@@ -1,47 +1,49 @@
 import { Sidebar } from "../../components/Sidebar";
-import { Box, Flex, Heading, VStack, Text, HStack, Tag, Link } from "@chakra-ui/react";
+import { Box, Flex, useBreakpointValue } from "@chakra-ui/react";
 import React from "react";
 import { getAllPosts } from "../../lib/mdx";
-import formatter from "../../lib/formatter";
+import { BlogPage } from "../../components/pages/Blog";
+import { Navbar } from "../../components/Navbar";
 
 export default function Blog({ posts }: any) {
+    const isDesktop = useBreakpointValue({ base: false, lg: true })
+
     return (
-        <Flex
+      <div>
+        <title>Kevin Wong</title>
+        {isDesktop ? (
+          <Box height="100vh" overflow="hidden" position="relative">
+            <Flex h="full" id="app-container">
+              <Sidebar />
+              <Box
+                as="section"
+                flex="1"
+                overflow="auto"
+              >
+                <Box
+                  as="section"
+                  flex="1"
+                  overflow="auto"
+                  maxW="4xl"
+                >
+                  <BlogPage posts={posts} />
+                </Box>
+              </Box>
+            </Flex>
+          </Box>
+        ) : (
+          <Flex
             as="section"
-            direction={{ base: 'column', lg: 'row' }}
+            direction={{ base: "column", lg: "row" }}
             height="100vh"
             bg="bg-canvas"
             overflowY="auto"
-        >
-            <title>Blog • Kevin Wong</title>
-            <Sidebar />
-            <Flex h="full" id="app-container">
-                <Box as="section" flex="1" p="4" marginTop="6" overflow="auto">
-                    <VStack align="left" spacing={8} maxW="4xl">
-                        {posts.length > 0 ?
-                            (posts.map((post: any) => (
-                                <VStack align="left" key={post} spacing={1}>
-                                    <Link href={`/blog/` + post.slug}><Heading as="h2" size="lg">
-                                        {post.title}
-                                    </Heading></Link>
-                                    <HStack spacing={2} direction="row" justify="left" wrap="wrap">
-                                        <Text fontSize="sm" fontWeight="bold">Tags:</Text>
-                                        {post.tags.map((tag: any) => (
-                                            <Tag key={tag} colorScheme="blue">
-                                                {tag}
-                                            </Tag>
-                                        ))}
-                                    </HStack>
-                                    <Text fontSize="sm" colorScheme="gray.600">{formatter.shortUTCDate(post.date)}</Text>
-                                    <Box>{post.excerpt}</Box>
-                                </VStack>
-                            ))) : (
-                                <Text>No posts found.</Text>
-                            )}
-                    </VStack>
-                </Box>
-            </Flex>
-        </Flex>
+          >
+            <Navbar />
+            <BlogPage posts={posts} />
+          </Flex>
+        )}
+      </div>
     );
 }
 

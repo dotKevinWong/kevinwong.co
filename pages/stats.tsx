@@ -1,28 +1,49 @@
 import { Sidebar } from "../components/Sidebar";
-import { Box, Flex } from "@chakra-ui/react";
+import { Box, Flex, useBreakpointValue } from "@chakra-ui/react";
 import React from "react";
-import useSWR from "swr";
-import fetcher from "../lib/fetcher";
-import { TopTracks } from "../components/TopTracks";
+import { Navbar } from "../components/Navbar";
+import { StatisticsPage } from "../components/pages/Statistics";
 
-export default function Stats() {
-    const { data } = useSWR("/api/toptracks", fetcher);
+export default function Statistics() {
+    const isDesktop = useBreakpointValue({ base: false, lg: true })
 
     return (
-        <Flex
-            as="section"
-            direction={{ base: 'column', lg: 'row' }}
-            height="100vh"
-            bg="bg-canvas"
-            overflowY="auto"
-        >
+        <div>
             <title>Statistics • Kevin Wong</title>
-            <Sidebar/>
-            <Flex h="full" id="app-container">
-                <Box as="section" flex="1" p="4" marginTop="6" overflow="auto">
-                    <TopTracks />
+            {isDesktop ? (
+                <Box height="100vh" overflow="hidden" position="relative">
+                    <Flex h="full" id="app-container">
+                        <Sidebar />
+                        <Box
+                            as="section"
+                            flex="1"
+                            overflow="auto"
+                        >
+                            <Box
+                                as="section"
+                                flex="1"
+                                overflow="auto"
+                                maxW="4xl"
+                                marginLeft={8}
+                                marginRight={8}
+                            >
+                                <StatisticsPage />
+                            </Box>
+                        </Box>
+                    </Flex>
                 </Box>
-            </Flex>
-        </Flex>
+            ) : (
+                <Flex
+                    as="section"
+                    direction={{ base: "column", lg: "row" }}
+                    height="100vh"
+                    bg="bg-canvas"
+                    overflowY="auto"
+                >
+                    <Navbar />
+                    <StatisticsPage />
+                </Flex>
+            )}
+        </div>
     );
 }

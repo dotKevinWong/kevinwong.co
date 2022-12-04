@@ -40,7 +40,7 @@ export const TopTracks = () => {
                         {data?.tracks.map((item: { albumImageUrl: string; album: string; name: string; artist: string; songUrl: string; albumUrl: string, artistUrl: string }, index: React.Key) => (
                             <Tr key={index}>
                                 <Td>
-                                    <Link as="a" href={item.albumUrl} target="_blank" rel="noreferrer"><Image boxSize="64px" src={item.albumImageUrl} alt={item.album}></Image></Link>
+                                    <Link as="a" href={item.albumUrl} target="_blank" rel="noreferrer"><Image boxSize="64px" objectFit='scale-down' src={item.albumImageUrl} alt={item.album}></Image></Link>
                                 </Td>
                                 <Td>
                                     <Link as="a" href={item.songUrl} target="_blank" rel="noreferrer"><Text fontWeight="bold">{item.name} <ExternalLinkIcon/></Text></Link>
