@@ -4,7 +4,7 @@ import React from "react";
 import { getAllPosts } from "../../lib/mdx";
 import formatter from "../../lib/formatter";
 
-export default function Blog({ posts }) {
+export default function Blog({ posts }: any) {
     return (
         <Flex
             as="section"

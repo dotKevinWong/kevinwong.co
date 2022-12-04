@@ -1,4 +1,4 @@
-import { Box, Button, Container, Drawer, DrawerContent, DrawerOverlay, Flex, Heading, HStack, Stack, Text, useBreakpointValue, useColorMode, useColorModeValue, useDisclosure } from '@chakra-ui/react'
+import { Box, Button, Container, Drawer, DrawerContent, DrawerOverlay, Flex, Heading, HStack, Stack, Text, useBreakpointValue, useColorMode, useColorModeValue as colorModeValue, useDisclosure } from '@chakra-ui/react'
 import { useRouter } from 'next/router'
 import * as React from 'react'
 import {
@@ -29,7 +29,7 @@ export const Sidebar = () => {
           <Flex
             flex="1"
             bg="bg-surface"
-            boxShadow={useColorModeValue('sm', 'sm-dark')}
+            boxShadow={colorModeValue('sm', 'sm-dark')}
             maxW={{ base: 'full', sm: 'xs' }}
             py={{ base: '6', sm: '10' }}
             px={{ base: '4', sm: '6' }}
@@ -60,7 +60,7 @@ export const Sidebar = () => {
       py="4"
       px={{ base: '4', md: '8' }}
       bg="bg-surface"
-      boxShadow={useColorModeValue('sm', 'sm-dark')}
+      boxShadow={colorModeValue('sm', 'sm-dark')}
     >
       <Flex justify="space-between">
         <Heading as="h1" size="lg">KEVIN WONG</Heading>
@@ -79,7 +79,7 @@ export const Sidebar = () => {
                 <Flex
                   flex="1"
                   bg="bg-surface"
-                  boxShadow={useColorModeValue('sm', 'sm-dark')}
+                  boxShadow={colorModeValue('sm', 'sm-dark')}
                   maxW={{ base: 'full', sm: 'xs' }}
                   py={{ base: '6', sm: '10' }}
                   px={{ base: '4', sm: '6' }}

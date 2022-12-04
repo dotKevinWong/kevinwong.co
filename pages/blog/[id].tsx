@@ -9,7 +9,7 @@ import formatter from '../../lib/formatter';
 
 const components = { Heading, Image, Button, Flex, Box, VStack };
 
-export default function Slug({ source, meta }) {
+export default function Slug({ source, meta }: any) {
     return (
         <Flex
             as="section"
@@ -37,7 +37,7 @@ export default function Slug({ source, meta }) {
     );
 };
 
-export async function getStaticProps({ params: { id } }) {
+export async function getStaticProps({ params: { id } }: any) {
     // MDX text - can be from a local file, database, anywhere
     // const source = 'Some **mdx** text, with a component <Heading>Bruh</Heading> <Image src="/me.jpg" width="200px" height="200px"/>';
     const { content, meta } = await getPost(id);
