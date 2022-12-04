@@ -26,7 +26,7 @@ export const NowPlaying = () => {
       >
         <VStack align="left">
         <Text color="black.800" fontWeight="extrabold">{data?.songUrl ? "Spotify – Now Playing" : "Spotify"}</Text>
-        <HStack spacing="0" color={mode("gray.500", "gray.400")}>
+        <HStack spacing={2} color={mode("gray.500", "gray.400")}>
           <Link href={data?.albumUrl} isExternal><Image width="64px" mr="2" src={data?.songUrl ? data?.albumImageUrl : "/album.png"} alt={data?.songUrl ? data?.album : "Not Playing"}/></Link>
           <VStack align="left" spacing={1}>
             {data?.songUrl ? (
