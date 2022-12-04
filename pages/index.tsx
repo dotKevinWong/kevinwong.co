@@ -28,7 +28,7 @@ export default function Home() {
               </VStack>
               <VStack align="left">
                 <Text><b>B.S. Software Engineering</b> at <Link color="blue.500" href="https://drexel.edu" isExternal><b>Drexel University</b></Link></Text>
-                <Text><b>Alumnus and Trustee</b> at <Link color="blue.500" href="https://romancatholichs.com" target="_blank" isExternal><b>Roman Catholic High School</b></Link></Text>
+                <Text><b>Alumnus and Trustee</b> at <Link color="blue.500" href="https://www.romancatholichs.com" target="_blank" isExternal><b>Roman Catholic High School</b></Link></Text>
               </VStack>
             </VStack>
           </HStack>
