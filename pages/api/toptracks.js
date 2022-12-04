@@ -3,6 +3,10 @@ import { getTopTracks } from "../../lib/spotify";
 export default async function handler(_, res) {
   const response = await getTopTracks();
 
+  if (response.status === 204 || response.status > 400) {
+    return res.status(200).json({ is_working: false });
+  }
+
   const list = await response.json();
 
   // loop through the list and get the data we need
