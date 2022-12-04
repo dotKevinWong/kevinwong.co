@@ -16,7 +16,7 @@ export default function Home() {
     >      <title>Projects • Kevin Wong</title>
       <Sidebar />
       <Flex h="full" id="app-container">
-        <Box as="section" flex="1" p="6" marginTop="4" overflow="auto">
+        <Box as="section" flex="1" p="6" marginTop="4">
           <Alert status="warning" maxW="3xl">
             <AlertIcon />
             This page is still under construction!
