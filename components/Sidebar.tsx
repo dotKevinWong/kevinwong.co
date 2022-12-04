@@ -32,7 +32,7 @@ export const Sidebar = () => {
       <Stack justify="space-between" spacing="1" width="full">
         <Stack spacing="8" shouldWrapChildren>
           <HStack spacing="4" marginLeft={4}>
-            <Heading as="h1" size="lg">KEVIN WONG</Heading>
+            <Heading as="a" size="lg" href="/">KEVIN WONG</Heading>
             <Button onClick={() => toggleColorMode()}>{colorMode === 'light' ? <FiMoon /> : <FiSun />}</Button>
           </HStack>
           <Stack>

@@ -22,7 +22,7 @@ export const Navbar = () => {
   const { isOpen, onToggle, onClose } = useDisclosure()
 
   return (
-   <Box
+    <Box
       width="full"
       py="4"
       px={{ base: '4', md: '8' }}
@@ -30,50 +30,50 @@ export const Navbar = () => {
       boxShadow={mode('sm', 'sm-dark')}
     >
       <Flex justify="space-between">
-        <Heading as="h1" size="lg">KEVIN WONG</Heading>
-            <ToggleButton isOpen={isOpen} aria-label="Open Menu" onClick={onToggle} />
-            <Drawer
-              isOpen={isOpen}
-              placement="left"
-              onClose={onClose}
-              isFullHeight
-              preserveScrollBarGap
-              // Only disabled for showcase
-              trapFocus={false}
+        <Heading as="a" size="lg" href="/">KEVIN WONG</Heading>
+        <ToggleButton isOpen={isOpen} aria-label="Open Menu" onClick={onToggle} />
+        <Drawer
+          isOpen={isOpen}
+          placement="left"
+          onClose={onClose}
+          isFullHeight
+          preserveScrollBarGap
+          // Only disabled for showcase
+          trapFocus={false}
+        >
+          <DrawerOverlay />
+          <DrawerContent>
+            <Flex
+              flex="1"
+              bg="bg-surface"
+              boxShadow={mode('sm', 'sm-dark')}
+              maxW={{ base: 'full', sm: 'xs' }}
+              py={{ base: '6', sm: '10' }}
+              px={{ base: '4', sm: '6' }}
             >
-              <DrawerOverlay />
-              <DrawerContent>
-                <Flex
-                  flex="1"
-                  bg="bg-surface"
-                  boxShadow={mode('sm', 'sm-dark')}
-                  maxW={{ base: 'full', sm: 'xs' }}
-                  py={{ base: '6', sm: '10' }}
-                  px={{ base: '4', sm: '6' }}
-                >
-                  <Stack justify="space-between" spacing="1" width="full">
-                    <Stack spacing="8" shouldWrapChildren>
-                      <HStack spacing="4" marginLeft={4}>
-                        <Heading as="h1" size="lg">KEVIN WONG</Heading>
-                        <Button onClick={() => toggleColorMode()}>{colorMode === 'light' ? <FiMoon /> : <FiSun />}</Button>
-                      </HStack>
-                      <Stack marginBottom={8}>
-                        <NavButton label="I am" icon={FiSmile} onClick={() => router.push('/')} />
-                        <NavButton label="Statistics" icon={FiBarChart2} onClick={() => router.push('/stats')} />
-                        <NavButton label="Snapshots" icon={FiCamera} onClick={() => router.push('/snapshots')} />
-                        <NavButton label="Projects" icon={FiArchive} onClick={() => router.push('/projects')} />
-                        <NavButton label="Blog" icon={FiBook} onClick={() => router.push('/blog')} />
-                        <NavButton label="Contact" icon={FiAtSign} onClick={() => router.push('/contact')} />
-                      </Stack>
-                      <NowPlaying />
-                    </Stack>
-
+              <Stack justify="space-between" spacing="1" width="full">
+                <Stack spacing="8" shouldWrapChildren>
+                  <HStack spacing="4" marginLeft={4}>
+                    <Heading as="h1" size="lg">KEVIN WONG</Heading>
+                    <Button onClick={() => toggleColorMode()}>{colorMode === 'light' ? <FiMoon /> : <FiSun />}</Button>
+                  </HStack>
+                  <Stack marginBottom={8}>
+                    <NavButton label="I am" icon={FiSmile} onClick={() => router.push('/')} />
+                    <NavButton label="Statistics" icon={FiBarChart2} onClick={() => router.push('/stats')} />
+                    <NavButton label="Snapshots" icon={FiCamera} onClick={() => router.push('/snapshots')} />
+                    <NavButton label="Projects" icon={FiArchive} onClick={() => router.push('/projects')} />
+                    <NavButton label="Blog" icon={FiBook} onClick={() => router.push('/blog')} />
+                    <NavButton label="Contact" icon={FiAtSign} onClick={() => router.push('/contact')} />
                   </Stack>
-                </Flex>
-              </DrawerContent>
-            </Drawer>
-          </Flex>
-        </Box>
+                  <NowPlaying />
+                </Stack>
+
+              </Stack>
+            </Flex>
+          </DrawerContent>
+        </Drawer>
+      </Flex>
+    </Box>
   )
 }
 
