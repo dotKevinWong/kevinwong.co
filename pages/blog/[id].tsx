@@ -35,7 +35,7 @@ export default function Slug({ source, meta }) {
             </Flex>
         </Flex>
     );
-}
+};
 
 export async function getStaticProps({ params: { id } }) {
     // MDX text - can be from a local file, database, anywhere

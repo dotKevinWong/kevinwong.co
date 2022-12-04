@@ -19,14 +19,14 @@ export default function Blog({ posts }) {
                 <Box as="section" flex="1" p="4" marginTop="6" overflow="auto">
                     <VStack align="left" spacing={8} maxW="4xl">
                         {posts.length > 0 ?
-                            (posts.map((post) => (
+                            (posts.map((post: any) => (
                                 <VStack align="left" key={post} spacing={1}>
                                     <Link href={`/blog/` + post.slug}><Heading as="h2" size="lg">
                                         {post.title}
                                     </Heading></Link>
                                     <HStack spacing={2} direction="row" justify="left" wrap="wrap">
                                         <Text fontSize="sm" fontWeight="bold">Tags:</Text>
-                                        {post.tags.map((tag) => (
+                                        {post.tags.map((tag: any) => (
                                             <Tag key={tag} colorScheme="blue">
                                                 {tag}
                                             </Tag>

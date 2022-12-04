@@ -19,7 +19,7 @@ export default function Home() {
         <Box as="section" flex="1" p="6" marginTop="4" overflow="auto">
           <Alert status="warning" maxW="3xl">
             <AlertIcon />
-            This page is still under construction! Feel free to move the folders around though :)
+            This page is still under construction!
           </Alert>
           <Box1 top={45} left={50} name="Soon" />
           <Box1 top={34} left={30} name="Thoughts" />
