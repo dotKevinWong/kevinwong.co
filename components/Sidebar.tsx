@@ -90,7 +90,7 @@ export const Sidebar = () => {
                         <Heading as="h1" size="lg">KEVIN WONG</Heading>
                         <Button onClick={() => toggleColorMode()}>{colorMode === 'light' ? <FiMoon /> : <FiSun />}</Button>
                       </HStack>
-                      <Stack>
+                      <Stack marginBottom={8}>
                         <NavButton label="I am" icon={FiSmile} onClick={() => router.push('/')} />
                         <NavButton label="Statistics" icon={FiBarChart2} onClick={() => router.push('/stats')} />
                         <NavButton label="Snapshots" icon={FiCamera} onClick={() => router.push('/snapshots')} />
@@ -98,8 +98,9 @@ export const Sidebar = () => {
                         <NavButton label="Blog" icon={FiBook} onClick={() => router.push('/blog')} />
                         <NavButton label="Contact" icon={FiAtSign} onClick={() => router.push('/contact')} />
                       </Stack>
+                      <NowPlaying />
                     </Stack>
-                    <NowPlaying />
+
                   </Stack>
                 </Flex>
               </DrawerContent>

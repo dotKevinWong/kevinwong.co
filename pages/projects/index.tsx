@@ -13,7 +13,8 @@ export default function Home() {
       height="100vh"
       bg="bg-canvas"
       overflowY="auto"
-    >      <title>Projects • Kevin Wong</title>
+    >      
+    <title>Projects • Kevin Wong</title>
       <Sidebar />
       <Flex h="full" id="app-container">
         <Box as="section" flex="1" p="6" marginTop="4">

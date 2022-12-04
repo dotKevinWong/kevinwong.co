@@ -1,5 +1,5 @@
 import { Sidebar } from "../components/Sidebar";
-import { Box, Button, Center, Divider, Flex, Heading, HStack, Link, Spacer, Text, VStack } from "@chakra-ui/react";
+import { Box, Button, Center, Container, Divider, Flex, Heading, HStack, Link, Spacer, Text, VStack } from "@chakra-ui/react";
 import React from "react";
 import { FaFacebook, FaGithub, FaInstagram, FaLinkedin, FaTwitter, FaYoutube } from "react-icons/fa";
 
@@ -17,11 +17,12 @@ export default function Contact() {
             bg="bg-canvas"
             overflowY="auto"
         >
+            
             <title>Contact • Kevin Wong</title>
             <Sidebar />
             <Flex h="full" id="app-container">
                 <Box as="section" flex="1" p="6" marginTop="4" overflow="auto">
-                    <Box maxW="4xl">
+                    <Box maxW="5xl">
                         <VStack align="left" spacing={6}>
                             <Heading>Contact Me</Heading>
                             <HStack align="left" justify="center" direction="row" wrap="wrap" spacing={4} gap={2}>
