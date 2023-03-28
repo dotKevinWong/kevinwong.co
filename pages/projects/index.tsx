@@ -2,10 +2,7 @@ import { Sidebar } from "../../components/Sidebar";
 import { Alert, AlertIcon, Box, Flex, Stack, useBreakpointValue } from "@chakra-ui/react";
 import React from "react";
 import { Navbar } from "../../components/Navbar";
-import { Box1 } from "../../components/Box1";
-import { Box2 } from "../../components/Box2";
 import Folder from "../../components/Folder";
-import { Icon } from "@chakra-ui/icon";
 
 export default function Projects() {
   const isDesktop = useBreakpointValue({ base: false, lg: true })
