@@ -1,13 +1,19 @@
 import { ExternalLinkIcon } from "@chakra-ui/icons"
-import { Box, Alert, AlertIcon, Flex, Badge, Image, Text, Link, HStack, Stack, Grid } from "@chakra-ui/react"
+import { Box, Alert, AlertIcon, Flex, Badge, Image, Text, Link, HStack, Stack, Grid, useBreakpointValue } from "@chakra-ui/react"
 import { PhotoPost } from "../PhotoPost"
 
 
 export const SnapshotsPage = () => {
+    const isMobile = useBreakpointValue({ base: true, md: false })
+
+    const justifyStyle =
+        isMobile ? {
+            justify: "center"
+        } : {}
 
     return (
         <Box as="section" flex="1" p="6" overflow="auto" marginTop={4}>
-            <Flex wrap="wrap" gap={8}>
+            <Flex wrap="wrap" gap={8} justify="center">
                 <PhotoPost
                     photoSrc="/snapshots/IMG_1748.jpg"
                     description="with the fam enjoying our kevin from home alone moment"

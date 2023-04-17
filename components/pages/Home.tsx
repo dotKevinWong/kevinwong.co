@@ -1,12 +1,22 @@
-import { Box, Image, Text, Link, HStack, VStack } from "@chakra-ui/react"
+import { Box, Image, Text, Link, HStack, VStack, useBreakpointValue } from "@chakra-ui/react"
 import React from "react"
 import { TopTracks } from "../TopTracks"
 
 
 export const HomePage = () => {
+    const isMobile = useBreakpointValue({ base: true, md: false })
+
+    const justifyStyle =
+        isMobile ? {
+            justify: "center"
+        } : {
+            justify: "left"
+        }
+
+    
     return (
         <Box as="section" flex="1" p="6" marginTop="4" overflow="auto">
-            <HStack align="left" wrap="wrap" justify="left">
+            <HStack align="left" wrap="wrap" {...justifyStyle}>
                 <Image height="100%" width="400px" marginRight={4} marginBottom={6} alt="Kevin Wong" src={"/me.jpg"} />
                 <VStack align="left" marginTop={8} spacing={8}>
                     <Text><b>Business Process Consultant</b> at <Link color="blue.500" href="https://sap.com" target="_blank" isExternal><b>SAP</b></Link></Text>

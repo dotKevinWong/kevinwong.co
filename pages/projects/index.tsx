@@ -1,22 +1,55 @@
 import { Sidebar } from "../../components/Sidebar";
-import { Alert, AlertIcon, Box, Flex, Stack, useBreakpointValue } from "@chakra-ui/react";
+import { Alert, AlertDescription, AlertIcon, AlertTitle, Box, Flex, Heading, Stack, VStack, useBreakpointValue } from "@chakra-ui/react";
 import React from "react";
 import { Navbar } from "../../components/Navbar";
 import Folder from "../../components/Folder";
 
+const MyAlert = () => {
+  const isMobile = useBreakpointValue({ base: true, md: false })
+
+  const alertStyles = isMobile
+    ? {
+      top: "0",
+      left: "50%",
+      transform: "translateX(-50%)",
+      marginTop: "2",
+    }
+    : {
+    }
+
+  return (
+    <Alert
+      status="info"
+      position="absolute"
+      w="100%"
+      maxW="360px"
+      borderRadius="md"
+      boxShadow="md"
+      {...alertStyles}
+    >
+      <AlertIcon />
+      <Box>
+      <AlertTitle mr={2}>Hint:</AlertTitle>
+      <AlertDescription>
+      Double click on the folders to open them
+      </AlertDescription>
+      </Box>
+    </Alert>
+  )
+}
+
 const Page = () => {
   return (
-    <Box as="section" position="relative" w="100%" h="100%" p="6" marginTop="4">
-    <Flex h="100%">
-    <Folder initialPosition={{ x: 38, y: 48 }} imageSrc="/dragonbot_folder.png" title="DragonBot" href="/projects/dragonbot" size={128} />
-    <Folder initialPosition={{ x: 12, y: 32 }} imageSrc="/gray_folder.png" title="Thoughts" size={128} />
-    <Folder initialPosition={{ x: 57, y: 12 }} imageSrc="/yellow_folder.png" title="Stuff" size={128} />
-    </Flex>
-</Box>
+    <Box as="section" position="relative" w="100%" h="100%" p="6" >
+      <Flex h="100%">
+        <MyAlert />
+        <Folder initialPosition={{ x: 38, y: 48 }} imageSrc="/dragonbot_folder.png" title="DragonBot" href="/projects/dragonbot" size={128} />
+        <Folder initialPosition={{ x: 12, y: 32 }} imageSrc="/gray_folder.png" title="Thoughts" href="#" size={128} />
+        <Folder initialPosition={{ x: 57, y: 12 }} imageSrc="/yellow_folder.png" title="Stuff" href="#" size={128} />
+      </Flex>
+    </Box>
   );
 };
-
-
 
 export default function Projects() {
   const isDesktop = useBreakpointValue({ base: false, lg: true })
