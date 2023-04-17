@@ -31,8 +31,8 @@ export const SnapshotsPage = () => {
                     sourceName="Instagram" />
                 <PhotoPost
                     photoSrc="/snapshots/IMG_2408.jpg"
-                    description="i didn\'t think i would be a software engineer but I used dijkstra's algorithm to find my way there"
-                    alt="i didn\'t think i would be a software engineer but I used dijkstra's algorithm to find my way there"
+                    description="i didn't think i would be a software engineer but I used dijkstra's algorithm to find my way there"
+                    alt="i didn't think i would be a software engineer but I used dijkstra's algorithm to find my way there"
                     date="June 06, 2022"
                     sourceHref="https://www.instagram.com/p/CeetaMbJlba/"
                     sourceName="Instagram" />
