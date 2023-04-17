@@ -9,7 +9,7 @@ export const BlogPage = (props: Blog) => {
     const { posts } = props
     return (
 
-        <Box as="section" flex="1" p="4" marginTop="6" overflow="auto">
+        <Box as="section" flex="1" p="4" marginTop="4" overflow="auto">
             <VStack align="left" spacing={8} maxW="4xl">
                 {posts.length > 0 ?
                     (posts.map((post: any) => (

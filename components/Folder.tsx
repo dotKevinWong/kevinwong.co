@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react'
 import Draggable from 'react-draggable'
 import { Box, Text, VStack, useBreakpointValue } from '@chakra-ui/react'
+import { useRouter } from 'next/router'
 
 interface FolderProps {
     imageSrc: string
     title?: string
     size: number
     initialPosition: { x: number; y: number }
+    href?: string
 }
 
 export const Folder = (props: FolderProps) => {
+  const router = useRouter()
     const [position, setPosition] = useState({ x: 0, y: 0 })
 
     const onDragStop = (e: any, data: { x: any; y: any }) => {
@@ -50,7 +53,7 @@ export const Folder = (props: FolderProps) => {
                 outline="dashed 1px"
                 _hover={{ cursor: 'grab' }}
             >
-                <Box bgImage={props.imageSrc} w="100%" h="100%" bgPosition="center" bgSize={`${props.size/2}px`} bgRepeat="no-repeat" borderRadius="md" />
+                <Box as="a" bgImage={props.imageSrc} w="100%" h="100%" bgPosition="center" bgSize={`${props.size/2}px`} bgRepeat="no-repeat" borderRadius="md" href={props.href} />
                 <Text fontSize="xs" fontFamily="mono" _groupHover={{ textDecoration: 'underline' }}>
                     {props.title}
                 </Text>

@@ -20,14 +20,7 @@ export default function Blog({ posts }: any) {
                 flex="1"
                 overflow="auto"
               >
-                <Box
-                  as="section"
-                  flex="1"
-                  overflow="auto"
-                  maxW="4xl"
-                >
                   <BlogPage posts={posts} />
-                </Box>
               </Box>
             </Flex>
           </Box>

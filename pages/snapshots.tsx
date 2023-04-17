@@ -23,7 +23,6 @@ export default function Snapshots() {
                                 as="section"
                                 flex="1"
                                 overflow="auto"
-                                maxW="4xl"
                             >
                                 <SnapshotsPage />
                             </Box>

@@ -4,7 +4,7 @@ import { FaFacebook, FaGithub, FaInstagram, FaLinkedin, FaTwitter, FaYoutube } f
 
 export const ContactPage = () => {
     return(
-    <Container as="section" flex="1" p="6" marginTop="4" overflow="auto" maxW="5xl">
+    <Container as="section" flex="1" p="6" marginTop="2" overflow="auto" maxW="5xl">
         <Box maxW="5xl">
             <VStack align="left" spacing={6}>
                 <Heading>Contact Me</Heading>

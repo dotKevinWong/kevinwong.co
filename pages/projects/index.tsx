@@ -4,6 +4,20 @@ import React from "react";
 import { Navbar } from "../../components/Navbar";
 import Folder from "../../components/Folder";
 
+const Page = () => {
+  return (
+    <Box as="section" position="relative" w="100%" h="100%" p="6" marginTop="4">
+    <Flex h="100%">
+    <Folder initialPosition={{ x: 38, y: 48 }} imageSrc="/dragonbot_folder.png" title="DragonBot" href="/projects/dragonbot" size={128} />
+    <Folder initialPosition={{ x: 12, y: 32 }} imageSrc="/gray_folder.png" title="Thoughts" size={128} />
+    <Folder initialPosition={{ x: 57, y: 12 }} imageSrc="/yellow_folder.png" title="Stuff" size={128} />
+    </Flex>
+</Box>
+  );
+};
+
+
+
 export default function Projects() {
   const isDesktop = useBreakpointValue({ base: false, lg: true })
 
@@ -18,19 +32,7 @@ export default function Projects() {
               as="section"
               flex="1"
             >
-                <Box as="section" position="relative" w="100%" h="100%" p="6" marginTop="4">
-                  <Flex h="100%">
-                  <Box>
-                  <Alert status="warning" maxW="3xl">
-                    <AlertIcon />
-                    This page is still under construction! Please check back later :)
-                  </Alert>
-                  </Box>
-                  <Folder initialPosition={{ x: 40, y: 45 }} imageSrc="/gray_folder.png" title="Soon" size={128} />
-                  <Folder initialPosition={{ x: 15, y: 34 }} imageSrc="/gray_folder.png" title="Thoughts" size={128} />
-                  <Folder initialPosition={{ x: 57, y: 27 }} imageSrc="/yellow_folder.png" title="Stuff" size={128} />
-                  </Flex>
-              </Box>
+              <Page />
             </Box>
           </Flex>
         </Box>
@@ -43,15 +45,7 @@ export default function Projects() {
           overflowY="auto"
         >
           <Navbar />
-          <Box as="section" flex="1" p="6" marginTop="4">
-            <Alert status="warning" maxW="3xl">
-              <AlertIcon />
-              This page is still under construction! Please check back later :)
-            </Alert>
-            <Folder initialPosition={{ x: 40, y: 45 }} imageSrc="/gray_folder.png" title="Soon" size={128} />
-            <Folder initialPosition={{ x: 15, y: 34 }} imageSrc="/gray_folder.png" title="Thoughts" size={128} />
-            <Folder initialPosition={{ x: 57, y: 27 }} imageSrc="/yellow_folder.png" title="Stuff" size={128} />
-          </Box>
+          <Page />
         </Flex>
       )}
     </div>
