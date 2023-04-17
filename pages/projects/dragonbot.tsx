@@ -3,6 +3,7 @@ import { Alert, AlertIcon, Box, Flex, Text, HStack, Icon, Wrap, Tag, Heading, St
 import React from "react";
 import { Navbar } from "../../components/Navbar";
 import Folder from "../../components/Folder";
+import Emoji from "../../components/Emoji";
 
 export default function Projects() {
     const isDesktop = useBreakpointValue({ base: false, lg: true })
@@ -11,7 +12,7 @@ export default function Projects() {
         return (
             <Box as="section" position="relative" w="100%" h="100%" p="6" marginTop="2">
                 <Box pb={4}>
-                    <Button as="a" colorScheme="blue" href="/projects">👈 Back</Button>
+                    <Button as="a" colorScheme="blue" href="/projects"><Emoji symbol="backhand-index-pointing-left" label="Backhand Index Pointing Left"/>Back</Button>
                 </Box>
                 <Flex wrap="wrap">
                     <Box
@@ -71,31 +72,31 @@ export default function Projects() {
                             </Thead>
                             <Tbody>
                                 <Tr>
-                                    <Td>✅ Verification Sync</Td>
+                                    <Td><HStack><Emoji symbol="checkmark" label="checkmark"/><Text fontWeight="bold">Verification Sync</Text></HStack></Td>
                                     <Td>Syncs the Drexel student/alumni status of a user across all servers that use DragonBot</Td>
                                 </Tr>
                                 <Tr>
-                                    <Td>🧑‍⚖️ Ban Sync</Td>
+                                    <Td><HStack><Emoji symbol="judge" label="judge"/><Text fontWeight="bold">Ban Sync</Text></HStack></Td>
                                     <Td>Syncs the ban status of a user across all servers that use DragonBot.</Td>
                                 </Tr>
                                 <Tr>
-                                    <Td>📚 Course Information</Td>
+                                    <Td><HStack><Emoji symbol="books" label="books"/><Text fontWeight="bold">Course Information</Text></HStack></Td>
                                     <Td>Provides information about a course, pre-reqs, and more from the Drexel WebTMS system</Td>
                                 </Tr>
                                 <Tr>
-                                    <Td>😎 User Profiles</Td>
+                                    <Td><HStack><Emoji symbol="cool" label="smiling face with sunglasses"/><Text fontWeight="bold">User Profiles</Text></HStack></Td>
                                     <Td>Learn more about a member of the server, including their plan, major, co-ops, clubs, and more</Td>
                                 </Tr>
                                 <Tr>
-                                    <Td>📊 Server Stats</Td>
+                                    <Td><HStack><Emoji symbol="bar-chart" label="bar chart"/><Text fontWeight="bold">Server Statistics</Text></HStack></Td>
                                     <Td>Provides a variety of server statistics, including membercount, MEE6 leaderboard, and more.</Td>
                                 </Tr>
                                 <Tr>
-                                    <Td>🛠️ Moderation Tools</Td>
+                                    <Td><HStack><Emoji symbol="toolbox" label="red toolbox"/><Text fontWeight="bold">Moderation Tools</Text></HStack></Td>
                                     <Td>Provides a variety of moderation tools, including automated messages, new member tools, and more</Td>
                                 </Tr>
                                 <Tr>
-                                    <Td>🎉 Fun Commands</Td>
+                                    <Td><HStack><Emoji symbol="party-popper" label="party popper"/><Text fontWeight="bold">Fun Commands</Text></HStack></Td>
                                     <Td>Provides a variety of fun commands, including a LaTeX compiler, d20 dice, and more</Td>
                                 </Tr>
                             </Tbody>
