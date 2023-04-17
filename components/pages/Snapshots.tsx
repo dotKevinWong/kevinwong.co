@@ -12,7 +12,7 @@ export const SnapshotsPage = () => {
         } : {}
 
     return (
-        <Box as="section" flex="1" p="6" overflow="auto" marginTop={4}>
+        <Box as="section" flex="1" p="6" overflow="auto">
             <Flex wrap="wrap" gap={8} justify="center">
                 <PhotoPost
                     photoSrc="/snapshots/IMG_1748.jpg"

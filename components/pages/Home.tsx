@@ -13,11 +13,15 @@ export const HomePage = () => {
             justify: "left"
         }
 
+    const marginStyle = isMobile ? {
+         } :
+        { marginRight: 4}
+
     
     return (
-        <Box as="section" flex="1" p="6" marginTop="4" overflow="auto">
+        <Box as="section" flex="1" p="6" overflow="auto">
             <HStack align="left" wrap="wrap" {...justifyStyle}>
-                <Image height="100%" width="400px" marginRight={4} marginBottom={6} alt="Kevin Wong" src={"/me.jpg"} />
+                <Image height="100%" width="400px" {...marginStyle} marginBottom={6} alt="Kevin Wong" src={"/me.jpg"} />
                 <VStack align="left" marginTop={8} spacing={8}>
                     <Text><b>Business Process Consultant</b> at <Link color="blue.500" href="https://sap.com" target="_blank" isExternal><b>SAP</b></Link></Text>
                     <VStack align="left">

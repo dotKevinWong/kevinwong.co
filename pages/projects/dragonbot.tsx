@@ -10,7 +10,7 @@ export default function Projects() {
 
     const Page = () => {
         return (
-            <Box as="section" position="relative" w="100%" h="100%" p="6" marginTop="2">
+            <Box as="section" position="relative" w="100%" h="100%" p="6">
                 <Box pb={4}>
                     <Button as="a" colorScheme="blue" href="/projects"><Emoji symbol="backhand-index-pointing-left" label="Backhand Index Pointing Left"/>Back</Button>
                 </Box>
@@ -21,7 +21,7 @@ export default function Projects() {
                         p={{ base: '6', md: '8' }}
                         rounded={{ sm: 'lg' }}
                         shadow={{ md: 'base' }}
-                        maxH="520px"
+                        maxH="640px"
                     >
                         <VStack spacing={4} align="right">
                             <HStack direction={{ base: 'column', md: 'row' }} spacing={{ base: '4', md: '8' }}>
@@ -61,9 +61,9 @@ export default function Projects() {
                             </HStack>
                         </VStack>
                     </Box>
-                    <Box p={{ base: '6', md: '8' }} maxW={{ base: "100%", lg: "calc(100% - 540px)" }} minW="480px">
+                    <Box p={{ base: '2', md: '8' }} maxW={{ base: "100%", lg: "calc(100% - 540px)" }} minW="360px">
                         <Heading pb={4}>Features</Heading>
-                        <Table variant="unstyled">
+                        <Table variant="simple">
                             <Thead>
                                 <Tr>
                                     <Th>Feature</Th>
