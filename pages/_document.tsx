@@ -4,7 +4,7 @@ import { Html, Head, Main, NextScript } from 'next/document'
 import { extendTheme } from '@chakra-ui/react'
 
 const config = {
-  initialColorMode: 'dark',
+  initialColorMode: 'light',
   useSystemColorMode: false,
 }
 
