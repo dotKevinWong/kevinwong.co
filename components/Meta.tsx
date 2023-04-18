@@ -16,8 +16,9 @@ export const Meta = (props: { title: string, ogImage?: string, ogDesc?: string }
             <meta property="og:locale" content="en_US" />
             <meta
                 property="og:image"
-                content={props.ogImage ? props.ogImage : "https://kevinwong.co/og.jpg"}
+                content={props.ogImage ? props.ogImage : "http://kevinwong.co/og.jpg"}
             />
+            <meta property="og:image:secure_url" content={props.ogImage ? props.ogImage : "https://kevinwong.co/og.jpg"} />
             <meta property="og:image:width" content="1920" />
             <meta property="og:image:height" content="1080" />
             <meta property="og:type" content="website" />
