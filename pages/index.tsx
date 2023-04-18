@@ -3,13 +3,14 @@ import { Box, Flex, useBreakpointValue } from "@chakra-ui/react";
 import React from "react";
 import { Navbar } from "../components/Navbar";
 import { HomePage } from "../components/pages/Home";
+import { Meta } from "../components/Meta";
 
 export default function Home() {
   const isDesktop = useBreakpointValue({ base: false, lg: true })
 
   return (
     <div>
-      <title>Kevin Wong</title>
+      <Meta title="Kevin Wong"/>
       {isDesktop ? (
         <Box height="100vh" overflow="hidden" position="relative">
           <Flex h="full" id="app-container">

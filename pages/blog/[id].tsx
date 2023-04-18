@@ -7,6 +7,7 @@ import { MDXRemote } from 'next-mdx-remote';
 import { getPost, getPosts } from '../../lib/mdx';
 import formatter from '../../lib/formatter';
 import { Navbar } from '../../components/Navbar';
+import { Meta } from '../../components/Meta';
 
 const components = { Heading, Image, Button, Flex, Box, VStack };
 
@@ -15,7 +16,7 @@ export default function Slug({ source, meta }: any) {
 
     return (
         <div>
-            <title>Kevin Wong</title>
+            <Meta title="Kevin Wong"/>
             {isDesktop ? (
                 <Box height="100vh" overflow="hidden" position="relative">
                     <Flex h="full" id="app-container">

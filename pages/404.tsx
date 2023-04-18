@@ -2,6 +2,7 @@ import { Sidebar } from "../components/Sidebar";
 import { Box, Flex, Heading, Text, useBreakpointValue, VStack } from "@chakra-ui/react";
 import React from "react";
 import { Navbar } from "../components/Navbar";
+import { Meta } from "../components/Meta";
 
 const Page = () => {
     return (
@@ -24,7 +25,7 @@ export default function Error() {
 
     return (
         <div>
-            <title>Kevin Wong</title>
+            <Meta title="404: ERROR NOT FOUND • Kevin Wong" />
             {isDesktop ? (
                 <Box height="100vh" overflow="hidden" position="relative">
                     <Flex h="full" id="app-container">

@@ -1,8 +1,9 @@
 import { Sidebar } from "../../components/Sidebar";
-import { Alert, AlertDescription, AlertIcon, AlertTitle, Box, Flex, Heading, Stack, VStack, useBreakpointValue } from "@chakra-ui/react";
+import { Alert, AlertDescription, AlertIcon, AlertTitle, Box, Flex, useBreakpointValue } from "@chakra-ui/react";
 import React from "react";
 import { Navbar } from "../../components/Navbar";
 import Folder from "../../components/Folder";
+import { Meta } from "../../components/Meta";
 
 const MyAlert = () => {
   const isMobile = useBreakpointValue({ base: true, md: false })
@@ -44,8 +45,8 @@ const Page = () => {
       <Flex h="100%">
         <MyAlert />
         <Folder initialPosition={{ x: 38, y: 48 }} imageSrc="/dragonbot_folder.png" title="DragonBot" href="/projects/dragonbot" size={128} />
-        <Folder initialPosition={{ x: 12, y: 32 }} imageSrc="/gray_folder.png" title="Thoughts" href="#" size={128} />
-        <Folder initialPosition={{ x: 57, y: 12 }} imageSrc="/yellow_folder.png" title="Stuff" href="#" size={128} />
+        {/* <Folder initialPosition={{ x: 12, y: 32 }} imageSrc="/gray_folder.png" title="Thoughts" href="#" size={128} />
+        <Folder initialPosition={{ x: 57, y: 12 }} imageSrc="/yellow_folder.png" title="Stuff" href="#" size={128} /> */}
       </Flex>
     </Box>
   );
@@ -56,7 +57,7 @@ export default function Projects() {
 
   return (
     <div style={{ overscrollBehavior: "contain" }}>
-      <title>Kevin Wong</title>
+      <Meta title="Projects • Kevin Wong" />
       {isDesktop ? (
         <Box height="100vh" overflow="hidden">
           <Flex h="full" id="app-container">

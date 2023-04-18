@@ -1,9 +1,10 @@
 import { Sidebar } from "../../components/Sidebar";
-import { Alert, AlertIcon, Box, Flex, Text, HStack, Icon, Wrap, Tag, Heading, Stack, useBreakpointValue, useColorModeValue, Avatar, VStack, Button, Table, Thead, Tr, Th, Tbody, Td, calc } from "@chakra-ui/react";
+import { Box, Flex, Text, HStack, Wrap, Tag, Heading, useBreakpointValue, useColorModeValue, Avatar, VStack, Button, Table, Thead, Tr, Th, Tbody, Td } from "@chakra-ui/react";
 import React from "react";
 import { Navbar } from "../../components/Navbar";
 import Folder from "../../components/Folder";
 import Emoji from "../../components/Emoji";
+import { Meta } from "../../components/Meta";
 
 export default function Projects() {
     const isDesktop = useBreakpointValue({ base: false, lg: true })
@@ -109,7 +110,7 @@ export default function Projects() {
 
     return (
         <div style={{ overscrollBehavior: "contain" }}>
-            <title>Kevin Wong</title>
+            <Meta title="DragonBot • Kevin Wong"/>
             {isDesktop ? (
                 <Box height="100vh" overflow="hidden">
                     <Flex h="full" id="app-container">
