@@ -14,7 +14,6 @@ import {
 import { NavButton } from './NavButton'
 import { NowPlaying } from './NowPlaying'
 
-
 export const Sidebar = () => {
   const { colorMode, toggleColorMode } = useColorMode()
   const router = useRouter()

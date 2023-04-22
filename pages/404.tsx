@@ -19,7 +19,6 @@ const Page = () => {
     );
 };
 
-
 export default function Error() {
     const isDesktop = useBreakpointValue({ base: false, lg: true })
 

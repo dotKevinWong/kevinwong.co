@@ -28,7 +28,6 @@ export const TopTracks = () => {
             <VStack align="left">
                 <Heading>Top Tracks</Heading>
                 <Text>Curious to what I&#39;m currently listening to? Here are my current top tracks</Text>
-                {/* Create a table of top spotify tracks from the /api/toptracks API endpoint with album cover, artist, track name */}
                 <Table>
                     <Thead>
                         <Tr>
