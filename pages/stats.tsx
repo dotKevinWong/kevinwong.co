@@ -24,9 +24,7 @@ export default function Statistics() {
                                 as="section"
                                 flex="1"
                                 overflow="auto"
-                                maxW="4xl"
-                                marginLeft={8}
-                                marginRight={8}
+                                p="2"
                             >
                                 <StatisticsPage />
                             </Box>

@@ -67,7 +67,6 @@ export const Navbar = () => {
                   </Stack>
                   {/* <NowPlaying /> */}
                 </Stack>
-
               </Stack>
             </Flex>
           </DrawerContent>

@@ -1,0 +1,73 @@
+---
+title: 'One Year Update: What I learned about building my own NAS'
+author: Kevin Wong
+tags:
+  - nas
+  - home networking
+  - freenas
+date: 2018-11-03
+og_image: https://www.u-nas.com/xcart/var/images/product/732.732/071A8935_1.jpg
+excerpt: My one year update on what I learned about building my own NAS.
+---
+
+About a year ago, in the Summer of 2017, I build my first ever NAS (or Network Attached Storage). I had a considerable amount of money saved and was willing to make an investment into using and learning more about enterprise networking and hardware.
+
+In the end of my research journey and budgeting, I ended up choosing:
+
+<Table variant="simple">
+<Thead>
+<Tr>
+<Th>Type</Th>
+<Th>Component</Th>
+</Tr>
+</Thead>
+<Tbody>
+<Tr>
+<Td>Case</Td>
+<Td>Fractal Design Node 304 Mini-ITX Case</Td>
+</Tr>
+<Tr>
+<Td>CPU</Td>
+<Td>Intel Xeon D-1518 (2.2GHz Quad-Core, Hyperthreaded - 35W - 6MB Cache)</Td>
+</Tr>
+<Tr>
+<Td>Motherboard</Td>
+<Td>Supermicro X10SDV-4C-TLN4F</Td>
+</Tr>
+<Tr>
+<Td>RAM</Td>
+<Td>Kingston 16GB DDR4-2133MHz ECC RAM</Td>
+</Tr>
+<Tr>
+<Td>HDD</Td>
+<Td>3x - 4TB - WD (Western Digital) RED</Td>
+</Tr>
+<Tr>
+<Td>PSU</Td>
+<Td>Cooler Master V550 80+ Gold Fully-Modular Power Supply</Td>
+</Tr>
+<Tr>
+<Td>Boot Drive</Td>
+<Td>2x - 32GB - Sandisk Cruzer Fit</Td>
+</Tr>
+</Tbody>
+</Table>
+
+For my OS of choice, I decided going with FreeNAS since it was the all-in-one package for a BSD/UNIX based OS with the ZFS file system installed.
+
+In my quest to learn more about enterprise networking and hardware while still getting something useful out of this build, I learned a lot! 
+
+<Divider/>
+
+<Box>
+<UnorderedList>
+<ListItem>**UNIX File System** - This was something I struggled understanding. I’ve always used chmod, chown, etc. on Linux but I never understood what the numbers really meant. In FreeNAS, I learned about user, groups, and everyone else. I learned to lockdown certain datasets from the network and expose datasets correctly without errors.</ListItem>
+<ListItem>**Networking** - I learned how to direct connect to the NAS over Ethernet. This was especially useful because whole-home 10GbE networking is expensive.</ListItem>
+<ListItem>**OpenVPN** - My FreeNAS is setup to connect over OpenVPN. This was somewhat complicated to setup but it ended out working out after a few tries</ListItem>
+<ListItem>**Plex** - Plex is useful! I cancelled my Hulu subscription and bought all of the seasons for the three TV shows I only needed Hulu for and kept my Netflix subscription.</ListItem>
+<ListItem>**ZFS** - The ZFS file system is really unique and robust. This was something worth learning on how it worked.</ListItem>
+<ListItem>**rsync** - I learned about rsync and how to backup FreeNAS securely.</ListItem>
+</UnorderedList>
+</Box>
+
+In conclusion, I’m really glad I built this NAS over purchasing something off the shelf. It really improved my *nix skills.

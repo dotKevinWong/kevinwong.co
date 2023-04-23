@@ -1,0 +1,45 @@
+---
+title: Homebridge with Nest & Apple HomePod
+author: Kevin Wong
+tags:
+  - homebridge
+  - homekit
+  - smart home
+  - homepod
+  - nest
+date: 2018-05-14
+og_image: https://images.squarespace-cdn.com/content/v1/58fb0155d1758eec4bb612b0/1526307926144-5LZXZO8B1G9Q0A4Z4XGU/2258-01.jpg?format=1500w
+excerpt: Putting together a Homebridge server with Nest and Apple HomePod using a Raspberry Pi 3.
+---
+
+I'm not a huge smart home fan due to privacy concerns but I will consider and allow certain smart home products in our home. When we were renovating our condo, we decided to pickup a Nest Learning Thermostat since American Express was offering a double points deal at the Nest Store and Nest was offering a two-pack of Nest Learning Thermostat's for $450. (Basically, $50 off with double points).
+
+Fast forward a couple months later, Apple finally releases the HomePod. A smart (eh...), Siri-enabled speaker which can act as an Apple HomeKit hub and really great speaker in any home. However, anything tech related has issues. **Google** (_a subsidiary of Alphabet, the parent company of Nest_) **doesn't allow nor have HomeKit support with Nest products.** The only real solution was to build your own HomeKit Bridge device and thanks to a few developers, you can easily do that for under $50 using a Raspberry Pi.
+
+I purchased a Raspberry Pi 3, Model B+ with case from adafruit for $40 and a 32GB microSD card on Amazon for $8.
+
+<Image
+	src="https://images.squarespace-cdn.com/content/v1/58fb0155d1758eec4bb612b0/1526307926144-5LZXZO8B1G9Q0A4Z4XGU/2258-01.jpg?format=1500w"
+	alt="Raspberry Pi 3, Model B+ with Adafruit Raspberry Pi Plastic Case"
+  width="500px"
+/>
+
+<Image
+	src="https://images.squarespace-cdn.com/content/v1/58fb0155d1758eec4bb612b0/1526307938433-LA4V6OYKKQW8QNCJOX0U/61CvJYRZtuL._SL1200_.jpg?format=1500w"
+	alt="SanDisk 32GB microSD Card"
+  width="500px"
+/>
+
+With the hardware in hand, everything was put together and Raspbian Linux was installed. I followed the directions from the Homebridge wiki and all of the plugins I wanted to install.
+
+<Box>
+<UnorderedList>
+	<ListItem>**Homebridge** - <Link href="https://github.com/nfarina/homebridge" target="_blank">https://github.com/nfarina/homebridge</Link></ListItem>
+	<ListItem>**Homebridge-Nest** - <Link href="https://github.com/chrisjshull/homebridge-nest" target="_blank">https://github.com/chrisjshull/homebridge-nest</Link></ListItem>
+	<ListItem>**Homebridge-Samsung-Remote** - <Link href="https://github.com/nitaybz/homebridge-samsung-remote" target="_blank">https://github.com/nitaybz/homebridge-samsung-remote</Link></ListItem>
+</UnorderedList>
+</Box>
+
+<Image src="https://images.squarespace-cdn.com/content/v1/58fb0155d1758eec4bb612b0/1526318737836-VVT9662LNYVAJICD7MZN/IMG_3998.PNG?format=1500w" alt="Nest on HomeKit" width="500px"/>
+
+With the Nest and Samsung TV operating in HomeKit, we can control the thermostat or TV using Siri anywhere around the house or around the world.

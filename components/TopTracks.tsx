@@ -12,8 +12,8 @@ import {
     Th,
     Tbody,
     Td,
-    HStack,
     Link,
+    useColorModeValue
 } from "@chakra-ui/react";
 import * as React from 'react'
 import useSWR from "swr";
@@ -24,11 +24,17 @@ export const TopTracks = () => {
 
     return (
 
-        <Box maxW="md">
+        <Box
+        maxW="460px"
+        bg={useColorModeValue('white', 'gray.800')}
+        rounded={{ sm: 'lg' }}
+        shadow={{ md: 'base' }}
+        p={{ base: '6', md: '8' }}
+    >
             <VStack align="left">
                 <Heading>Top Tracks</Heading>
                 <Text>Curious to what I&#39;m currently listening to? Here are my current top tracks</Text>
-                <Table>
+                <Table size="sm">
                     <Thead>
                         <Tr>
                             <Th></Th> {/* Album Cover */}
@@ -39,7 +45,7 @@ export const TopTracks = () => {
                         {data?.tracks.map((item: { albumImageUrl: string; album: string; name: string; artist: string; songUrl: string; albumUrl: string, artistUrl: string }, index: React.Key) => (
                             <Tr key={index}>
                                 <Td>
-                                    <Link as="a" href={item.albumUrl} target="_blank" rel="noreferrer"><Image boxSize="64px" objectFit='scale-down' src={item.albumImageUrl} alt={item.album}></Image></Link>
+                                    <Link as="a" href={item.albumUrl} target="_blank" rel="noreferrer"><Image boxSize="96px" objectFit='scale-down' src={item.albumImageUrl} alt={item.album}></Image></Link>
                                 </Td>
                                 <Td>
                                     <Link as="a" href={item.songUrl} target="_blank" rel="noreferrer"><Text fontWeight="bold">{item.name} <ExternalLinkIcon/></Text></Link>

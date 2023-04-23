@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { Chart, BarController, LinearScale, CategoryScale, registerables } from 'chart.js'
-import { Box, Heading, VStack, Text } from "@chakra-ui/react";
+import { Box, Heading, VStack, Text, useColorModeValue } from "@chakra-ui/react";
 import useSWR from "swr";
 import fetcher from "../lib/fetcher";
 
@@ -77,8 +77,15 @@ export const AudioFeatures = () => {
   }, [data, chartRef]);
 
   return (
-    <Box maxW="lg">
-      <VStack align="left">
+    <Box
+    maxW="460px"
+    bg={useColorModeValue('white', 'gray.800')}
+    rounded={{ sm: 'lg' }}
+    shadow={{ md: 'base' }}
+    p={{ base: '6', md: '8' }}
+    maxH="600px"
+>
+      <VStack align="left" spacing={4}>
         <Heading>Audio Features</Heading>
         <Text maxW="360px">Here are the audio statistics on my current top 10 Spotify tracks</Text>
         <canvas id="audioFeatures" width="400" height="400" ref={chartRef}></canvas>
