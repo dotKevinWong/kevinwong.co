@@ -69,7 +69,7 @@ function Post({ source, meta }: any) {
             overflow="auto"
             maxW="4xl"
         >
-            <Box as="section" flex="1" marginLeft={8} marginRight={8} p="6" marginTop="4" overflow="auto" maxW="5xl">
+            <Box as="section" flex="1" p="6" marginTop="2" overflow="auto" maxW="5xl">
                 <VStack align="left" spacing={8}>
                     <Heading>{meta.title}</Heading>
                     <HStack>
@@ -88,8 +88,8 @@ export default function Slug({ source, meta }: any) {
     const isDesktop = useBreakpointValue({ base: false, lg: true })
 
     return (
-        <div>
-            <Meta title="Kevin Wong" />
+        <>
+            <Meta title={`${meta.title} • Kevin Wong`} ogImage={meta.og_image} ogDesc={meta.excerpt} />
             {isDesktop ? (
                 <Box height="100vh" overflow="hidden" position="relative">
                     <Flex h="full" id="app-container">
@@ -98,6 +98,7 @@ export default function Slug({ source, meta }: any) {
                             as="section"
                             flex="1"
                             overflow="auto"
+                            marginLeft={4}
                         >
                             <Post source={source} meta={meta} />
                         </Box>
@@ -115,7 +116,7 @@ export default function Slug({ source, meta }: any) {
                     <Post source={source} meta={meta} />
                 </Flex>
             )}
-        </div>
+        </>
     );
 };
 
