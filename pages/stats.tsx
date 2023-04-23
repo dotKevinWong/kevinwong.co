@@ -24,7 +24,6 @@ export default function Statistics() {
                                 as="section"
                                 flex="1"
                                 overflow="auto"
-                                p="2"
                             >
                                 <StatisticsPage />
                             </Box>

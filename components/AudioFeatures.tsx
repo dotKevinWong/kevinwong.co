@@ -78,7 +78,7 @@ export const AudioFeatures = () => {
 
   return (
     <Box
-    maxW="460px"
+    maxW="390px"
     bg={useColorModeValue('white', 'gray.800')}
     rounded={{ sm: 'lg' }}
     shadow={{ md: 'base' }}
@@ -87,7 +87,7 @@ export const AudioFeatures = () => {
 >
       <VStack align="left" spacing={4}>
         <Heading>Audio Features</Heading>
-        <Text maxW="360px">Here are the audio statistics on my current top 10 Spotify tracks</Text>
+        <Text>Here are the audio statistics on my current top 10 Spotify tracks</Text>
         <canvas id="audioFeatures" width="400" height="400" ref={chartRef}></canvas>
       </VStack>
     </Box >
