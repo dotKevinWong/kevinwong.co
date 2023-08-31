@@ -18,7 +18,7 @@ export const NowPlaying = () => {
 
   return(
   <Container as="footer">
-      {/* <Flex
+      <Flex
         justify="space-between"
         align="center"
         fontWeight="medium"
@@ -43,7 +43,7 @@ export const NowPlaying = () => {
           </VStack>
         </HStack>
         </VStack>
-      </Flex> */}
+      </Flex>
   </Container>
   )
 }

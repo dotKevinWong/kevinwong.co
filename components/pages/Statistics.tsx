@@ -11,7 +11,7 @@ export const StatisticsPage = () => {
     return (
         <Box as="section" flex="1" p="6" overflow="auto">
             <Flex direction="row" wrap="wrap" justify={isDesktop ? "flex-start" : "center"} rowGap={4} columnGap={4}>
-            {/* <TopTracks/> */}
+            <TopTracks/>
             <AudioFeatures/>
             <GithubStats/>
             </Flex>

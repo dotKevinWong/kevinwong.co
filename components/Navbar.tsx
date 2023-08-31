@@ -65,7 +65,7 @@ export const Navbar = () => {
                     <NavButton label="Blog" icon={FiBook} onClick={() => router.push('/blog')} />
                     <NavButton label="Contact" icon={FiAtSign} onClick={() => router.push('/contact')} />
                   </Stack>
-                  {/* <NowPlaying /> */}
+                  <NowPlaying />
                 </Stack>
               </Stack>
             </Flex>
