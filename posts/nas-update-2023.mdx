@@ -1,0 +1,94 @@
+---
+title: 'NAS Update: 2023 Edition'
+author: Kevin Wong
+tags:
+  - nas
+  - home networking
+  - freenas
+date: 2023-12-30
+og_image: https://res.cloudinary.com/dseps2m53/image/upload/f_auto,q_auto/v1/kevinwong/ee2i3ixgbbgcxzqpm9t1
+excerpt: Learn about all the changes I've made to my NAS since 2018 in this 2023 end of year update.
+---
+
+It's been a while since I've written about my NAS. It has been running since 2018 and I've made some changes to it since then. 
+This year I've made some major changes to my NAS such as upgrading the CPU, RAM, adding a 36TB array, and upgrading to TrueNAS Scale. Over the years, I've added small upgrades like a 4TB pure flash SSD array. 
+
+<Heading size="md">Hardware</Heading>
+<Table variant="simple">
+<Thead>
+<Tr>
+<Th>Type</Th>
+<Th>Component</Th>
+</Tr>
+</Thead>
+<Tbody>
+<Tr>
+<Td>Case</Td>
+<Td>U-NAS NSC-810A Server Chassis</Td>
+</Tr>
+<Tr>
+<Td>CPU</Td>
+<Td>Intel Xeon E-2276G (3.8GHz Hexa-Core, Hyperthreaded - 80W - 12MB Cache)</Td>
+</Tr>
+<Tr>
+<Td>Motherboard</Td>
+<Td>ASRock Rack E3C246D4U2-2T</Td>
+</Tr>
+<Tr>
+<Td>RAM</Td>
+<Td>4x - Crucial 16GB DDR4-2666MHz ECC RAM (64GB RAM Total)</Td>
+</Tr>
+<Tr>
+<Td>HDD</Td>
+<Td>3x - 4TB - WD RED</Td>
+</Tr>
+<Tr>
+<Td></Td>
+<Td>3x - 12TB - WD RED Pro</Td>
+</Tr>
+<Tr>
+<Td></Td>
+<Td>4x - 1TB - Intel 660p NVMe SSD</Td>
+</Tr>
+<Tr>
+<Td>PSU</Td>
+<Td>Silverstone 600W Flex ATX PSU</Td>
+</Tr>
+<Tr>
+<Td>Boot Drive</Td>
+<Td>2x - 32GB - Sandisk Cruzer Fit</Td>
+</Tr>
+</Tbody>
+</Table>
+
+<Heading size="md">Software</Heading>
+<p>This year I've finally decided to upgrade from FreeNAS Core to FreeNAS Scale. The primary reasons being that FreeNAS Scale is based on Linux and the ease of enabling hardware transcoding in Plex. As such, here are the current "apps" that I'm running on FreeNAS Scale.</p>
+
+<Box>
+<UnorderedList>
+<ListItem>Plex</ListItem>
+<ListItem>Transmission</ListItem>
+<ListItem>Radarr</ListItem>
+<ListItem>Sonarr</ListItem>
+<ListItem>Jackett</ListItem>
+<ListItem>xTeVe</ListItem>
+<ListItem>unpackerr</ListItem>
+</UnorderedList>
+</Box>
+
+<Heading size="md">Why the U-NAS Case?</Heading>
+<p>I started off with the Fractal Design Node 304 but the case was starting to fall apart. This is where I began searching for the best hot-swappable case and found one made by U-NAS.</p>
+<p>The case can be a bit hard to work in and it requires routine maintenance as there is no dust filters built into the case. However, the hot-swappable functionality is great and it supports microATX motherboards with a bit of handwork.</p>
+
+<Heading size="md">What are all the drives for?</Heading>
+<p>I currently have a 4TB SSD array that is used as primary storage for everything. The 36TB HDD array is used for all media storage and the 12TB HDD array is used exclusively for macOS Time Machine backups.</p>
+<p>The 12TB array was originally used for media storage but I slowly ran out of storage space which is where the 36TB HDD array came into play. All of the arrays are configured in a ZRAID-1 setup so I can lose a drive and still have all of my data. However, as a best practice, I follow the 3-2-1 backup strategy with offsite backup.</p>
+
+<Heading size="md">What troubles have I run into?</Heading>
+<p>There were a few. First off, you cannot use Registered ECC RAM with the ASRock Rack E3C246D4U2-2T motherboard. This is due to a limitation of the Intel C246 chipset. If you run into this issue, you'll need to use Unbuffered ECC RAM (UDIMMs).</p>
+<p>Secondly, when upgrading to FreeNAS Scale from FreeNAS Core, my legacy arrays were not recognized on FreeNAS Scale. You could fix this issue by manually upgrading each drive in the array. However, I decided to start fresh and restore from backups.</p>
+<p>Lastly, FreeNAS Scale still has a few bugs in the UI that need to be worked out. For example, you could not edit an app configuration after it has been created. This was fixed in the latest release.</p>
+
+<Heading size="md">What's next?</Heading>
+<p>I would like to upgrade the SSD array to larger capacity drives. This would be an expensive upgrade but I think it would be worth it. I will be waiting for SSD prices to drop before I make this upgrade.</p>
+<p>I would also like to upgrade my home network to 10GBe. This would allow me to take advantage of the 10GBe NIC on my motherboard and allow me to transfer files faster over Ethernet.</p>
