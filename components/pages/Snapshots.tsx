@@ -13,8 +13,78 @@ export const SnapshotsPage = () => {
 
     return (
         <Box as="section" flex="1" p="6" overflow="auto">
-            <Flex wrap="wrap" gap={8} justify="center">
-            <PhotoPost
+            <Flex wrap="wrap" gap={8} justify={isMobile ? "center" : "left"} maxW="1640px">
+                <PhotoPost
+                    photoSrc="https://res.cloudinary.com/dseps2m53/image/upload/v1736439818/kevinwong/jub98pifpiahjvlvjglm.jpg"
+                    description="favorite moment when the mummers came up and said “ayy you got that shit on”"
+                    alt="favorite moment when the mummers came up and said ayy you got that shit on"
+                    date="January 01, 2025"
+                    sourceHref="https://www.instagram.com/p/DETWepspuWQ/"
+                    sourceName="Instagram" />
+                <PhotoPost
+                    photoSrc="https://res.cloudinary.com/dseps2m53/image/upload/v1736439810/kevinwong/gwuruuwsvqerfkdwpbwc.jpg"
+                    description="2024: this and yap"
+                    alt="2024: this and yap"
+                    date="December 31, 2024"
+                    sourceHref="https://www.instagram.com/p/DEQ4bOpJ6Ei/"
+                    sourceName="Instagram" />
+                <PhotoPost
+                    photoSrc="https://res.cloudinary.com/dseps2m53/image/upload/v1736439818/kevinwong/osijurswvf1gufhkyrwp.jpg"
+                    description="squad-ed up with gung gung (公公), go go (哥哥), and @matthewhhyoung – thanks to General Wong, I went from hitting 1 clay to 6 clays in my second round 😭"
+                    alt="squad-ed up with gung gung (公公), go go (哥哥), and @matthewhhyoung"
+                    date="November 10, 2024"
+                    sourceHref="https://www.instagram.com/p/DCNUV04Jmv-/"
+                    sourceName="Instagram" />
+                <PhotoPost
+                    photoSrc="https://res.cloudinary.com/dseps2m53/image/upload/v1736439809/kevinwong/z2hpqrhsffdordzaicp3.jpg"
+                    description="🇬🇧 serving royal looks from across the pond at fall ball 2024 👑"
+                    alt="🇬🇧 serving royal looks from across the pond at fall ball 2024 👑"
+                    date="November 03, 2024"
+                    sourceHref="https://www.instagram.com/p/DB6SJJLJCi9/"
+                    sourceName="Instagram" />
+                <PhotoPost
+                    photoSrc="https://res.cloudinary.com/dseps2m53/image/upload/v1736439808/kevinwong/itnrd9w7d4b6fjq9gay0.jpg"
+                    description="roman catholic high school greater philadelphia area leadership award 2k24"
+                    alt="roman catholic high school greater philadelphia area leadership award 2k24"
+                    date="October 17, 2024"
+                    sourceHref="https://www.instagram.com/p/DBP9MdzJk77"
+                    sourceName="Instagram" />
+                <PhotoPost
+                    photoSrc="https://res.cloudinary.com/dseps2m53/image/upload/v1736439804/kevinwong/wuwscthe1mbvzsdsu8zz.jpg"
+                    description="first time playing golf but i need lessons ⛳️"
+                    alt="first time playing golf but i need lessons ⛳️"
+                    date="July 13, 2024"
+                    sourceHref="https://www.instagram.com/p/C9YhxvpJswh/"
+                    sourceName="Instagram" />
+                <PhotoPost
+                    photoSrc="https://res.cloudinary.com/dseps2m53/image/upload/v1736439815/kevinwong/yf5fbymnvnvglujo7dty.jpg"
+                    description="at the junior summer kickoff party"
+                    alt="at the junior summer kickoff party"
+                    date="June 20, 2024"
+                    sourceHref="https://www.instagram.com/p/C8dVHBuJYZt/?img_index=1"
+                    sourceName="Instagram" />
+                <PhotoPost
+                    photoSrc="https://res.cloudinary.com/dseps2m53/image/upload/v1736439809/kevinwong/sslqy4fowqmytfaxljzn.jpg"
+                    description="at the opening of matisse and renoir sipping red wine with my red wine bow tie"
+                    alt="at the opening of matisse and renoir sipping red wine with my red wine bow tie"
+                    date="June 18, 2024"
+                    sourceHref="https://www.instagram.com/p/C8YPDhZJzil/"
+                    sourceName="Instagram" />
+                <PhotoPost
+                    photoSrc="https://res.cloudinary.com/dseps2m53/image/upload/v1736439813/kevinwong/bgcnynfjkvy3z9w0u8o0.jpg"
+                    description="acrobate et jeune arlequin"
+                    alt="acrobate et jeune arlequin"
+                    date="May 10, 2024"
+                    sourceHref="https://www.instagram.com/p/C6z1OjXt7Tx/"
+                    sourceName="Instagram" />
+                <PhotoPost
+                    photoSrc="https://res.cloudinary.com/dseps2m53/image/upload/v1736439808/kevinwong/vtto4xgaaqbcthb8ikvj.jpg"
+                    description="ul juniors & young friends of the art museum take on art-ish 🎭"
+                    alt="ul juniors & young friends of the art museum take on art-ish 🎭"
+                    date="April 21, 2024"
+                    sourceHref="https://www.instagram.com/p/C6ApdlitfVt/"
+                    sourceName="Instagram" />
+                <PhotoPost
                     photoSrc="https://res.cloudinary.com/dseps2m53/image/upload/f_auto,q_auto/v1/kevinwong/jznxdbizbkesgmhgsbaf"
                     description="officially a member of the league. for love of country leads 🇺🇸"
                     alt="officially a member of the league. for love of country leads 🇺🇸"

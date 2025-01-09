@@ -45,6 +45,7 @@ const Page = () => {
       <Flex h="100%">
         <MyAlert />
         <Folder initialPosition={{ x: 38, y: 48 }} imageSrc="/dragonbot_folder.png" title="DragonBot" href="/projects/dragonbot" size={128} />
+        <Folder initialPosition={{ x: 12, y: 32 }} imageSrc="/cahillclub_folder.png" title="Cahill Club" href="/projects/cahillclub" size={128} />
         {/* <Folder initialPosition={{ x: 12, y: 32 }} imageSrc="/gray_folder.png" title="Thoughts" href="#" size={128} />
         <Folder initialPosition={{ x: 57, y: 12 }} imageSrc="/yellow_folder.png" title="Stuff" href="#" size={128} /> */}
       </Flex>

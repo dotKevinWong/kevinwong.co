@@ -18,7 +18,7 @@ export const PhotoPost = (props: PhotoPostProps) => {
             <Flex align="baseline" mt={3}>
                 <Badge colorScheme="pink"><Link href={props.sourceHref} target="_blank">{props.sourceName} <ExternalLinkIcon /></Link></Badge>
             </Flex>
-            <Text mt={2}>
+            <Text mt={2} whiteSpace="pre-line">
                 {props.description}
             </Text>
             <Text mt={2} fontWeight="light">{props.date}</Text>

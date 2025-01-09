@@ -10,7 +10,7 @@ export default function Home() {
 
   return (
     <div>
-      <Meta title="Kevin Wong"/>
+      <Meta title="Kevin Wong" ogDesc="I'm Kevin, a Software Engineer based in Philly. 2022 B.S. Software Engineering from Drexel University. Consultant at SAP."/>
       {isDesktop ? (
         <Box height="100vh" overflow="hidden" position="relative">
           <Flex h="full" id="app-container">

@@ -4,7 +4,6 @@ import { ListeningTimeline } from "../ListeningTimeline"
 import { AudioFeatures } from "../AudioFeatures"
 import { GithubStats } from "../GitHubStats"
 
-
 export const StatisticsPage = () => {
     const isDesktop = useBreakpointValue({ base: false, lg: true })
 

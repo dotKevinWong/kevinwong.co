@@ -26,7 +26,7 @@ export default function Projects() {
                     >
                         <VStack spacing={4} align="right">
                             <HStack direction={{ base: 'column', md: 'row' }} spacing={{ base: '4', md: '8' }}>
-                                <Avatar size="xl" name="Kevin Wong" src="/dragonbot.png" />
+                                <Avatar size="xl" name="DragonBot" src="/dragonbot.png" />
                                 <VStack spacing={1} align="left">
                                     <Heading textAlign="center" size="xl" fontWeight="extrabold" letterSpacing="tight">
                                         DragonBot
@@ -95,6 +95,10 @@ export default function Projects() {
                                 <Tr>
                                     <Td><HStack><Emoji symbol="toolbox" label="red toolbox"/><Text fontWeight="bold">Moderation Tools</Text></HStack></Td>
                                     <Td>Provides a variety of moderation tools, including automated messages, new member tools, and more</Td>
+                                </Tr>
+                                <Tr>
+                                    <Td><HStack><Emoji symbol="scroll" label="robot"/><Text fontWeight="bold">Logging</Text></HStack></Td>
+                                    <Td>Logs a variety of events, including message edits, deletions, and more</Td>
                                 </Tr>
                                 <Tr>
                                     <Td><HStack><Emoji symbol="party-popper" label="party popper"/><Text fontWeight="bold">Fun Commands</Text></HStack></Td>
