@@ -4,6 +4,7 @@ import React from "react";
 import { Navbar } from "../../components/Navbar";
 import Emoji from "../../components/Emoji";
 import { Meta } from "../../components/Meta";
+import Link from "next/link";
 
 export default function Projects() {
     const isDesktop = useBreakpointValue({ base: false, lg: true })
@@ -12,7 +13,7 @@ export default function Projects() {
         return (
             <Box as="section" position="relative" w="100%" h="100%" p="6">
                 <Box pb={4}>
-                    <Button asChild colorPalette="blue"><a href="/projects"><Emoji symbol="backhand-index-pointing-left" label="Backhand Index Pointing Left" />Back</a></Button>              
+                    <Button asChild colorPalette="blue"><Link href="/projects"><Emoji symbol="backhand-index-pointing-left" label="Backhand Index Pointing Left" />Back</Link></Button>              
                 </Box>
                 <Flex wrap="wrap">
                     <VStack gap={4} align="left">
@@ -95,7 +96,7 @@ export default function Projects() {
                                     Links
                                 </Heading>
                                 <HStack gap={4}>
-                                    <Button asChild colorPalette="blue" variant="subtle"><a href="https://cahillclub.com" target="_blank">Website</a></Button>
+                                    <Button asChild colorPalette="blue" variant="subtle"><Link href="https://cahillclub.com" target="_blank">Website</Link></Button>
                                 </HStack>
                             </VStack>
                         </Box>

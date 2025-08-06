@@ -12,6 +12,7 @@ import {
 import { NavButton } from './NavButton'
 import { NowPlaying } from './NowPlaying'
 import { ColorModeButton } from './ui/color-mode'
+import Link from 'next/link'
 
 export const Sidebar = () => {
   const router = useRouter()
@@ -28,7 +29,7 @@ export const Sidebar = () => {
       <Stack justify="space-between" gap="1" width="full">
         <Stack gap="8" >
           <HStack gap="4" marginLeft={4}>
-            <Heading size="2xl" fontWeight="bold"><a href="/">KEVIN WONG</a></Heading>
+            <Heading size="2xl" fontWeight="bold"><Link href="/">KEVIN WONG</Link></Heading>
             <ColorModeButton />
           </HStack>
           <Stack>

@@ -1,15 +1,13 @@
-import { Box, Button, CloseButton, Drawer, Flex, Heading, Portal, useDisclosure } from '@chakra-ui/react'
-import { useRouter } from 'next/router'
+import { Box, Button, CloseButton, Drawer, Flex, Heading, Portal } from '@chakra-ui/react'
 import * as React from 'react'
 import {
   FiMenu,
 } from 'react-icons/fi'
 import { Sidebar } from './Sidebar'
+import Link from 'next/link'
 
 
 export const Navbar = () => {
-  const router = useRouter()
-  const { open, onToggle, onClose } = useDisclosure()
 
   return (
     <Box
@@ -20,7 +18,7 @@ export const Navbar = () => {
       boxShadow={{ base: 'sm', _dark: 'sm-dark' }}
     >
       <Flex justify="space-between" align="center">
-        <Heading size="2xl" fontWeight="bold"><a href="/">KEVIN WONG</a></Heading>
+        <Heading size="2xl" fontWeight="bold"><Link href="/">KEVIN WONG</Link></Heading>
         <Drawer.Root size="xs" placement="start">
           <Drawer.Trigger>
             <Button variant="ghost" aria-label="Open Menu">

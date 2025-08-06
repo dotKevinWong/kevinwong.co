@@ -11,7 +11,6 @@ import {
     Image,
     VStack,
     Stack,
-    Link,
     List,
     ListItem,
     Table,
@@ -19,6 +18,7 @@ import {
     useBreakpointValue,
     AvatarGroup
 } from '@chakra-ui/react';
+import Link from 'next/link';
 import React from "react";
 import { serialize } from 'next-mdx-remote/serialize';
 import { MDXRemote } from 'next-mdx-remote';
@@ -56,10 +56,10 @@ function Post({ source, meta }: any) {
         >
             <Box as="section" flex="1" p="6" marginTop="2" overflow="auto" maxW="5xl">
                 <Button asChild colorPalette="blue" marginBottom="4">
-                    <a href="/blog">
+                    <Link href="/blog" passHref>
                         <Emoji symbol="backhand-index-pointing-left" label="Backhand Index Pointing Left" />
                         Back
-                    </a>
+                    </Link>
                 </Button>
                 <VStack align="left" gap={8}>
 
