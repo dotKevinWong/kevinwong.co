@@ -1,20 +1,8 @@
 import {
-  Box,
-  Circle,
   Flex,
-  Heading,
-  HStack,
-  VStack,
-  Image,
-  Text,
-  Link,
-  useColorModeValue as mode,
   Container,
-  Avatar,
 } from "@chakra-ui/react";
 import * as React from 'react'
-import { FaSpotify } from "react-icons/fa";
-import { ExternalLinkIcon } from "@chakra-ui/icons";
 import useSWR from "swr";
 import fetcher from "../lib/fetcher";
 

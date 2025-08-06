@@ -9,33 +9,31 @@ export const BlogPage = (props: Blog) => {
     const { posts } = props
     return (
         <Box as="section" flex="1" p="4" margin="4" overflow="auto">
-            <VStack spacing={12} align="left">
+            <VStack gap={12} align="left">
                 {posts.length > 0 ?
                     (posts.map((post: any) => (
                         <Box maxW="2xl" key={post}>
-                            <Stack spacing="16">
-                                <Stack spacing="6">
+                            <Stack gap="16">
+                                <Stack gap="6">
                                     <Link href={`/blog/` + post.slug}>
-                                        <AspectRatio ratio={16 / 9}>
                                             <Image
                                                 src={post.og_image}
                                                 objectPosition="top"
                                                 objectFit="cover"
-                                                fallback={<Skeleton />}
                                                 alt={post.title}
+                                                aspectRatio={16/9}
                                                 borderRadius="xl"
                                             />
-                                        </AspectRatio>
                                     </Link>
-                                    <Stack spacing="3">
-                                        <Stack spacing="1">
-                                            {/* <HStack spacing={2} direction="row" justify="left" wrap="wrap">
+                                    <Stack gap="3">
+                                        <Stack gap="1">
+                                            <HStack gap={2} direction="row" justify="left" wrap="wrap">
                                                 {post.tags.map((tag: any) => (
-                                                    <Tag key={tag} colorScheme="blue">
-                                                        {tag}
-                                                    </Tag>
+                                                    <Tag.Root key={tag} colorPalette="blue">
+                                                        <Tag.Label>{tag}</Tag.Label>
+                                                    </Tag.Root>
                                                 ))}
-                                        </HStack> */}
+                                        </HStack>
                                             <Link href={`/blog/` + post.slug}>
                                                 <Heading
                                                     size="xs"

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import Draggable from 'react-draggable'
-import { Box, Text, VStack, useBreakpointValue } from '@chakra-ui/react'
+import { Box, Text, Image, VStack, useBreakpointValue, Container } from '@chakra-ui/react'
 import { useRouter } from 'next/router'
 
 interface FolderProps {
@@ -15,6 +15,7 @@ export const Folder = (props: FolderProps) => {
   const router = useRouter()
   const [position, setPosition] = useState({ x: 0, y: 0 })
   const [lastTap, setLastTap] = useState(0)
+  const nodeRef = useRef<HTMLDivElement>(null)
 
   const onDragStop = (e: any, data: { x: any; y: any }) => {
     setPosition({ x: data.x, y: data.y })
@@ -54,7 +55,7 @@ export const Folder = (props: FolderProps) => {
   }, [props.initialPosition, screenSize])
 
   return (
-    <Draggable position={position} onStop={onDragStop} bounds="parent">
+    <Draggable position={position} onStop={onDragStop} bounds="parent" nodeRef={nodeRef}>
       <VStack
         w={`${props.size}px`}
         h={`${props.size}px`}
@@ -67,13 +68,14 @@ export const Folder = (props: FolderProps) => {
         _hover={{ cursor: 'grab' }}
         onDoubleClick={() => {router.push(`${props.href}`)}}
         onTouchStart={handleTouchStart}
+        ref={nodeRef}
       >
-        <Box bgImage={props.imageSrc} w="100%" h="100%" bgPosition="center" bgSize={`${props.size / 2}px`} bgRepeat="no-repeat" borderRadius="md" />
-                <Text fontSize="xs" fontFamily="mono" _groupHover={{ textDecoration: 'underline' }}>
-                    {props.title}
-                </Text>
-            </VStack>
-        </Draggable>
+        <Box css={{ backgroundImage: `url(${props.imageSrc})`, backgroundSize: `${props.size / 2}px`, backgroundRepeat: 'no-repeat', backgroundPosition: 'center' }} w="100%" h="100%" borderRadius="md" />
+        <Text fontSize="xs" fontFamily="mono" _groupHover={{ textDecoration: 'underline' }}>
+          {props.title}
+        </Text>
+      </VStack>
+    </Draggable>
     )
 }
 

@@ -14,66 +14,66 @@ It's been a while since I've written about my NAS. It has been running since 201
 This year I've made some major changes to my NAS such as upgrading the CPU, RAM, adding a 36TB array, and upgrading to TrueNAS Scale. Over the years, I've added small upgrades like a 4TB pure flash SSD array. 
 
 <Heading size="md">Hardware</Heading>
-<Table variant="simple">
-<Thead>
-<Tr>
-<Th>Type</Th>
-<Th>Component</Th>
-</Tr>
-</Thead>
-<Tbody>
-<Tr>
-<Td>Case</Td>
-<Td>U-NAS NSC-810A Server Chassis</Td>
-</Tr>
-<Tr>
-<Td>CPU</Td>
-<Td>Intel Xeon E-2276G (3.8GHz Hexa-Core, Hyperthreaded - 80W - 12MB Cache)</Td>
-</Tr>
-<Tr>
-<Td>Motherboard</Td>
-<Td>ASRock Rack E3C246D4U2-2T</Td>
-</Tr>
-<Tr>
-<Td>RAM</Td>
-<Td>4x - Crucial 16GB DDR4-2666MHz ECC RAM (64GB RAM Total)</Td>
-</Tr>
-<Tr>
-<Td>HDD</Td>
-<Td>3x - 4TB - WD RED</Td>
-</Tr>
-<Tr>
-<Td></Td>
-<Td>3x - 12TB - WD RED Pro</Td>
-</Tr>
-<Tr>
-<Td></Td>
-<Td>4x - 1TB - Intel 660p NVMe SSD</Td>
-</Tr>
-<Tr>
-<Td>PSU</Td>
-<Td>Silverstone 600W Flex ATX PSU</Td>
-</Tr>
-<Tr>
-<Td>Boot Drive</Td>
-<Td>2x - 32GB - Sandisk Cruzer Fit</Td>
-</Tr>
-</Tbody>
-</Table>
+<Table.Root variant="simple">
+<Table.Header>
+<Table.Row>
+<Table.ColumnHeader>Type</Table.ColumnHeader>
+<Table.ColumnHeader>Component</Table.ColumnHeader>
+</Table.Row>
+</Table.Header>
+<Table.Body>
+<Table.Row>
+<Table.Cell>Case</Table.Cell>
+<Table.Cell>U-NAS NSC-810A Server Chassis</Table.Cell>
+</Table.Row>
+<Table.Row>
+<Table.Cell>CPU</Table.Cell>
+<Table.Cell>Intel Xeon E-2276G (3.8GHz Hexa-Core, Hyperthreaded - 80W - 12MB Cache)</Table.Cell>
+</Table.Row>
+<Table.Row>
+<Table.Cell>Motherboard</Table.Cell>
+<Table.Cell>ASRock Rack E3C246D4U2-2T</Table.Cell>
+</Table.Row>
+<Table.Row>
+<Table.Cell>RAM</Table.Cell>
+<Table.Cell>4x - Crucial 16GB DDR4-2666MHz ECC RAM (64GB RAM Total)</Table.Cell>
+</Table.Row>
+<Table.Row>
+<Table.Cell>HDD</Table.Cell>
+<Table.Cell>3x - 4TB - WD RED</Table.Cell>
+</Table.Row>
+<Table.Row>
+<Table.Cell></Table.Cell>
+<Table.Cell>3x - 12TB - WD RED Pro</Table.Cell>
+</Table.Row>
+<Table.Row>
+<Table.Cell></Table.Cell>
+<Table.Cell>4x - 1TB - Intel 660p NVMe SSD</Table.Cell>
+</Table.Row>
+<Table.Row>
+<Table.Cell>PSU</Table.Cell>
+<Table.Cell>Silverstone 600W Flex ATX PSU</Table.Cell>
+</Table.Row>
+<Table.Row>
+<Table.Cell>Boot Drive</Table.Cell>
+<Table.Cell>2x - 32GB - Sandisk Cruzer Fit</Table.Cell>
+</Table.Row>
+</Table.Body>
+</Table.Root>
 
 <Heading size="md">Software</Heading>
 <p>This year I've finally decided to upgrade from FreeNAS Core to FreeNAS Scale. The primary reasons being that FreeNAS Scale is based on Linux and the ease of enabling hardware transcoding in Plex. As such, here are the current "apps" that I'm running on FreeNAS Scale.</p>
 
 <Box>
-<UnorderedList>
-<ListItem>Plex</ListItem>
-<ListItem>Transmission</ListItem>
-<ListItem>Radarr</ListItem>
-<ListItem>Sonarr</ListItem>
-<ListItem>Jackett</ListItem>
-<ListItem>xTeVe</ListItem>
-<ListItem>unpackerr</ListItem>
-</UnorderedList>
+<List.Root>
+  <List.Item>Plex</List.Item>
+  <List.Item>Transmission</List.Item>
+  <List.Item>Radarr</List.Item>
+  <List.Item>Sonarr</List.Item>
+  <List.Item>Jackett</List.Item>
+  <List.Item>xTeVe</List.Item>
+  <List.Item>unpackerr</List.Item>
+</List.Root>
 </Box>
 
 <Heading size="md">Why the U-NAS Case?</Heading>

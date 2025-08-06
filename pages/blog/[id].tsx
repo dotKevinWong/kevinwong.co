@@ -14,17 +14,10 @@ import {
     Link,
     List,
     ListItem,
-    ListIcon,
-    OrderedList,
-    UnorderedList,
     Table,
-    Thead,
-    Tbody,
-    Tr,
-    Th,
-    Td,
-    Divider,
-    useBreakpointValue
+    Separator,
+    useBreakpointValue,
+    AvatarGroup
 } from '@chakra-ui/react';
 import React from "react";
 import { serialize } from 'next-mdx-remote/serialize';
@@ -33,6 +26,7 @@ import { getPost, getPosts } from '../../lib/mdx';
 import formatter from '../../lib/formatter';
 import { Navbar } from '../../components/Navbar';
 import { Meta } from '../../components/Meta';
+import Emoji from '../../components/Emoji';
 
 const components = {
     Avatar,
@@ -48,17 +42,8 @@ const components = {
     Link,
     List,
     ListItem,
-    ListIcon,
-    OrderedList,
-    UnorderedList,
     Table,
-    Thead,
-    Tbody,
-    Tr,
-    Th,
-    Td,
-    Divider,
-    useBreakpointValue
+    Separator
 };
 
 function Post({ source, meta }: any) {
@@ -70,10 +55,22 @@ function Post({ source, meta }: any) {
             maxW="4xl"
         >
             <Box as="section" flex="1" p="6" marginTop="2" overflow="auto" maxW="5xl">
-                <VStack align="left" spacing={8}>
+                <Button asChild colorPalette="blue" marginBottom="4">
+                    <a href="/blog">
+                        <Emoji symbol="backhand-index-pointing-left" label="Backhand Index Pointing Left" />
+                        Back
+                    </a>
+                </Button>
+                <VStack align="left" gap={8}>
+
                     <Heading>{meta.title}</Heading>
                     <HStack>
-                        <Avatar size="sm" name="Kevin Wong" src={meta.author_avatar} />
+                        <AvatarGroup>
+                            <Avatar.Root size="sm">
+                                <Avatar.Image src={meta.author_avatar} alt={meta.author} />
+                                <Avatar.Fallback>DB</Avatar.Fallback>
+                            </Avatar.Root>
+                        </AvatarGroup>
                         <Text>{meta.author} / </Text>
                         <Text>{formatter.shortUTCDate(meta.date)}</Text>
                     </HStack>

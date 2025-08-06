@@ -1,4 +1,4 @@
-import { Button, Flex, Heading, HStack, Stack, useColorMode, useColorModeValue as mode } from '@chakra-ui/react'
+import { Flex, Heading, HStack, Stack} from '@chakra-ui/react'
 import { useRouter } from 'next/router'
 import * as React from 'react'
 import {
@@ -7,32 +7,29 @@ import {
   FiBarChart2,
   FiBook,
   FiCamera,
-  FiMoon,
   FiSmile,
-  FiSun
 } from 'react-icons/fi'
 import { NavButton } from './NavButton'
 import { NowPlaying } from './NowPlaying'
+import { ColorModeButton } from './ui/color-mode'
 
 export const Sidebar = () => {
-  const { colorMode, toggleColorMode } = useColorMode()
   const router = useRouter()
 
   return (
     <Flex
       flex="1"
-      // bg="bg-surface"
-      boxShadow={mode('sm', 'sm-dark')}
+      boxShadow={{ base: 'sm', _dark: 'sm-dark' }}
       maxW={{ base: 'full', sm: 'xs' }}
       py={{ base: '6', sm: '10' }}
       px={{ base: '4', sm: '6' }}
-      bg={mode("gray.100", "inherit")}
+      bg={{ base: 'gray.100', _dark: 'inherit' }}
     >
-      <Stack justify="space-between" spacing="1" width="full">
-        <Stack spacing="8" shouldWrapChildren>
-          <HStack spacing="4" marginLeft={4}>
-            <Heading as="a" size="lg" href="/">KEVIN WONG</Heading>
-            <Button onClick={() => toggleColorMode()}>{colorMode === 'light' ? <FiMoon /> : <FiSun />}</Button>
+      <Stack justify="space-between" gap="1" width="full">
+        <Stack gap="8" >
+          <HStack gap="4" marginLeft={4}>
+            <Heading size="2xl" fontWeight="bold"><a href="/">KEVIN WONG</a></Heading>
+            <ColorModeButton />
           </HStack>
           <Stack>
             <NavButton label="I am" icon={FiSmile} onClick={() => router.push('/')} />
