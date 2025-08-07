@@ -14,7 +14,7 @@ export const Navbar = () => {
       width="full"
       py="4"
       px={{ base: '4', md: '8' }}
-      bg={{ base: 'gray.100', _dark: 'inherit'}}
+      bg={{ base: 'gray.100', _dark: '#111111'}}
       boxShadow={{ base: 'sm', _dark: 'sm-dark' }}
     >
       <Flex justify="space-between" align="center">

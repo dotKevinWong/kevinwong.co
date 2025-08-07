@@ -13,17 +13,17 @@ export default function Projects() {
         return (
             <Box as="section" position="relative" w="100%" h="100%" p="6">
                 <Box pb={4}>
-                    <Button asChild colorPalette="blue"><Link href="/projects"><Emoji symbol="backhand-index-pointing-left" label="Backhand Index Pointing Left" />Back</Link></Button>              
+                    <Button asChild colorPalette="blue"><Link href="/projects"><Emoji symbol="backhand-index-pointing-left" label="Backhand Index Pointing Left" />Back</Link></Button>
                 </Box>
                 <Flex wrap="wrap">
                     <VStack gap={4} align="left">
                         <Box
-                            bg={{ base: 'gray.100', _dark: 'gray.800' }}
+                            bg={{ base: 'gray.100', _dark: '#111111' }}
                             maxWidth="lg"
                             p={{ base: '6', md: '8' }}
                             rounded={{ sm: 'lg' }}
                             shadow={{ md: 'base' }}
-                            maxH="640px"
+                            alignSelf="flex-start"
                         >
                             <VStack gap={4} align="right">
                                 <HStack direction={{ base: 'column', md: 'row' }} gap={{ base: '4', md: '8' }}>
@@ -46,13 +46,13 @@ export default function Projects() {
                             </VStack>
                         </Box>
                         <Box
-                            bg={{ base: 'gray.100', _dark: 'gray.800' }}
+                            bg={{ base: 'gray.100', _dark: '#111111' }}
                             maxWidth="lg"
                             p={{ base: '6', md: '8' }}
                             rounded={{ sm: 'lg' }}
                             shadow={{ md: 'base' }}
-                            maxH="640px"
                             mb={4}
+                            alignSelf="flex-start"
                         >
                             <VStack gap={4} align="right">
                                 <HStack direction={{ base: 'column', md: 'row' }} gap={{ base: '4', md: '8' }}>

@@ -24,7 +24,7 @@ export const Sidebar = () => {
       maxW={{ base: 'full', sm: 'xs' }}
       py={{ base: '6', sm: '10' }}
       px={{ base: '4', sm: '6' }}
-      bg={{ base: 'gray.100', _dark: 'inherit' }}
+      bg={{ base: 'gray.100', _dark: '#111111' }}
     >
       <Stack justify="space-between" gap="1" width="full">
         <Stack gap="8" >

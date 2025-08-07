@@ -21,7 +21,7 @@ export const TopTracks = () => {
 
         <Box
             maxW="420px"
-            bg={{ base: 'gray.100', _dark: 'gray.800' }}
+            bg={{ base: 'gray.100', _dark: '#111111' }}
             rounded={{ sm: 'lg' }}
             shadow={{ md: 'base' }}
             p={{ base: '6', md: '8' }}

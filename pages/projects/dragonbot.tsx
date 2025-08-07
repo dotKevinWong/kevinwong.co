@@ -17,12 +17,12 @@ export default function Projects() {
                 </Box>
                 <Flex wrap="wrap">
                     <Box
-                        bg={{ base: 'white', _dark: 'gray.800' }}
+                        bg={{ base: 'white', _dark: '#111111' }}
                         maxWidth="lg"
                         p={{ base: '6', md: '8' }}
                         rounded={{ sm: 'lg' }}
                         shadow={{ md: 'base' }}
-                        maxH="640px"
+                        alignSelf="flex-start"
                     >
                         <VStack gap={4} align="right">
                             <HStack direction={{ base: 'column', md: 'row' }} gap={{ base: '4', md: '8' }}>
