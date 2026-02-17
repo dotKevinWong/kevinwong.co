@@ -10,8 +10,8 @@
     "audit:prod": "npm audit --omit=dev --audit-level=high"
   },
   "engines": {
-    "node": ">=25.6.1",
-    "npm": ">=11.9.0"
+    "node": "24.x",
+    "npm": "11.x"
   },
   "packageManager": "npm@11.9.0",
   "dependencies": {
