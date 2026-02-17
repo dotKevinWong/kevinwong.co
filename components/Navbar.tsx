@@ -20,7 +20,7 @@ export const Navbar = () => {
       <Flex justify="space-between" align="center">
         <Heading size="2xl" fontWeight="bold"><Link href="/">KEVIN WONG</Link></Heading>
         <Drawer.Root size="xs" placement="start">
-          <Drawer.Trigger>
+          <Drawer.Trigger asChild>
             <Button variant="ghost" aria-label="Open Menu">
               <FiMenu/>
             </Button>
@@ -41,4 +41,3 @@ export const Navbar = () => {
     </Box >
   )
 }
-
