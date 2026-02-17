@@ -18,14 +18,14 @@ export const GithubStats = () => {
                 <Heading>GitHub Statistics</Heading>
                 <Text>Here are some statistics about my contributions on GitHub</Text>
                 { ColorMode === 'dark' ? (
-                    <Image src="https://github-readme-stats.vercel.app/api?username=dotkevinwong&show_icons=true&count_private=true&theme=dark" alt="GitHub Stats" maxW="420px" />
+                    <Image src="https://raw.githubusercontent.com/dotKevinWong/dotKevinWong/refs/heads/main/profile/stats-dark.svg" alt="GitHub Stats" maxW="420px" />
                 ) : (
-                    <Image src="https://github-readme-stats.vercel.app/api?username=dotkevinwong&show_icons=true&count_private=true" alt="GitHub Stats" maxW="420px" />
+                    <Image src="https://raw.githubusercontent.com/dotKevinWong/dotKevinWong/refs/heads/main/profile/stats.svg" alt="GitHub Stats" maxW="420px" />
                 )}
                 { ColorMode === 'dark' ? (
-                    <Image src="https://github-readme-stats.vercel.app/api/top-langs/?username=dotkevinwong&layout=compact&theme=dark" alt="GitHub Stats" maxW="420px" />
+                    <Image src="https://raw.githubusercontent.com/dotKevinWong/dotKevinWong/refs/heads/main/profile/top-langs-dark.svg" alt="GitHub Stats" maxW="420px" />
                 ) : (
-                    <Image src="https://github-readme-stats.vercel.app/api/top-langs/?username=dotkevinwong&layout=compact" alt="GitHub Stats" maxW="420px" />
+                    <Image src="https://raw.githubusercontent.com/dotKevinWong/dotKevinWong/refs/heads/main/profile/top-langs.svg" alt="GitHub Stats" maxW="420px" />
                 )}
             </VStack>
         </Box >
