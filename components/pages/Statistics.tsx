@@ -1,6 +1,5 @@
 import { Box, Flex, useBreakpointValue } from "@chakra-ui/react"
 import { TopTracks } from "../TopTracks"
-import { ListeningTimeline } from "../ListeningTimeline"
 import { GithubStats } from "../GitHubStats"
 
 export const StatisticsPage = () => {
@@ -15,5 +14,3 @@ export const StatisticsPage = () => {
         </Box>
     )
 }
-
-

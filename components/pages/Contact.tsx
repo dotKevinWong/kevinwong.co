@@ -41,7 +41,7 @@ export const ContactPage = () => {
                 <Separator orientation='horizontal' />
                 <VStack align="left" gap={4}>
                     <Text fontWeight="bold">Expires:</Text>
-                    <Text>01/01/2026 (MM/DD/YYYY)</Text>
+                    <Text>01/01/2030 (MM/DD/YYYY)</Text>
                     <Text fontWeight="bold">Fingerprint:</Text>
                     <VStack align="left" gap={2}>
                         <Text>EC93 2702 D4C5 9E90 0168</Text>

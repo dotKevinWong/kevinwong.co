@@ -1,6 +1,8 @@
 import { getNowPlaying } from "../../lib/spotify";
 
 export default async function handler(_, res) {
+  res.setHeader("Cache-Control", "private, no-store, max-age=0, must-revalidate");
+
   const response = await getNowPlaying();
 
   if (response.status === 204 || response.status > 400) {
@@ -23,11 +25,6 @@ export default async function handler(_, res) {
   const artistUrl = song.item.artists[0].external_urls.spotify;
   const currentDuration = song.progress_ms;
   const totalDuration = song.item.duration_ms;
-
-  res.setHeader(
-    "Cache-Control",
-    "public, s-maxage=60, stale-while-revalidate=30"
-  );
 
   return res.status(200).json({
     album,

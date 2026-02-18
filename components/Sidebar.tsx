@@ -6,6 +6,7 @@ import {
   FiAtSign,
   FiBarChart2,
   FiBook,
+  FiBookOpen,
   FiCamera,
   FiSmile,
 } from 'react-icons/fi'
@@ -35,6 +36,7 @@ export const Sidebar = () => {
           <Stack>
             <NavButton label="I am" icon={FiSmile} onClick={() => router.push('/')} />
             <NavButton label="Statistics" icon={FiBarChart2} onClick={() => router.push('/stats')} />
+            <NavButton label="Bookshelf" icon={FiBookOpen} onClick={() => router.push('/bookshelf')} />
             <NavButton label="Snapshots" icon={FiCamera} onClick={() => router.push('/snapshots')} />
             <NavButton label="Projects" icon={FiArchive} onClick={() => router.push('/projects')} />
             <NavButton label="Blog" icon={FiBook} onClick={() => router.push('/blog')} />
