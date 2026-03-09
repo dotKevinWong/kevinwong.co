@@ -6,20 +6,19 @@ import Emoji from "../../components/Emoji";
 import { Meta } from "../../components/Meta";
 import Link from "next/link";
 
-export default function Projects() {
-    const isDesktop = useBreakpointValue({ base: false, lg: true })
-
-    const Page = () => {
-        return (
-            <Box as="section" position="relative" w="100%" h="100%" p="6">
+export const CahillClubPage = ({ embedded = false }: { embedded?: boolean }) => {
+    return (
+        <Box as="section" position="relative" w="100%" h="100%" p="6">
+            {!embedded && (
                 <Box pb={4}>
                     <Button asChild colorPalette="blue"><Link href="/projects"><Emoji symbol="backhand-index-pointing-left" label="Backhand Index Pointing Left" />Back</Link></Button>
                 </Box>
-                <Flex wrap="wrap">
-                    <VStack gap={4} align="left">
+            )}
+                <Flex wrap="wrap" direction={embedded ? "column" : { base: "column", lg: "row" }}>
+                    <VStack gap={4} align="left" w={embedded ? "100%" : undefined}>
                         <Box
                             bg={{ base: 'gray.100', _dark: '#111111' }}
-                            maxWidth="lg"
+                            maxWidth={embedded ? "100%" : "lg"}
                             p={{ base: '6', md: '8' }}
                             rounded={{ sm: 'lg' }}
                             shadow={{ md: 'base' }}
@@ -47,7 +46,7 @@ export default function Projects() {
                         </Box>
                         <Box
                             bg={{ base: 'gray.100', _dark: '#111111' }}
-                            maxWidth="lg"
+                            maxWidth={embedded ? "100%" : "lg"}
                             p={{ base: '6', md: '8' }}
                             rounded={{ sm: 'lg' }}
                             shadow={{ md: 'base' }}
@@ -101,17 +100,22 @@ export default function Projects() {
                             </VStack>
                         </Box>
                     </VStack>
-                    <Box p={{ base: '2', md: '8' }} maxW={{ base: "100%", lg: "calc(100% - 540px)" }} minW="360px">
-                        <Text>Coming Soon...</Text>
-                    </Box>
+                    {!embedded && (
+                        <Box p={{ base: '2', md: '8' }} maxW={{ base: "100%", lg: "calc(100% - 540px)" }} minW="360px">
+                            <Text>Coming Soon...</Text>
+                        </Box>
+                    )}
                 </Flex>
             </Box >
         )
-    }
+}
+
+export default function Projects() {
+    const isDesktop = useBreakpointValue({ base: false, lg: true })
 
     return (
         <div style={{ overscrollBehavior: "contain" }}>
-            <Meta title="DragonBot • Kevin Wong" />
+            <Meta title="Cahill Club • Kevin Wong" />
             {isDesktop ? (
                 <Box height="100vh" overflow="hidden">
                     <Flex h="full" id="app-container">
@@ -121,7 +125,7 @@ export default function Projects() {
                             flex="1"
                             overflow="auto"
                         >
-                            <Page />
+                            <CahillClubPage />
                         </Box>
                     </Flex>
                 </Box>
@@ -134,7 +138,7 @@ export default function Projects() {
                     overflowY="auto"
                 >
                     <Navbar />
-                    <Page />
+                    <CahillClubPage />
                 </Flex>
             )
             }

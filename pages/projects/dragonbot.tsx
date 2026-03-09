@@ -1,28 +1,27 @@
 import { Sidebar } from "../../components/Sidebar";
-import { Box, Flex, Text, HStack, Wrap, Tag, Heading, useBreakpointValue, Avatar, VStack, Button, Table, AvatarGroup } from "@chakra-ui/react";
+import { Box, Flex, Text, HStack, Wrap, Tag, Heading, useBreakpointValue, Avatar, VStack, Button, AvatarGroup } from "@chakra-ui/react";
 import React from "react";
 import { Navbar } from "../../components/Navbar";
 import Emoji from "../../components/Emoji";
 import { Meta } from "../../components/Meta";
 import Link from "next/link";
 
-export default function Projects() {
-    const isDesktop = useBreakpointValue({ base: false, lg: true })
-
-    const Page = () => {
-        return (
-            <Box as="section" position="relative" w="100%" h="100%" p="6">
+export const DragonBotPage = ({ embedded = false }: { embedded?: boolean }) => {
+    return (
+        <Box as="section" position="relative" w="100%" h="100%" p="6">
+            {!embedded && (
                 <Box pb={4}>
                     <Button asChild colorPalette="blue"><Link href="/projects"><Emoji symbol="backhand-index-pointing-left" label="Backhand Index Pointing Left" />Back</Link></Button>
                 </Box>
-                <Flex wrap="wrap">
+            )}
+                <Flex wrap="wrap" direction={embedded ? "column" : { base: "column", lg: "row" }}>
                     <Box
-                        bg={{ base: 'white', _dark: '#111111' }}
-                        maxWidth="lg"
+                        bg={{ base: 'gray.100', _dark: '#111111' }}
+                        maxWidth={embedded ? "100%" : "lg"}
+                        w={embedded ? "100%" : "lg"}
                         p={{ base: '6', md: '8' }}
                         rounded={{ sm: 'lg' }}
                         shadow={{ md: 'base' }}
-                        alignSelf="flex-start"
                     >
                         <VStack gap={4} align="right">
                             <HStack direction={{ base: 'column', md: 'row' }} gap={{ base: '4', md: '8' }}>
@@ -75,55 +74,44 @@ export default function Projects() {
                             </HStack>
                         </VStack>
                     </Box>
-                    <Box p={{ base: '2', md: '8' }} maxW={{ base: "100%", lg: "calc(100% - 540px)" }} minW="360px">
+                    <Box p={{ base: '2', md: '8' }} maxWidth={embedded ? "100%" : "lg"} w={embedded ? "100%" : "lg"}>
                         <Heading pb={4}>Features</Heading>
-                        <Table.Root>
-                            <Table.Header>
-                                <Table.Row>
-                                    <Table.Cell>Feature</Table.Cell>
-                                    <Table.Cell>Description</Table.Cell>
-                                </Table.Row>
-                            </Table.Header>
-                            <Table.Body>
-                                <Table.Row>
-                                    <Table.Cell><HStack><Emoji symbol="checkmark" label="checkmark" /><Text fontWeight="bold">Verification Sync</Text></HStack></Table.Cell>
-                                    <Table.Cell>Syncs the Drexel student/alumni status of a user across all servers that use DragonBot</Table.Cell>
-                                </Table.Row>
-                                <Table.Row>
-                                    <Table.Cell><HStack><Emoji symbol="judge" label="judge" /><Text fontWeight="bold">Ban Sync</Text></HStack></Table.Cell>
-                                    <Table.Cell>Syncs the ban status of a user across all servers that use DragonBot.</Table.Cell>
-                                </Table.Row>
-                                <Table.Row>
-                                    <Table.Cell><HStack><Emoji symbol="books" label="books" /><Text fontWeight="bold">Course Information</Text></HStack></Table.Cell>
-                                    <Table.Cell>Provides information about a course, pre-reqs, and more from the Drexel WebTMS system</Table.Cell>
-                                </Table.Row>
-                                <Table.Row>
-                                    <Table.Cell><HStack><Emoji symbol="cool" label="smiling face with sunglasses" /><Text fontWeight="bold">User Profiles</Text></HStack></Table.Cell>
-                                    <Table.Cell>Learn more about a member of the server, including their plan, major, co-ops, clubs, and more</Table.Cell>
-                                </Table.Row>
-                                <Table.Row>
-                                    <Table.Cell><HStack><Emoji symbol="bar-chart" label="bar chart" /><Text fontWeight="bold">Server Statistics</Text></HStack></Table.Cell>
-                                    <Table.Cell>Provides a variety of server statistics, including membercount, MEE6 leaderboard, and more.</Table.Cell>
-                                </Table.Row>
-                                <Table.Row>
-                                    <Table.Cell><HStack><Emoji symbol="toolbox" label="red toolbox" /><Text fontWeight="bold">Moderation Tools</Text></HStack></Table.Cell>
-                                    <Table.Cell>Provides a variety of moderation tools, including automated messages, new member tools, and more</Table.Cell>
-                                </Table.Row>
-                                <Table.Row>
-                                    <Table.Cell><HStack><Emoji symbol="scroll" label="robot" /><Text fontWeight="bold">Logging</Text></HStack></Table.Cell>
-                                    <Table.Cell>Logs a variety of events, including message edits, deletions, and more</Table.Cell>
-                                </Table.Row>
-                                <Table.Row>
-                                    <Table.Cell><HStack><Emoji symbol="party-popper" label="party popper" /><Text fontWeight="bold">Fun Commands</Text></HStack></Table.Cell>
-                                    <Table.Cell>Provides a variety of fun commands, including a LaTeX compiler, d20 dice, and more</Table.Cell>
-                                </Table.Row>
-                            </Table.Body>
-                        </Table.Root>
+                        <VStack gap={3} align="stretch">
+                            {[
+                                { emoji: "checkmark", label: "checkmark", name: "Verification Sync", desc: "Syncs the Drexel student/alumni status of a user across all servers that use DragonBot" },
+                                { emoji: "judge", label: "judge", name: "Ban Sync", desc: "Syncs the ban status of a user across all servers that use DragonBot" },
+                                { emoji: "books", label: "books", name: "Course Information", desc: "Provides information about a course, pre-reqs, and more from the Drexel WebTMS system" },
+                                { emoji: "cool", label: "smiling face with sunglasses", name: "User Profiles", desc: "Learn more about a member of the server, including their plan, major, co-ops, clubs, and more" },
+                                { emoji: "bar-chart", label: "bar chart", name: "Server Statistics", desc: "Provides a variety of server statistics, including membercount, MEE6 leaderboard, and more" },
+                                { emoji: "toolbox", label: "red toolbox", name: "Moderation Tools", desc: "Provides a variety of moderation tools, including automated messages, new member tools, and more" },
+                                { emoji: "scroll", label: "robot", name: "Logging", desc: "Logs a variety of events, including message edits, deletions, and more" },
+                                { emoji: "party-popper", label: "party popper", name: "Fun Commands", desc: "Provides a variety of fun commands, including a LaTeX compiler, d20 dice, and more" },
+                            ].map((feature) => (
+                                <Box
+                                    key={feature.name}
+                                    bg={{ base: 'gray.100', _dark: '#111111' }}
+                                    p={4}
+                                    rounded="lg"
+                                    shadow={{ md: 'base' }}
+                                >
+                                    <HStack gap={4} align="center">
+                                        <Text fontSize="2xl" flexShrink={0}><Emoji symbol={feature.emoji} label={feature.label} /></Text>
+                                        <VStack align="left" gap={1}>
+                                            <Text fontWeight="bold">{feature.name}</Text>
+                                            <Text fontSize="sm" color={{ base: 'gray.600', _dark: 'gray.400' }}>{feature.desc}</Text>
+                                        </VStack>
+                                    </HStack>
+                                </Box>
+                            ))}
+                        </VStack>
                     </Box>
                 </Flex>
             </Box >
         )
-    }
+}
+
+export default function Projects() {
+    const isDesktop = useBreakpointValue({ base: false, lg: true })
 
     return (
         <div style={{ overscrollBehavior: "contain" }}>
@@ -137,7 +125,7 @@ export default function Projects() {
                             flex="1"
                             overflow="auto"
                         >
-                            <Page />
+                            <DragonBotPage />
                         </Box>
                     </Flex>
                 </Box>
@@ -150,7 +138,7 @@ export default function Projects() {
                     overflowY="auto"
                 >
                     <Navbar />
-                    <Page />
+                    <DragonBotPage />
                 </Flex>
             )
             }

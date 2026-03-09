@@ -13,6 +13,63 @@ import useSWR from "swr";
 import fetcher from "../lib/fetcher";
 import { FiExternalLink } from "react-icons/fi";
 
+const marqueeStyleId = "marquee-keyframes";
+const ensureMarqueeStyle = () => {
+  if (typeof document === "undefined") return;
+  if (document.getElementById(marqueeStyleId)) return;
+  const style = document.createElement("style");
+  style.id = marqueeStyleId;
+  style.textContent = `
+    @keyframes np-marquee {
+      0%, 20% { transform: translateX(0); }
+      50%, 70% { transform: translateX(var(--marquee-offset)); }
+      100% { transform: translateX(0); }
+    }
+  `;
+  document.head.appendChild(style);
+};
+
+const MarqueeText = ({ children, href }: { children: React.ReactNode; href?: string }) => {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [shouldScroll, setShouldScroll] = React.useState(false);
+  const [offset, setOffset] = React.useState(0);
+
+  React.useEffect(() => {
+    ensureMarqueeStyle();
+  }, []);
+
+  React.useEffect(() => {
+    const check = () => {
+      if (containerRef.current) {
+        const overflow = containerRef.current.scrollWidth - containerRef.current.clientWidth;
+        setShouldScroll(overflow > 0);
+        setOffset(overflow > 0 ? -overflow - 10 : 0);
+      }
+    };
+    // Delay check slightly so layout is settled
+    const timer = setTimeout(check, 100);
+    window.addEventListener("resize", check);
+    return () => { clearTimeout(timer); window.removeEventListener("resize", check); };
+  }, [children]);
+
+  return (
+    <div ref={containerRef} style={{ overflow: "hidden", whiteSpace: "nowrap", maxWidth: "100%" }}>
+      <Link
+        as="a"
+        href={href}
+        target="_blank"
+        style={{
+          display: "inline-block",
+          ["--marquee-offset" as string]: `${offset}px`,
+          animation: shouldScroll ? "np-marquee 10s ease-in-out infinite" : "none",
+        }}
+      >
+        <span style={{ whiteSpace: "nowrap" }}>{children}</span>
+      </Link>
+    </div>
+  );
+};
+
 type NowPlayingResponse = {
   album?: string;
   albumImageUrl?: string;
@@ -87,12 +144,12 @@ export const NowPlaying = () => {
         <Text color="black.800" fontWeight="extrabold">{data?.songUrl ? "Spotify – Now Playing" : "Spotify"}</Text>
         <HStack gap={2} color={{ base: 'gray.500', _dark: 'gray.400' }}>
           <Link as="a" href={data?.albumUrl} target="_blank"><Image width="64px" mr="2" src={data?.songUrl ? data?.albumImageUrl : "/album.png"} alt={data?.songUrl ? data?.album : "Not Playing"}/></Link>
-          <VStack align="left" gap={1}>
+          <VStack align="left" gap={1} overflow="hidden" maxW="calc(100% - 80px)">
             {data?.songUrl ? (
               <>
-                <Link as="a" href={data?.songUrl} target="_blank">{data.title}<FiExternalLink/></Link>
-                <Link as="a" href={data?.artistUrl} target="_blank">{data.artist}</Link>
-                <Link as="a" href={data?.albumUrl} target="_blank">{data.album}</Link>
+                <MarqueeText href={data?.songUrl}>{data.title} <FiExternalLink style={{ display: "inline", verticalAlign: "middle" }} /></MarqueeText>
+                <MarqueeText href={data?.artistUrl}>{data.artist}</MarqueeText>
+                <MarqueeText href={data?.albumUrl}>{data.album}</MarqueeText>
               </>
             ) : (
               <>
