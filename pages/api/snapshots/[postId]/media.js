@@ -70,7 +70,7 @@ export default async function handler(req, res) {
       [postId, position, limit]
     );
 
-    res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=600");
+    res.setHeader("Cache-Control", "public, s-maxage=2592000, stale-while-revalidate=2592000");
     return res.status(200).json({ media: normalizeRows(result.rows) });
   } catch (error) {
     console.error("[api/snapshots/:postId/media]", error);

@@ -23,6 +23,7 @@ export default async function handler(_, res) {
 
     });
 
+    res.setHeader("Cache-Control", "public, s-maxage=86400, stale-while-revalidate=86400");
     return res.status(200).json({
         tracks,
     });

@@ -157,7 +157,7 @@ export default async function handler(req, res) {
       ? encodeCursor({ id: lastPost.id, postedAt: lastPost.postedAt })
       : null;
 
-    res.setHeader("Cache-Control", "public, s-maxage=120, stale-while-revalidate=300");
+    res.setHeader("Cache-Control", "public, s-maxage=2592000, stale-while-revalidate=2592000");
     return res.status(200).json({
       posts,
       pagination: {
