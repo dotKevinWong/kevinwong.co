@@ -11,7 +11,8 @@ import {
 import * as React from 'react'
 import useSWR from "swr";
 import fetcher from "../lib/fetcher";
-import { FiExternalLink } from "react-icons/fi";
+import { FiExternalLink, FiMusic } from "react-icons/fi";
+import { Tooltip } from "./ui/tooltip";
 
 const marqueeStyleId = "marquee-keyframes";
 const ensureMarqueeStyle = () => {
@@ -91,7 +92,7 @@ const formatDuration = (ms: number) => {
   return `${minutes}:${seconds}`;
 };
 
-export const NowPlaying = () => {
+export const NowPlaying = ({ collapsed = false }: { collapsed?: boolean }) => {
   const { data } = useSWR<NowPlayingResponse>("/api/nowplaying", fetcher, {
     refreshInterval: 15000,
     revalidateOnFocus: true,
@@ -131,6 +132,41 @@ export const NowPlaying = () => {
   const totalDuration = Math.max(0, data?.totalDuration ?? 0);
   const currentDuration = totalDuration > 0 ? Math.min(displayProgressMs, totalDuration) : displayProgressMs;
   const progressWidth = totalDuration > 0 ? `${(currentDuration / totalDuration) * 100}%` : "0%";
+
+  const tooltipLabel = data?.songUrl
+    ? `${data.title} by ${data.artist}`
+    : "Not Playing";
+
+  if (collapsed) {
+    return (
+      <Flex justify="center">
+        <Tooltip content={tooltipLabel} positioning={{ placement: 'right' }}>
+          <Link as="a" href={data?.songUrl || undefined} target="_blank">
+            {data?.songUrl ? (
+              <Image
+                width="40px"
+                height="40px"
+                borderRadius="md"
+                src={data.albumImageUrl}
+                alt={data.album}
+              />
+            ) : (
+              <Flex
+                w="40px"
+                h="40px"
+                align="center"
+                justify="center"
+                borderRadius="md"
+                bg={{ base: 'gray.200', _dark: 'gray.800' }}
+              >
+                <FiMusic size={18} />
+              </Flex>
+            )}
+          </Link>
+        </Tooltip>
+      </Flex>
+    );
+  }
 
   return(
   <Container as="footer">

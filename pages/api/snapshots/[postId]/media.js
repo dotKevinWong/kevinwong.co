@@ -1,36 +1,9 @@
 import { getDbPool } from "../../../../lib/db";
+import { UUID_REGEX, clampInt, normalizeMedia } from "../../../../lib/snapshots";
+import { rateLimit } from "../../../../lib/rate-limit";
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function clampStartPosition(input) {
-  const parsed = Number.parseInt(String(input || 0), 10);
-  if (Number.isNaN(parsed)) {
-    return 0;
-  }
-
-  return Math.max(0, parsed);
-}
-
-function clampLimit(input) {
-  const parsed = Number.parseInt(String(input || 1), 10);
-  if (Number.isNaN(parsed)) {
-    return 1;
-  }
-
-  return Math.max(1, Math.min(6, parsed));
-}
-
-function normalizeRows(rows) {
-  return rows.map((row) => ({
-    id: row.id,
-    position: Number(row.position || 0),
-    kind: row.kind,
-    url: row.url,
-    publicId: row.publicId,
-    width: row.width ? Number(row.width) : null,
-    height: row.height ? Number(row.height) : null,
-  }));
-}
+const CACHE_HEADER =
+  "public, s-maxage=2592000, stale-while-revalidate=86400";
 
 export default async function handler(req, res) {
   if (req.method !== "GET") {
@@ -38,9 +11,13 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  if (rateLimit(req)) {
+    return res.status(429).json({ error: "Too many requests" });
+  }
+
   const postId = String(req.query.postId || "");
-  const position = clampStartPosition(req.query.position);
-  const limit = clampLimit(req.query.limit);
+  const position = clampInt(req.query.position, { min: 0, max: Infinity, fallback: 0 });
+  const limit = clampInt(req.query.limit, { min: 1, max: 6, fallback: 1 });
 
   if (!postId) {
     return res.status(400).json({ error: "postId is required" });
@@ -70,8 +47,8 @@ export default async function handler(req, res) {
       [postId, position, limit]
     );
 
-    res.setHeader("Cache-Control", "public, s-maxage=2592000, stale-while-revalidate=2592000");
-    return res.status(200).json({ media: normalizeRows(result.rows) });
+    res.setHeader("Cache-Control", CACHE_HEADER);
+    return res.status(200).json({ media: normalizeMedia(result.rows) });
   } catch (error) {
     console.error("[api/snapshots/:postId/media]", error);
     return res.status(500).json({ error: "Failed to load media" });

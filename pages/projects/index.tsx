@@ -1,6 +1,6 @@
 import { Sidebar } from "../../components/Sidebar";
 import { Box, Flex, Text, VStack, HStack, useBreakpointValue } from "@chakra-ui/react";
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import Draggable from "react-draggable";
 import { Navbar } from "../../components/Navbar";
 import { Meta } from "../../components/Meta";
@@ -8,7 +8,6 @@ import { useColorMode } from "../../components/ui/color-mode";
 import { useRouter } from "next/router";
 import { DragonBotPage } from "./dragonbot";
 import { CahillClubPage } from "./cahillclub";
-import { NowPlaying } from "../../components/NowPlaying";
 import useSWR from "swr";
 import fetcher from "../../lib/fetcher";
 
@@ -106,68 +105,408 @@ const AppleLogo = () => (
   </svg>
 );
 
-/* ─── Spotify Visualizer ─── */
+/* ─── Spotify Visualizer (WMP Psychedelic) ─── */
 
-const VISUALIZER_BARS = 24;
 const SpotifyVisualizer = ({ isPlaying }: { isPlaying: boolean }) => {
-  const [bars, setBars] = useState<number[]>(() =>
-    Array.from({ length: VISUALIZER_BARS }, () => 0.15)
-  );
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animRef = useRef<number>(0);
 
   useEffect(() => {
-    if (!isPlaying) {
-      setBars(Array.from({ length: VISUALIZER_BARS }, () => 0.15));
-      return;
-    }
-    const interval = setInterval(() => {
-      setBars(prev => prev.map((_, i) => {
-        // Create a wave-like pattern with some randomness
-        const base = Math.sin(Date.now() / 400 + i * 0.5) * 0.3 + 0.5;
-        const random = Math.random() * 0.3;
-        return Math.max(0.1, Math.min(1, base + random));
-      }));
-    }, 120);
-    return () => clearInterval(interval);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let t = 0;
+
+    const draw = () => {
+      const W = canvas.width;
+      const H = canvas.height;
+
+      if (!isPlaying) {
+        // Idle: dark with subtle slow plasma
+        ctx.fillStyle = "rgba(0,0,0,0.15)";
+        ctx.fillRect(0, 0, W, H);
+        t += 0.005;
+        for (let x = 0; x < W; x += 4) {
+          for (let y = 0; y < H; y += 4) {
+            const v = Math.sin(x * 0.02 + t) + Math.sin(y * 0.02 + t * 0.7);
+            const brightness = (v + 2) / 4 * 30;
+            ctx.fillStyle = `hsl(260, 60%, ${brightness}%)`;
+            ctx.fillRect(x, y, 4, 4);
+          }
+        }
+        animRef.current = requestAnimationFrame(draw);
+        return;
+      }
+
+      // Fade trailing effect
+      ctx.fillStyle = "rgba(0, 0, 0, 0.08)";
+      ctx.fillRect(0, 0, W, H);
+
+      t += 0.03;
+      const cx = W / 2;
+      const cy = H / 2;
+
+      // Plasma layer
+      for (let x = 0; x < W; x += 3) {
+        for (let y = 0; y < H; y += 3) {
+          const dx = (x - cx) / W;
+          const dy = (y - cy) / H;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const v1 = Math.sin(x * 0.025 + t * 1.3);
+          const v2 = Math.sin(y * 0.02 - t * 0.9);
+          const v3 = Math.sin((x + y) * 0.015 + t);
+          const v4 = Math.sin(dist * 8 - t * 2);
+          const v = (v1 + v2 + v3 + v4) / 4;
+          const hue = ((v + 1) * 180 + t * 40) % 360;
+          const light = 40 + v * 25;
+          const alpha = 0.45 + v * 0.15;
+          ctx.fillStyle = `hsla(${hue}, 100%, ${light}%, ${alpha})`;
+          ctx.fillRect(x, y, 3, 3);
+        }
+      }
+
+      // Radial waveform rings
+      for (let ring = 0; ring < 3; ring++) {
+        ctx.beginPath();
+        const baseRadius = 20 + ring * 18;
+        const hue = (t * 60 + ring * 120) % 360;
+        ctx.strokeStyle = `hsla(${hue}, 100%, 65%, 0.7)`;
+        ctx.lineWidth = 1.5;
+        for (let a = 0; a <= Math.PI * 2; a += 0.04) {
+          const wobble = Math.sin(a * 6 + t * 3 + ring) * 8 +
+            Math.sin(a * 10 - t * 5) * 4 +
+            Math.sin(a * 3 + t * 2) * 6;
+          const r = baseRadius + wobble;
+          const px = cx + Math.cos(a) * r;
+          const py = cy + Math.sin(a) * r;
+          a === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.stroke();
+      }
+
+      // Flowing sine waves across the bottom
+      for (let w = 0; w < 4; w++) {
+        ctx.beginPath();
+        const hue = (t * 50 + w * 90) % 360;
+        ctx.strokeStyle = `hsla(${hue}, 100%, 60%, 0.6)`;
+        ctx.lineWidth = 2;
+        for (let x = 0; x < W; x += 2) {
+          const y = H * 0.7 +
+            Math.sin(x * 0.04 + t * 2 + w) * 12 +
+            Math.sin(x * 0.02 - t * 1.5 + w * 2) * 8 +
+            Math.cos(x * 0.06 + t * 3) * 5;
+          x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+
+      // Sparkle particles
+      for (let i = 0; i < 6; i++) {
+        const angle = t * 2 + i * (Math.PI * 2 / 6);
+        const sparkR = 30 + Math.sin(t * 3 + i) * 20;
+        const sx = cx + Math.cos(angle) * sparkR;
+        const sy = cy + Math.sin(angle) * sparkR;
+        const hue = (t * 80 + i * 60) % 360;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 2, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${hue}, 100%, 80%, 0.9)`;
+        ctx.fill();
+      }
+
+      animRef.current = requestAnimationFrame(draw);
+    };
+
+    animRef.current = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(animRef.current);
   }, [isPlaying]);
 
+  // Resize canvas to fill container
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      canvas.width = Math.floor(width);
+      canvas.height = Math.floor(height);
+    });
+    ro.observe(canvas.parentElement || canvas);
+    return () => ro.disconnect();
+  }, []);
+
   return (
-    <div style={{
-      display: "flex",
-      alignItems: "flex-end",
-      gap: 2,
-      height: 40,
-      padding: "0 4px",
-    }}>
-      {bars.map((h, i) => (
-        <div
-          key={i}
-          style={{
-            flex: 1,
-            height: `${h * 100}%`,
-            background: `linear-gradient(to top, #1DB954, #1ed760)`,
-            borderRadius: 1,
-            transition: isPlaying ? "height 0.1s ease" : "height 0.5s ease",
-            opacity: isPlaying ? 0.85 : 0.3,
-          }}
-        />
-      ))}
-    </div>
+    <canvas
+      ref={canvasRef}
+      width={400}
+      height={260}
+      style={{
+        width: "100%",
+        height: "100%",
+        display: "block",
+        background: "#000",
+      }}
+    />
   );
 };
 
-const SpotifyApp = () => {
-  const { data } = useSWR<{ isPlaying?: boolean; songUrl?: string }>("/api/nowplaying", fetcher, {
+const formatDur = (ms: number) => {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+};
+
+type NowPlayingData = {
+  album?: string; albumImageUrl?: string; artist?: string; artistUrl?: string;
+  isPlaying?: boolean; songUrl?: string; albumUrl?: string; title?: string;
+  currentDuration?: number; totalDuration?: number;
+};
+
+/* SVG transport icons (crisp at any size, no emoji issues) */
+const IconPrev = ({ size = 14, color = "#333" }: { size?: number; color?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={color}><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" /></svg>
+);
+const IconPlay = ({ size = 18, color = "#333" }: { size?: number; color?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={color}><path d="M8 5v14l11-7z" /></svg>
+);
+const IconPause = ({ size = 18, color = "#333" }: { size?: number; color?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={color}><path d="M6 19h4V5H6zm8-14v14h4V5z" /></svg>
+);
+const IconNext = ({ size = 14, color = "#333" }: { size?: number; color?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={color}><path d="M6 18l8.5-6L6 6v12zm10-12v12h2V6h-2z" /></svg>
+);
+const IconVolume = ({ size = 16, color = "#666" }: { size?: number; color?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={color}><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" /></svg>
+);
+
+const useNowPlaying = () => {
+  const { data } = useSWR<NowPlayingData>("/api/nowplaying", fetcher, {
     refreshInterval: 15000,
     dedupingInterval: 1000,
   });
   const isPlaying = !!(data?.isPlaying && data?.songUrl);
+  const [progressMs, setProgressMs] = useState(0);
+
+  useEffect(() => {
+    setProgressMs(Math.max(0, data?.currentDuration ?? 0));
+  }, [data?.songUrl, data?.currentDuration, data?.title]);
+
+  useEffect(() => {
+    if (!isPlaying) return;
+    const total = data?.totalDuration ?? 0;
+    const id = setInterval(() => {
+      setProgressMs(p => total > 0 ? Math.min(p + 1000, total) : p + 1000);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [isPlaying, data?.totalDuration, data?.songUrl]);
+
+  const total = Math.max(0, data?.totalDuration ?? 0);
+  const current = total > 0 ? Math.min(progressMs, total) : progressMs;
+  const pct = total > 0 ? (current / total) * 100 : 0;
+  return { data, isPlaying, current, total, pct };
+};
+
+/* ─── WMP Button (desktop) ─── */
+const WmpButton = ({ children, big }: { children: React.ReactNode; big?: boolean }) => (
+  <button style={{
+    width: big ? 36 : 28, height: big ? 36 : 28,
+    borderRadius: "50%", border: "1px solid #999",
+    background: "linear-gradient(180deg, #f0f0f4 0%, #c0c0c8 100%)",
+    cursor: "default", display: "flex", alignItems: "center", justifyContent: "center",
+    padding: 0, boxShadow: "0 1px 2px rgba(0,0,0,0.2)",
+  }}>{children}</button>
+);
+
+/* ─── Desktop: Windows Media Player layout ─── */
+const SpotifyAppDesktop = () => {
+  const { data, isPlaying, current, total, pct } = useNowPlaying();
 
   return (
-    <div style={{ padding: "12px 16px" }}>
-      <NowPlaying />
-      <SpotifyVisualizer isPlaying={isPlaying} />
+    <div style={{
+      display: "flex", flexDirection: "column", height: "100%",
+      background: "#2a2a34", fontSize: 12, overflow: "hidden",
+    }}>
+      {/* Main: visualizer + sidebar */}
+      <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
+        {/* Visualizer */}
+        <div style={{ flex: 1, position: "relative", background: "#000", minWidth: 0 }}>
+          <SpotifyVisualizer isPlaying={isPlaying} />
+          {data?.songUrl && (
+            <div style={{
+              position: "absolute", bottom: 12, left: 14, right: 14,
+              textShadow: "0 1px 8px rgba(0,0,0,0.95), 0 0 24px rgba(0,0,0,0.6)",
+              pointerEvents: "none",
+            }}>
+              <div style={{ color: "#bbb", fontSize: 12 }}>{data.artist}</div>
+              <div style={{
+                color: "#fff", fontSize: 18, fontWeight: 700,
+                textTransform: "uppercase", letterSpacing: 0.5,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}>{data.title}</div>
+            </div>
+          )}
+        </div>
+
+        {/* Right panel */}
+        <div style={{
+          width: 170, background: "#2c2c34", display: "flex", flexDirection: "column",
+          borderLeft: "1px solid #444",
+        }}>
+          <div style={{ padding: 10, textAlign: "center" }}>
+            <a href={data?.albumUrl} target="_blank" rel="noreferrer">
+              <img
+                src={data?.songUrl ? data?.albumImageUrl : "/album.png"}
+                alt={data?.album || "Album"}
+                style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 2, border: "1px solid #555" }}
+              />
+            </a>
+            <div style={{
+              color: "#ccc", fontSize: 11, marginTop: 6,
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }}>{data?.album || "No Album"}</div>
+          </div>
+          <div style={{ flex: 1, padding: "4px 8px", overflowY: "auto" }}>
+            {data?.songUrl ? (
+              <div style={{
+                background: "#1a1a22", borderRadius: 2, padding: "6px 8px",
+                border: "1px solid #3a3a44",
+              }}>
+                <div style={{ color: "#7fbf4f", fontSize: 11, fontWeight: 700, marginBottom: 2 }}>NOW PLAYING</div>
+                <div style={{ color: "#fff", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{data.title}</div>
+                <div style={{ color: "#999", fontSize: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{data.artist}</div>
+              </div>
+            ) : (
+              <div style={{ color: "#888", fontSize: 11, textAlign: "center", paddingTop: 12 }}>Not Playing</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Status bar */}
+      <div style={{
+        background: "#1a1a20", borderTop: "1px solid #444",
+        padding: "3px 8px", display: "flex", justifyContent: "space-between",
+        alignItems: "center", fontSize: 11, color: "#aaa",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {isPlaying && (
+            <svg width="8" height="10" viewBox="0 0 24 24" fill="#7fbf4f"><path d="M8 5v14l11-7z" /></svg>
+          )}
+          <span>{data?.songUrl ? `Artist: ${data.artist}` : "Stopped"}</span>
+        </div>
+        <span style={{ color: "#7fbf4f" }}>{data?.songUrl ? formatDur(current) : "00:00"}</span>
+      </div>
+
+      {/* Progress bar */}
+      <div style={{ height: 8, background: "#1a1a20", display: "flex", alignItems: "center", padding: "0 2px" }}>
+        <div style={{ flex: 1, height: 4, background: "#333", borderRadius: 2, overflow: "hidden" }}>
+          <div style={{
+            height: "100%", width: `${pct}%`,
+            background: "linear-gradient(90deg, #2d7a1e, #4db83a)",
+            transition: "width 0.9s linear", borderRadius: 2,
+          }} />
+        </div>
+      </div>
+
+      {/* Transport controls - WMP chrome */}
+      <div style={{
+        background: "linear-gradient(180deg, #e8e8ec 0%, #c8c8d0 40%, #b0b0b8 100%)",
+        borderTop: "1px solid #999", padding: "6px 12px",
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+      }}>
+        <WmpButton><IconPrev /></WmpButton>
+        <WmpButton big>{isPlaying ? <IconPause /> : <IconPlay />}</WmpButton>
+        <WmpButton><IconNext /></WmpButton>
+        <div style={{ width: 12 }} />
+        <IconVolume />
+        <div style={{ width: 70, height: 5, background: "#666", borderRadius: 3, overflow: "hidden" }}>
+          <div style={{ width: "65%", height: "100%", background: "linear-gradient(90deg, #2d7a1e, #4db83a)", borderRadius: 3 }} />
+        </div>
+      </div>
     </div>
   );
+};
+
+/* ─── Mobile: Spotify-style layout ─── */
+const SpotifyAppMobile = () => {
+  const { data, isPlaying, current, total, pct } = useNowPlaying();
+
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", height: "100%",
+      background: "#121212", color: "#fff", overflow: "hidden",
+    }}>
+      {/* Album art + visualizer overlay */}
+      <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 0 }}>
+        <img
+          src={data?.songUrl ? data?.albumImageUrl : "/album.png"}
+          alt={data?.album || "Album"}
+          style={{
+            position: "absolute", inset: 0, width: "100%", height: "100%",
+            objectFit: "cover", filter: "blur(40px) brightness(0.3)",
+          }}
+        />
+        <div style={{ position: "absolute", inset: 0, opacity: 0.35 }}>
+          <SpotifyVisualizer isPlaying={isPlaying} />
+        </div>
+        <img
+          src={data?.songUrl ? data?.albumImageUrl : "/album.png"}
+          alt={data?.album || "Album"}
+          style={{
+            width: "65%", maxWidth: 240, aspectRatio: "1", objectFit: "cover",
+            borderRadius: 8, boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+            position: "relative", zIndex: 1,
+          }}
+        />
+      </div>
+
+      {/* Track info */}
+      <div style={{ padding: "16px 20px 8px", flexShrink: 0 }}>
+        <div style={{
+          fontSize: 18, fontWeight: 700,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}>{data?.songUrl ? data.title : "Not Playing"}</div>
+        <div style={{
+          fontSize: 14, color: "#b3b3b3", marginTop: 2,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}>{data?.songUrl ? data.artist : ""}</div>
+      </div>
+
+      {/* Progress bar */}
+      <div style={{ padding: "0 20px", flexShrink: 0 }}>
+        <div style={{ height: 4, background: "#535353", borderRadius: 2, overflow: "hidden" }}>
+          <div style={{
+            height: "100%", width: `${pct}%`, borderRadius: 2,
+            background: "#1DB954", transition: "width 0.9s linear",
+          }} />
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 11, color: "#b3b3b3" }}>
+          <span>{formatDur(current)}</span>
+          <span>{data?.songUrl ? `-${formatDur(Math.max(0, total - current))}` : "0:00"}</span>
+        </div>
+      </div>
+
+      {/* Transport controls - Spotify style */}
+      <div style={{
+        padding: "12px 20px 20px", display: "flex", alignItems: "center",
+        justifyContent: "center", gap: 28, flexShrink: 0,
+      }}>
+        <IconPrev size={22} color="#b3b3b3" />
+        <div style={{
+          width: 48, height: 48, borderRadius: "50%", background: "#fff",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          {isPlaying ? <IconPause size={24} color="#000" /> : <IconPlay size={24} color="#000" />}
+        </div>
+        <IconNext size={22} color="#b3b3b3" />
+      </div>
+    </div>
+  );
+};
+
+/* ─── SpotifyApp: delegates to desktop or mobile layout ─── */
+const SpotifyApp = ({ mobile }: { mobile?: boolean }) => {
+  return mobile ? <SpotifyAppMobile /> : <SpotifyAppDesktop />;
 };
 
 /* ─── FolderIcon (draggable) ─── */
@@ -343,20 +682,22 @@ const DockItem = ({
   mouseX: number | null;
   itemRef: React.RefObject<HTMLDivElement | null>;
 }) => {
-  const [scale, setScale] = useState(1);
-
-  useEffect(() => {
-    if (mouseX === null || !itemRef.current) {
-      setScale(1);
-      return;
+  useLayoutEffect(() => {
+    const el = itemRef.current;
+    if (!el) return;
+    let scale = 1;
+    if (mouseX !== null) {
+      const rect = el.getBoundingClientRect();
+      const center = rect.left + rect.width / 2;
+      const dist = Math.abs(mouseX - center);
+      const maxDist = 120;
+      const maxScale = 1.6;
+      scale = dist > maxDist ? 1 : 1 + (maxScale - 1) * (1 - dist / maxDist);
     }
-    const rect = itemRef.current.getBoundingClientRect();
-    const center = rect.left + rect.width / 2;
-    const dist = Math.abs(mouseX - center);
-    const maxDist = 120;
-    const maxScale = 1.6;
-    const newScale = dist > maxDist ? 1 : 1 + (maxScale - 1) * (1 - dist / maxDist);
-    setScale(newScale);
+    el.style.transform = `scale(${scale})`;
+    el.style.marginBottom = `${(scale - 1) * 24}px`;
+    el.style.marginLeft = `${(scale - 1) * 10}px`;
+    el.style.marginRight = `${(scale - 1) * 10}px`;
   }, [mouseX, itemRef]);
 
   return (
@@ -370,10 +711,6 @@ const DockItem = ({
         alignItems: "center",
         padding: "4px 2px",
         cursor: onClick ? "pointer" : "default",
-        transform: `scale(${scale})`,
-        marginBottom: (scale - 1) * 24,
-        marginLeft: (scale - 1) * 10,
-        marginRight: (scale - 1) * 10,
         transformOrigin: "bottom center",
       }}
     >
@@ -438,15 +775,15 @@ const Dock = ({
   const finderRef = useRef<HTMLDivElement>(null);
   const spotifyRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
-  const itemRefs = useRef<Map<string, React.RefObject<HTMLDivElement | null>>>(new Map());
+  const [itemRefs] = useState(() => new Map<string, React.RefObject<HTMLDivElement | null>>());
 
   useEffect(() => { ensureDockStyles(); }, []);
 
   const getItemRef = (id: string) => {
-    if (!itemRefs.current.has(id)) {
-      itemRefs.current.set(id, { current: null });
+    if (!itemRefs.has(id)) {
+      itemRefs.set(id, { current: null });
     }
-    return itemRefs.current.get(id)!;
+    return itemRefs.get(id)!;
   };
 
   const hasMinimized = minimizedWindows.length > 0 || minimizedApps.length > 0;
@@ -841,7 +1178,7 @@ const TerminalContent = () => {
       return () => clearInterval(interval);
     }, 500);
     return () => clearTimeout(startTimer);
-  }, []);
+  }, [totalLines]);
 
   return (
     <div style={{
@@ -902,7 +1239,7 @@ const TerminalContent = () => {
 /* ─── DesktopMenuBar ─── */
 
 const DesktopMenuBar = ({ isDark }: { isDark: boolean }) => {
-  const [time, setTime] = useState<Date | null>(null);
+  const [time, setTime] = useState(() => new Date());
   const textPrimary = isDark ? "#fafafa" : "#09090b";
   const menuBarBg = isDark
     ? "rgba(0,0,0,0.55)"
@@ -912,7 +1249,6 @@ const DesktopMenuBar = ({ isDark }: { isDark: boolean }) => {
     : "rgba(0,0,0,0.08)";
 
   useEffect(() => {
-    setTime(new Date());
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
@@ -1241,9 +1577,11 @@ const Desktop = () => {
           onFocus={() => focusApp("spotify")}
           onMinimize={() => minimizeApp("spotify")}
           animatingState={animatingApps["spotify"] || null}
-          width={380}
-          height="auto"
+          width={560}
+          height={420}
           initialPos={{ x: 200, y: 100 }}
+          windowBgOverride="#3a3a4a"
+          barBgOverride="#2a2a34"
         >
           <SpotifyApp />
         </AppWindow>
@@ -1368,7 +1706,7 @@ const MobileAppScreen = ({
       {/* App content */}
       <div style={{ flex: 1, overflow: "auto" }}>
         {appId === "spotify" ? (
-          <SpotifyApp />
+          <SpotifyApp mobile />
         ) : (
           <TerminalContent />
         )}

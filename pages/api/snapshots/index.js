@@ -1,18 +1,9 @@
 import { getDbPool } from "../../../lib/db";
+import { UUID_REGEX, clampInt, normalizeMedia } from "../../../lib/snapshots";
+import { rateLimit } from "../../../lib/rate-limit";
 
-const MIN_LIMIT = 3;
-const MAX_LIMIT = 12;
-const DEFAULT_LIMIT = 6;
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function clampLimit(input) {
-  const parsed = Number.parseInt(String(input || DEFAULT_LIMIT), 10);
-  if (Number.isNaN(parsed)) {
-    return DEFAULT_LIMIT;
-  }
-
-  return Math.max(MIN_LIMIT, Math.min(MAX_LIMIT, parsed));
-}
+const CACHE_HEADER =
+  "public, s-maxage=2592000, stale-while-revalidate=86400";
 
 function encodeCursor(cursor) {
   return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
@@ -52,29 +43,17 @@ function decodeCursor(rawCursor) {
   }
 }
 
-function normalizeMedia(media) {
-  if (!Array.isArray(media)) {
-    return [];
-  }
-
-  return media.map((item) => ({
-    id: item.id,
-    position: Number(item.position || 0),
-    kind: item.kind,
-    url: item.url,
-    publicId: item.publicId,
-    width: item.width ? Number(item.width) : null,
-    height: item.height ? Number(item.height) : null,
-  }));
-}
-
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     res.setHeader("Allow", ["GET"]);
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const limit = clampLimit(req.query.limit);
+  if (rateLimit(req)) {
+    return res.status(429).json({ error: "Too many requests" });
+  }
+
+  const limit = clampInt(req.query.limit, { min: 3, max: 12, fallback: 6 });
   const cursor = decodeCursor(req.query.cursor);
 
   try {
@@ -157,7 +136,7 @@ export default async function handler(req, res) {
       ? encodeCursor({ id: lastPost.id, postedAt: lastPost.postedAt })
       : null;
 
-    res.setHeader("Cache-Control", "public, s-maxage=2592000, stale-while-revalidate=2592000");
+    res.setHeader("Cache-Control", CACHE_HEADER);
     return res.status(200).json({
       posts,
       pagination: {
