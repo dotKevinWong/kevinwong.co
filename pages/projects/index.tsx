@@ -51,31 +51,31 @@ const PAGE_COMPONENTS: Record<string, React.ComponentType<{ embedded?: boolean }
 /* ─── Neofetch Data ─── */
 
 const NEOFETCH_LOGO = [
-  "                    'c.",
-  "                 ,xNMM.",
-  "               .OMMMMo",
-  "               OMMM0,",
-  "     .;loddo:' loollodol;.",
-  "   cKMMMMMMMMMMNWMMMMMMMM0:",
-  " .KMMMMMMMMMMMMMMMMMMMMMMMWd.",
-  " XMMMMMMMMMMMMMMMMMMMMMMMMX.",
-  ";MMMMMMMMMMMMMMMMMMMMMMMM:",
-  ":MMMMMMMMMMMMMMMMMMMMMMMM:",
-  ".MMMMMMMMMMMMMMMMMMMMMMMMX.",
-  " kMMMMMMMMMMMMMMMMMMMMMMMMWd.",
-  " .XMMMMMMMMMMMMMMMMMMMMMMMMk",
-  "  .XMMMMMMMMMMMMMMMMMMMMK.",
-  "    kMMMMMMMMMMMMMMMMMMd",
-  "     ;KMMMMMMMWXXWMMMMMMMk.",
-  "       .cooc,.    .,coo:.",
+  "                    'c.",         
+  "               ,xNMM.",        
+  "             .OMMMMo",           
+  "             OMMM0,",            
+  "   .;loddo:' loolloddol;.",      
+  " cKMMMMMMMMMMNWMMMMMMMMMM0:",    
+  " .KMMMMMMMMMMMMMMMMMMMMMMMWd.",     
+  " XMMMMMMMMMMMMMMMMMMMMMMMX.",      
+  ";MMMMMMMMMMMMMMMMMMMMMMMM:",       
+  ":MMMMMMMMMMMMMMMMMMMMMMMM:",       
+  ".MMMMMMMMMMMMMMMMMMMMMMMX.",       
+  " kMMMMMMMMMMMMMMMMMMMMMMMMWd.",    
+  " .XMMMMMMMMMMMMMMMMMMMMMMMMMMk",   
+  "  .XMMMMMMMMMMMMMMMMMMMMMMMMK.",    
+  "    kMMMMMMMMMMMMMMMMMMMMMMd",     
+  "     ;KMMMMMMMWXXWMMMMMMMk.",      
+  "       .cooc,.    .,coo:.",   
 ];
 
 const NEOFETCH_INFO: { label: string | null; value: string; color?: string }[] = [
   { label: null, value: "Kevin@MacBookPro.lan", color: "#3a71a4" },
   { label: null, value: "----------------------", color: "#3a71a4" },
-  { label: "OS", value: "macOS 26.3 25D125 arm64" },
+  { label: "OS", value: "macOS 26.4 25E246 arm64" },
   { label: "Host", value: "MacBookPro18,4" },
-  { label: "Kernel", value: "25.3.0" },
+  { label: "Kernel", value: "25.4.0" },
   { label: "Uptime", value: "" },
   { label: "Shell", value: "zsh 5.9" },
   { label: "Resolution", value: "1800x1169" },
@@ -87,7 +87,7 @@ const NEOFETCH_INFO: { label: string | null; value: string; color?: string }[] =
   { label: "GPU", value: "Apple M1 Max" },
 ];
 
-const NEOFETCH_COLORS = ["#374953", "#f66605", "#2f5d86", "#d2a700", "#007e8d", "#c000c0", "#247b68", "#cfd7db"];
+const NEOFETCH_COLORS = ["#384A54", "#F66605", "#305D87", "#D2A700", "#007E8D", "#C000C0", "#247B68", "#CFD8DC"];
 
 // Apple rainbow colors per logo line (matching real neofetch macOS)
 const LOGO_LINE_COLORS = [
