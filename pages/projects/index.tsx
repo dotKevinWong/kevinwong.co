@@ -51,23 +51,23 @@ const PAGE_COMPONENTS: Record<string, React.ComponentType<{ embedded?: boolean }
 /* ─── Neofetch Data ─── */
 
 const NEOFETCH_LOGO = [
-  "                    'c.",         
-  "               ,xNMM.",        
-  "             .OMMMMo",           
-  "             OMMM0,",            
-  "   .;loddo:' loolloddol;.",      
-  " cKMMMMMMMMMMNWMMMMMMMMMM0:",    
-  " .KMMMMMMMMMMMMMMMMMMMMMMMWd.",     
-  " XMMMMMMMMMMMMMMMMMMMMMMMX.",      
-  ";MMMMMMMMMMMMMMMMMMMMMMMM:",       
-  ":MMMMMMMMMMMMMMMMMMMMMMMM:",       
-  ".MMMMMMMMMMMMMMMMMMMMMMMX.",       
-  " kMMMMMMMMMMMMMMMMMMMMMMMMWd.",    
-  " .XMMMMMMMMMMMMMMMMMMMMMMMMMMk",   
-  "  .XMMMMMMMMMMMMMMMMMMMMMMMMK.",    
-  "    kMMMMMMMMMMMMMMMMMMMMMMd",     
-  "     ;KMMMMMMMWXXWMMMMMMMk.",      
-  "       .cooc,.    .,coo:.",   
+  "                    'c.",
+  "                 ,xNMM.",
+  "               .OMMMMo",
+  "               OMMM0,",
+  "     .;loddo:' loolloddol;.",
+  "   cKMMMMMMMMMMNWMMMMMMMMMM0:",
+  " .KMMMMMMMMMMMMMMMMMMMMMMMWd.",
+  " XMMMMMMMMMMMMMMMMMMMMMMMX.",
+  ";MMMMMMMMMMMMMMMMMMMMMMMM:",
+  ":MMMMMMMMMMMMMMMMMMMMMMMM:",
+  ".MMMMMMMMMMMMMMMMMMMMMMMMX.",
+  " kMMMMMMMMMMMMMMMMMMMMMMMMWd.",
+  " .XMMMMMMMMMMMMMMMMMMMMMMMMMMk",
+  "  .XMMMMMMMMMMMMMMMMMMMMMMMMK.",
+  "    kMMMMMMMMMMMMMMMMMMMMMMd",
+  "     ;KMMMMMMMWXXWMMMMMMMk.",
+  "       .cooc,.    .,coo:.",
 ];
 
 const NEOFETCH_INFO: { label: string | null; value: string; color?: string }[] = [
@@ -89,14 +89,13 @@ const NEOFETCH_INFO: { label: string | null; value: string; color?: string }[] =
 
 const NEOFETCH_COLORS = ["#384A54", "#F66605", "#305D87", "#D2A700", "#007E8D", "#C000C0", "#247B68", "#CFD8DC"];
 
-// Apple rainbow colors per logo line (matching real neofetch macOS)
+// Colors matching real neofetch macOS output
 const LOGO_LINE_COLORS = [
-  "#61BA46", "#61BA46", "#61BA46", "#61BA46",  // Green
-  "#FDB827", "#FDB827", "#FDB827",              // Yellow
-  "#F5821F", "#F5821F",                          // Orange
-  "#E03A3E", "#E03A3E", "#E03A3E",              // Red
-  "#963D97", "#963D97",                          // Purple
-  "#009DDC", "#009DDC", "#009DDC",              // Blue
+  "#305D87", "#305D87", "#305D87", "#305D87",  // Blue
+  "#D2A700", "#D2A700", "#D2A700",              // Yellow
+  "#F66605", "#F66605", "#F66605",              // Orange
+  "#C000C0", "#C000C0", "#C000C0", "#C000C0",  // Pink
+  "#007E8D", "#007E8D", "#007E8D",              // Teal
 ];
 
 /* ─── Apple Logo ─── */
