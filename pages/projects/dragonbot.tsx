@@ -14,11 +14,11 @@ export const DragonBotPage = ({ embedded = false }: { embedded?: boolean }) => {
                     <Button asChild colorPalette="blue"><Link href="/projects"><Emoji symbol="backhand-index-pointing-left" label="Backhand Index Pointing Left" />Back</Link></Button>
                 </Box>
             )}
-                <Flex wrap="wrap" direction={embedded ? "column" : { base: "column", lg: "row" }}>
+                <Flex wrap="wrap" direction={embedded ? "column" : "row"} align="start" gap={{ base: 4, lg: 0 }}>
                     <Box
                         bg={{ base: 'gray.100', _dark: '#111111' }}
+                        flex={embedded ? undefined : "1 1 400px"}
                         maxWidth={embedded ? "100%" : "lg"}
-                        w={embedded ? "100%" : "lg"}
                         p={{ base: '6', md: '8' }}
                         rounded={{ sm: 'lg' }}
                         shadow={{ md: 'base' }}
@@ -39,53 +39,79 @@ export const DragonBotPage = ({ embedded = false }: { embedded?: boolean }) => {
                                 </VStack>
                             </HStack>
                             <Text fontSize="lg" color={{ base: 'gray.600', _dark: 'gray.400' }}>
-                                DragonBot is a general-purpose Discord bot that is used across multiple Drexel University discord servers.
+                                DragonBot is a Discord bot built for Drexel University communities, featuring email verification, moderation tools, user profiles, AI Q&A, XP/leveling, polls, suggestions, YouTube notifications, scheduled messages, birthday tracking, audit logging, and a full web dashboard.
                             </Text>
                             <Heading size="md" fontWeight="extrabold">
                                 Technologies Used
                             </Heading>
                             <Wrap gap="2">
                                 <Tag.Root colorPalette="blue">
-                                    <Tag.Label>Node.js</Tag.Label>
+                                    <Tag.Label>TypeScript</Tag.Label>
                                 </Tag.Root>
                                 <Tag.Root colorPalette="green">
                                     <Tag.Label>Discord.js</Tag.Label>
                                 </Tag.Root>
-                                <Tag.Root colorPalette="yellow">
-                                    <Tag.Label>Firebase</Tag.Label>
+                                <Tag.Root colorPalette="cyan">
+                                    <Tag.Label>Next.js</Tag.Label>
                                 </Tag.Root>
                                 <Tag.Root colorPalette="purple">
-                                    <Tag.Label>Heroku</Tag.Label>
+                                    <Tag.Label>PostgreSQL</Tag.Label>
+                                </Tag.Root>
+                                <Tag.Root colorPalette="orange">
+                                    <Tag.Label>Drizzle ORM</Tag.Label>
+                                </Tag.Root>
+                                <Tag.Root colorPalette="teal">
+                                    <Tag.Label>Tailwind CSS</Tag.Label>
+                                </Tag.Root>
+                                <Tag.Root colorPalette="yellow">
+                                    <Tag.Label>OpenAI</Tag.Label>
+                                </Tag.Root>
+                                <Tag.Root colorPalette="red">
+                                    <Tag.Label>Turborepo</Tag.Label>
                                 </Tag.Root>
                             </Wrap>
                             <Heading size="md" fontWeight="extrabold">
-                                Usage Statistics
+                                Deployment
                             </Heading>
-                            <VStack gap={2} align="right">
-                                <HStack><Heading size="sm" fontWeight="bold">Servers: </Heading><Tag.Root colorPalette="green"><Tag.Label>13</Tag.Label></Tag.Root></HStack>
-                                <HStack><Heading size="sm" fontWeight="bold">Users: </Heading><Tag.Root colorPalette="blue"><Tag.Label>6,500+</Tag.Label></Tag.Root></HStack>
-                            </VStack>
+                            <Wrap gap="2">
+                                <Tag.Root colorPalette="purple">
+                                    <Tag.Label>Railway (Bot)</Tag.Label>
+                                </Tag.Root>
+                                <Tag.Root colorPalette="blue">
+                                    <Tag.Label>Vercel (Web)</Tag.Label>
+                                </Tag.Root>
+                                <Tag.Root colorPalette="green">
+                                    <Tag.Label>Neon (Database)</Tag.Label>
+                                </Tag.Root>
+                            </Wrap>
                             <Heading size="md" fontWeight="extrabold">
                                 Links
                             </Heading>
                             <HStack gap={4}>
                                 <Button asChild colorPalette="blue" variant="subtle"><Link href="https://discord.gg/KCkj4CeMtD" target="_blank">Discord</Link></Button>
-                                <Button asChild colorPalette="blue" variant="subtle"><Link href="https://github.com/dotKevinWong/DragonBot" target="_blank">GitHub</Link></Button>
+                                <Button asChild colorPalette="blue" variant="subtle"><Link href="https://github.com/drexelDiscord/dragonbot" target="_blank">GitHub</Link></Button>
                             </HStack>
                         </VStack>
                     </Box>
-                    <Box p={{ base: '2', md: '8' }} maxWidth={embedded ? "100%" : "lg"} w={embedded ? "100%" : "lg"}>
+                    <Box pt={embedded ? 4 : 0} px={embedded ? 0 : { base: '0', lg: '8' }} pb={embedded ? 4 : { base: '2', lg: '8' }} flex={embedded ? undefined : "1 1 400px"} maxWidth={embedded ? "100%" : "lg"}>
                         <Heading pb={4}>Features</Heading>
                         <VStack gap={3} align="stretch">
                             {[
-                                { emoji: "checkmark", label: "checkmark", name: "Verification Sync", desc: "Syncs the Drexel student/alumni status of a user across all servers that use DragonBot" },
-                                { emoji: "judge", label: "judge", name: "Ban Sync", desc: "Syncs the ban status of a user across all servers that use DragonBot" },
-                                { emoji: "books", label: "books", name: "Course Information", desc: "Provides information about a course, pre-reqs, and more from the Drexel WebTMS system" },
-                                { emoji: "cool", label: "smiling face with sunglasses", name: "User Profiles", desc: "Learn more about a member of the server, including their plan, major, co-ops, clubs, and more" },
-                                { emoji: "bar-chart", label: "bar chart", name: "Server Statistics", desc: "Provides a variety of server statistics, including membercount, MEE6 leaderboard, and more" },
-                                { emoji: "toolbox", label: "red toolbox", name: "Moderation Tools", desc: "Provides a variety of moderation tools, including automated messages, new member tools, and more" },
-                                { emoji: "scroll", label: "robot", name: "Logging", desc: "Logs a variety of events, including message edits, deletions, and more" },
-                                { emoji: "party-popper", label: "party popper", name: "Fun Commands", desc: "Provides a variety of fun commands, including a LaTeX compiler, d20 dice, and more" },
+                                { emoji: "checkmark", label: "checkmark", name: "Email Verification", desc: "Verify Drexel students with @drexel.edu emails, with cross-server sync across all DragonBot guilds" },
+                                { emoji: "judge", label: "judge", name: "Ban Sync", desc: "Automatically propagate bans across all servers with ban sync enabled" },
+                                { emoji: "cool", label: "smiling face with sunglasses", name: "User Profiles", desc: "Shareable profiles with name, pronouns, major, college, year, plan, co-ops, clubs, and more" },
+                                { emoji: "robot", label: "robot", name: "AI Q&A", desc: "AI powered /ask command with per-server custom system prompts" },
+                                { emoji: "bar-chart", label: "bar chart", name: "XP & Leveling", desc: "XP system with in-memory caching, leaderboards, level-up announcements, and archive/restore" },
+                                { emoji: "light-bulb", label: "light bulb", name: "Suggestions", desc: "Community feature requests with status tracking and web dashboard management" },
+                                { emoji: "checkmark", label: "ballot box", name: "Polls", desc: "Reaction-based polls with up to 20 options and custom emoji support" },
+                                { emoji: "television", label: "television", name: "YouTube Notifications", desc: "Upload alerts for subscribed YouTube channels with custom messages" },
+                                { emoji: "birthday-cake", label: "birthday cake", name: "Birthday Tracking", desc: "Set birthdays with automated per-server announcements and configurable timezone support" },
+                                { emoji: "clock", label: "clock", name: "Scheduled Messages", desc: "Automated recurring messages with cron scheduling, timezone support, and embed customization" },
+                                { emoji: "globe-with-meridians", label: "globe", name: "Web Dashboard", desc: "Full-featured dashboard to manage server settings, profiles, schedules, suggestions, and YouTube subscriptions" },
+                                { emoji: "scroll", label: "scroll", name: "Audit Logging", desc: "Log embeds for joins, leaves, bans, kicks, message edits/deletes, role and nickname changes, and voice activity" },
+                                { emoji: "waving-hand", label: "waving hand", name: "Welcome", desc: "Customizable channel and DM welcome messages" },
+                                { emoji: "toolbox", label: "red toolbox", name: "Moderation Tools", desc: "Bot announcements, mod notes, message gating, and granular guild manager permissions with 12+ delegation scopes" },
+                                { emoji: "party-popper", label: "party popper", name: "Fun Commands", desc: "Dice rolls, LaTeX rendering, and more" },
                             ].map((feature) => (
                                 <Box
                                     key={feature.name}
