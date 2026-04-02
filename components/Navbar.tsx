@@ -32,7 +32,7 @@ export const Navbar = () => {
                 <Drawer.CloseTrigger asChild pos="bottom">
                   <CloseButton />
                 </Drawer.CloseTrigger>
-                <Sidebar />
+                <Sidebar inDrawer />
               </Drawer.Content>
             </Drawer.Positioner>
           </Portal>

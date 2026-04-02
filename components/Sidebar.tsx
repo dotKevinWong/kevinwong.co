@@ -17,17 +17,21 @@ import { ColorModeButton } from './ui/color-mode'
 import { Tooltip } from './ui/tooltip'
 import Link from 'next/link'
 
-export const Sidebar = () => {
+export const Sidebar = ({ inDrawer = false }: { inDrawer?: boolean }) => {
   const router = useRouter()
   const { collapsed, setCollapsed } = useSidebar()
+
+  // In drawer context, never show collapsed state
+  const isCollapsed = inDrawer ? false : collapsed
 
   return (
     <Flex
       boxShadow={{ base: 'sm', _dark: 'sm-dark' }}
-      w={collapsed ? '68px' : 'xs'}
-      minW={collapsed ? '68px' : 'xs'}
+      w={isCollapsed ? '68px' : 'xs'}
+      minW={isCollapsed ? '68px' : 'xs'}
+      h={inDrawer ? 'full' : undefined}
       py={{ base: '6', sm: '10' }}
-      px={collapsed ? '2' : { base: '4', sm: '6' }}
+      px={isCollapsed ? '2' : { base: '4', sm: '6' }}
       bg={{ base: 'gray.100', _dark: '#111111' }}
       transition="all 0.2s ease-in-out"
       overflow="hidden"
@@ -35,7 +39,7 @@ export const Sidebar = () => {
     >
       <Stack justify="space-between" gap="1" width="full">
         <Stack gap="8">
-          {collapsed ? (
+          {isCollapsed ? (
             <Stack align="center" gap="3">
               <Tooltip content="Kevin Wong" positioning={{ placement: 'right' }}>
                 <Text fontWeight="bold" fontSize="lg">
@@ -66,37 +70,39 @@ export const Sidebar = () => {
                 <Heading size="2xl" fontWeight="bold"><Link href="/">KEVIN WONG</Link></Heading>
                 <ColorModeButton />
               </HStack>
-              <Tooltip content="Collapse sidebar" positioning={{ placement: 'right' }}>
-                <Flex
-                  as="button"
-                  onClick={() => setCollapsed(true)}
-                  align="center"
-                  justify="center"
-                  w="28px"
-                  h="28px"
-                  borderRadius="sm"
-                  color={{ base: 'gray.500', _dark: 'gray.400' }}
-                  _hover={{ color: { base: 'gray.900', _dark: 'gray.100' } }}
-                  transition="color 0.15s ease"
-                  cursor="pointer"
-                  flexShrink={0}
-                >
-                  <Icon as={LuPanelLeftClose} boxSize="5" />
-                </Flex>
-              </Tooltip>
+              {!inDrawer && (
+                <Tooltip content="Collapse sidebar" positioning={{ placement: 'right' }}>
+                  <Flex
+                    as="button"
+                    onClick={() => setCollapsed(true)}
+                    align="center"
+                    justify="center"
+                    w="28px"
+                    h="28px"
+                    borderRadius="sm"
+                    color={{ base: 'gray.500', _dark: 'gray.400' }}
+                    _hover={{ color: { base: 'gray.900', _dark: 'gray.100' } }}
+                    transition="color 0.15s ease"
+                    cursor="pointer"
+                    flexShrink={0}
+                  >
+                    <Icon as={LuPanelLeftClose} boxSize="5" />
+                  </Flex>
+                </Tooltip>
+              )}
             </Flex>
           )}
           <Stack>
-            <NavButton label="I am" icon={FiSmile} collapsed={collapsed} onClick={() => router.push('/')} />
-            <NavButton label="Statistics" icon={FiBarChart2} collapsed={collapsed} onClick={() => router.push('/stats')} />
-            <NavButton label="Bookshelf" icon={FiBookOpen} collapsed={collapsed} onClick={() => router.push('/bookshelf')} />
-            <NavButton label="Snapshots" icon={FiCamera} collapsed={collapsed} onClick={() => router.push('/snapshots')} />
-            <NavButton label="Projects" icon={FiArchive} collapsed={collapsed} onClick={() => router.push('/projects')} />
-            <NavButton label="Blog" icon={FiBook} collapsed={collapsed} onClick={() => router.push('/blog')} />
-            <NavButton label="Contact" icon={FiAtSign} collapsed={collapsed} onClick={() => router.push('/contact')} />
+            <NavButton label="I am" icon={FiSmile} collapsed={isCollapsed} onClick={() => router.push('/')} />
+            <NavButton label="Statistics" icon={FiBarChart2} collapsed={isCollapsed} onClick={() => router.push('/stats')} />
+            <NavButton label="Bookshelf" icon={FiBookOpen} collapsed={isCollapsed} onClick={() => router.push('/bookshelf')} />
+            <NavButton label="Snapshots" icon={FiCamera} collapsed={isCollapsed} onClick={() => router.push('/snapshots')} />
+            <NavButton label="Projects" icon={FiArchive} collapsed={isCollapsed} onClick={() => router.push('/projects')} />
+            <NavButton label="Blog" icon={FiBook} collapsed={isCollapsed} onClick={() => router.push('/blog')} />
+            <NavButton label="Contact" icon={FiAtSign} collapsed={isCollapsed} onClick={() => router.push('/contact')} />
           </Stack>
         </Stack>
-        <NowPlaying collapsed={collapsed} />
+        <NowPlaying collapsed={isCollapsed} />
       </Stack>
     </Flex>
   )
