@@ -3,9 +3,18 @@ import { getNowPlaying } from "../../lib/spotify";
 export default async function handler(_, res) {
   res.setHeader("Cache-Control", "private, no-store, max-age=0, must-revalidate");
 
-  const response = await getNowPlaying();
+  let response;
 
-  if (response.status === 204 || response.status > 400) {
+  try {
+    response = await getNowPlaying();
+  } catch (error) {
+    // Includes SpotifyReauthRequiredError. The widget just shows "Not Playing"
+    // until the refresh token is replaced; lib/spotify.js has already logged
+    // what went wrong.
+    return res.status(200).json({ isPlaying: false });
+  }
+
+  if (response.status === 204 || !response.ok) {
     return res.status(200).json({ isPlaying: false });
   }
 

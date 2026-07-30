@@ -10,7 +10,10 @@ export const ListeningTimeline = () => {
     Chart.register(BarController, LinearScale, CategoryScale, ...registerables);
 
     useEffect(() => {
-        if (!data || !chartRef.current) {
+        // The API answers { is_working: false } when Spotify is unreachable —
+        // including once the refresh token hits its six-month expiry. Without
+        // this guard that flag gets charted as if it were a date bucket.
+        if (!data || data.is_working === false || !chartRef.current) {
             return;
         }
 

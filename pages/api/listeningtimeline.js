@@ -1,9 +1,15 @@
 import { getListeningTimeline } from "../../lib/spotify";
 
 export default async function handler(_, res) {
-  const response = await getListeningTimeline();
+  let response;
 
-  if (response.status === 204 || response.status > 400) {
+  try {
+    response = await getListeningTimeline();
+  } catch (error) {
+    return res.status(200).json({ is_working: false });
+  }
+
+  if (response.status === 204 || !response.ok) {
     return res.status(200).json({ is_working: false });
   }
 

@@ -17,6 +17,11 @@ import { FiExternalLink } from "react-icons/fi";
 export const TopTracks = () => {
     const { data } = useSWR("/api/toptracks", fetcher);
 
+    // `tracks` is absent while loading, and also whenever the API degrades —
+    // which it does for real once the Spotify refresh token hits its six-month
+    // expiry and returns { is_working: false }.
+    const tracks = data?.tracks;
+
     return (
 
         <Box
@@ -31,6 +36,11 @@ export const TopTracks = () => {
             <VStack align="left">
                 <Heading>Top Tracks</Heading>
                 <Text mb={4}>Curious to what I&#39;m currently listening to? Here are my current top tracks</Text>
+                {data && !tracks ? (
+                    <Text color={{ base: 'gray.500', _dark: 'gray.400' }}>
+                        Top tracks are unavailable right now.
+                    </Text>
+                ) : null}
                 <Table.Root
                     css={{
                         "backgroundColor": 'inherit',
@@ -38,7 +48,7 @@ export const TopTracks = () => {
                     }}
                 >
                     <Table.Body>
-                        {data?.tracks.map((item: { albumImageUrl: string; album: string; name: string; artist: string; songUrl: string; albumUrl: string, artistUrl: string }, index: React.Key) => (
+                        {tracks?.map((item: { albumImageUrl: string; album: string; name: string; artist: string; songUrl: string; albumUrl: string, artistUrl: string }, index: React.Key) => (
                             <Table.Row key={index} css={{
                                 "backgroundColor": 'inherit',
                                 "width": '100%',

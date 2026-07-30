@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "audit:prod": "npm audit --omit=dev --audit-level=high"
+    "audit:prod": "npm audit --omit=dev --audit-level=high",
+    "spotify:reauth": "node scripts/spotify-reauth.mjs"
   },
   "engines": {
     "node": ">=24 <26",
