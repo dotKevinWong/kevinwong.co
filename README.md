@@ -59,6 +59,91 @@ Set a reminder for ~5 months out so this happens before the token dies rather th
 
 [spotify-blog]: https://developer.spotify.com/blog/2026-06-18-refresh-token-expiration
 
+### 📸 Instagram sync
+
+`/snapshots` is served from Postgres (`instagram_posts` / `instagram_media`) with the
+media mirrored to Cloudinary. A daily Vercel Cron job pulls new posts from the Instagram
+API and fills those tables.
+
+**Account requirement.** The Instagram Basic Display API was shut down on 2024-12-04 and
+personal accounts now have no API access at all. The account must be an Instagram
+**professional** account (Creator or Business), used through
+[Instagram API with Instagram Login][ig-login]. No App Review is needed to read your own
+account — keep the Meta app in Development mode with your account on it.
+
+**Known gap: captions.** Meta badges the `caption` field
+"Available for Instagram API with Facebook Login only", so posts synced through Instagram
+Login arrive with an empty caption. Requesting the field anyway fails the whole request,
+so it is deliberately left out of the query. To re-test whether that is still true:
+
+````sh
+npm run instagram:sync -- --probe-caption
+````
+
+Getting captions would mean switching to Instagram API with Facebook Login, which
+requires a Business account linked to a Facebook Page.
+
+#### One-time setup
+
+1. Apply the migrations in [`sql/`](sql/), in filename order.
+2. Set these environment variables locally and in Vercel:
+   `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, and
+   `CRON_SECRET` (any long random string — the cron endpoint refuses to run without it).
+3. In the Meta App Dashboard, go to **Instagram → API setup with Instagram business
+   login** and click **Generate token**. No OAuth redirect flow is needed for a single
+   account.
+4. Store it, which also validates it against the API. Pass it through the
+   environment rather than as an argument, so it stays out of your shell history:
+   ````sh
+   INSTAGRAM_ACCESS_TOKEN=<TOKEN> npm run instagram:token
+   ````
+5. Reconcile the posts that came from the old data-export import:
+   ````sh
+   npm run instagram:repair            # dry run
+   npm run instagram:repair -- --apply
+   ````
+6. Dry-run the sync, then let it run for real:
+   ````sh
+   npm run instagram:sync -- --dry-run
+   npm run instagram:sync
+   ````
+
+#### How duplicates are prevented
+
+Posts are keyed by `source_key = ig:<shortcode>`, where the shortcode comes from the
+permalink. The rows imported from the data-export ZIP are keyed by a path *inside that
+archive*, and 18 of them have no `instagram_url` at all, so they cannot be matched to
+anything the API returns.
+
+Those 18 all predate **2025-10-25**, and every post after that date does carry a
+permalink. The sync therefore ignores anything the API returns at or before the newest
+unmatchable post — see `findLegacyWatermark` in
+[`lib/instagram-sync.js`](lib/instagram-sync.js). Without that guard, years of posts
+would be re-imported as duplicates.
+
+The watermark is derived from `source_key`, not `instagram_url`: it is the newest post
+whose key does not start with `ig:`. So to move it, backfill `instagram_url` on those
+rows **and then re-run `npm run instagram:repair -- --apply`** to convert their keys.
+Backfilling the URL alone changes nothing.
+
+#### Token lifetime
+
+Long-lived Instagram tokens last 60 days, but **refreshing resets the full window**, so
+the daily cron keeps the token alive indefinitely — unlike Spotify, where the six-month
+clock cannot be extended. The cron refreshes once the token is within 30 days of expiry,
+which leaves ~30 days of slack because [Vercel cron delivery is best effort][cron-limits].
+
+A token left unrefreshed for 60 days is dead permanently. When that happens the API
+returns error code `190`; the sync records it in `integration_tokens.dead_reason`, stops
+calling the API, and logs what to do. Before setting that flag the code re-checks the token with a second request, so a
+transient error cannot brick the integration. Recover by generating a new token and
+re-seeding it.
+
+Check status any time with `npm run instagram:token` (no arguments).
+
+[ig-login]: https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login
+[cron-limits]: https://vercel.com/docs/cron-jobs/usage-and-pricing
+
 ## 📝 License
 This project is licensed under the MIT License. See the [LICENSE](LICENSE.md) file for more information.
 

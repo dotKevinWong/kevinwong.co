@@ -2,8 +2,12 @@ import { getDbPool } from "../../../lib/db";
 import { UUID_REGEX, clampInt, normalizeMedia } from "../../../lib/snapshots";
 import { rateLimit } from "../../../lib/rate-limit";
 
+// Kept short because the daily Instagram cron writes to these tables. At the
+// previous 30-day s-maxage the edge kept serving a pre-sync body until the next
+// production deploy, so new posts were invisible however often the cron ran.
+// stale-while-revalidate keeps responses instant while the edge refreshes.
 const CACHE_HEADER =
-  "public, s-maxage=2592000, stale-while-revalidate=86400";
+  "public, s-maxage=300, stale-while-revalidate=86400";
 
 function encodeCursor(cursor) {
   return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
