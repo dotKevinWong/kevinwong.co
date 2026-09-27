@@ -71,17 +71,17 @@ personal accounts now have no API access at all. The account must be an Instagra
 [Instagram API with Instagram Login][ig-login]. No App Review is needed to read your own
 account — keep the Meta app in Development mode with your account on it.
 
-**Known gap: captions.** Meta badges the `caption` field
-"Available for Instagram API with Facebook Login only", so posts synced through Instagram
-Login arrive with an empty caption. Requesting the field anyway fails the whole request,
-so it is deliberately left out of the query. To re-test whether that is still true:
+**Captions.** Meta's docs badge the `caption` field "Available for Instagram API with
+Facebook Login only", but an Instagram Login token reads it fine in practice (verified
+2026-09-26), so the sync requests it. If Meta ever starts enforcing that badge, every
+sync will fail with error code `100`. Check with:
 
 ````sh
 npm run instagram:sync -- --probe-caption
 ````
 
-Getting captions would mean switching to Instagram API with Facebook Login, which
-requires a Business account linked to a Facebook Page.
+and if it reports captions as unsupported, remove `caption` from `MEDIA_FIELDS` in
+[`lib/instagram.js`](lib/instagram.js).
 
 #### One-time setup
 

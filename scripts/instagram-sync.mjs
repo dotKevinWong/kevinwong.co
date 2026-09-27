@@ -61,12 +61,15 @@ if (flag("probe-caption")) {
   if (result.supported) {
     console.log(`  sample:    ${JSON.stringify(result.sample)}`);
     console.log(
-      "\n  Meta's docs badge caption as Facebook-Login-only, but this token can\n" +
-        "  read it. Add \"caption\" to MEDIA_FIELDS in lib/instagram.js.\n"
+      "\n  Readable, as expected. (Meta's docs badge caption as Facebook-Login-only,\n" +
+        "  but Instagram Login tokens have been able to read it in practice.)\n"
     );
   } else {
     console.log(`  reason:    ${result.reason}`);
-    console.log("\n  As documented: caption needs Instagram API with Facebook Login.\n");
+    console.log(
+      "\n  Meta is now enforcing the Facebook-Login-only badge on caption. Remove\n" +
+        "  \"caption\" from MEDIA_FIELDS in lib/instagram.js or every sync will fail.\n"
+    );
   }
   process.exit(0);
 }
@@ -95,6 +98,7 @@ if (summary.inserted.length > 0) {
   console.log(`\n${dryRun ? "Would insert" : "Inserted"}:`);
   for (const p of summary.inserted) {
     console.log(`  ${p.postedAt.split("T")[0]}  ${p.shortcode}  (${p.mediaCount} media)`);
+    console.log(`      caption: ${p.caption ? JSON.stringify(p.caption) : "(none)"}`);
   }
 }
 
