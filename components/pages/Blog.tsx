@@ -12,7 +12,7 @@ export const BlogPage = (props: Blog) => {
             <VStack gap={12} align="left">
                 {posts.length > 0 ?
                     (posts.map((post: any) => (
-                        <Box maxW="2xl" key={post}>
+                        <Box maxW="2xl" key={post.slug}>
                             <Stack gap="16">
                                 <Stack gap="6">
                                     <Link href={`/blog/` + post.slug}>
