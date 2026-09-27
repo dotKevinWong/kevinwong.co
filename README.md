@@ -111,20 +111,27 @@ and if it reports captions as unsupported, remove `caption` from `MEDIA_FIELDS` 
 #### How duplicates are prevented
 
 Posts are keyed by `source_key = ig:<shortcode>`, where the shortcode comes from the
-permalink. The rows imported from the data-export ZIP are keyed by a path *inside that
-archive*, and 18 of them have no `instagram_url` at all, so they cannot be matched to
-anything the API returns.
+permalink, so a post already in the table is recognised and skipped.
 
-Those 18 all predate **2025-10-25**, and every post after that date does carry a
-permalink. The sync therefore ignores anything the API returns at or before the newest
-unmatchable post — see `findLegacyWatermark` in
-[`lib/instagram-sync.js`](lib/instagram-sync.js). Without that guard, years of posts
-would be re-imported as duplicates.
+The first 21 posts came from an Instagram "Download Your Information" ZIP and were keyed
+by paths *inside that archive*, which the API can never match. `npm run instagram:repair`
+converted them to the same `ig:` form: posts with a permalink used it directly, and the
+18 without one were matched to their real post by timestamp (to within 5 seconds, and
+only when exactly one post matched), which also filled in their missing Instagram link.
+Each original key is kept in `raw_post_json.legacy_source_key`.
 
-The watermark is derived from `source_key`, not `instagram_url`: it is the newest post
-whose key does not start with `ig:`. So to move it, backfill `instagram_url` on those
-rows **and then re-run `npm run instagram:repair -- --apply`** to convert their keys.
-Backfilling the URL alone changes nothing.
+#### How far back the page goes
+
+`SNAPSHOTS_START` in [`lib/instagram-sync.js`](lib/instagram-sync.js) is the oldest post
+the page shows — currently **2022-01-01**. The 47 posts from 2014–2021 are ignored.
+
+To go further back, move that date earlier. The daily sync will backfill at 25 uploads
+per run, or do it in one go locally — raise `--max-posts` too, since each run only reads
+the newest 50 posts:
+
+````sh
+npm run instagram:sync -- --max-posts=200 --max-uploads=500
+````
 
 #### Token lifetime
 

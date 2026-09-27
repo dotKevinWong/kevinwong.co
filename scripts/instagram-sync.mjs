@@ -83,9 +83,7 @@ const summary = await syncInstagram({
 });
 
 console.log(`\n${dryRun ? "DRY RUN — nothing was written" : "Sync complete"}`);
-if (summary.watermark) {
-  console.log(`  legacy watermark:  ${summary.watermark} (posts at/before this are left alone)`);
-}
+console.log(`  start date:        ${summary.startDate.slice(0, 10)} (older posts are ignored)`);
 console.log(`  fetched from API:  ${summary.fetched}`);
 console.log(`  already in db:     ${summary.alreadyPresent}`);
 console.log(`  ${dryRun ? "would insert" : "inserted"}:      ${summary.inserted.length}`);

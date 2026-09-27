@@ -17,9 +17,14 @@
  * inserted a second time.
  *
  * The shortcode inside the permalink is the one identifier both sources can
- * produce, and these rows already carry the permalink in instagram_url. This
- * rewrites their source_key to `ig:<shortcode>`, keeping the original value in
- * raw_post_json.legacy_source_key so the change is reversible.
+ * produce. This rewrites each row's source_key to `ig:<shortcode>`, keeping the
+ * original value in raw_post_json.legacy_source_key so the change is reversible.
+ *
+ * Rows that have a permalink in instagram_url use it directly. Rows without one
+ * are matched to their real post by timestamp (needs a stored Instagram token):
+ * the export's creation_timestamp and the API's timestamp agree to within a
+ * second or two, and only a match against exactly one post is accepted. Those
+ * rows also get the permalink filled in, so they link out on /snapshots.
  */
 
 import pg from "pg";
@@ -48,6 +53,35 @@ const { rows } = await pool.query(
     order by posted_at asc`
 );
 
+// Rows with no permalink can still be matched to their real post by timestamp:
+// the export's creation_timestamp and the API's timestamp agree to within a
+// second or two. Only a match against exactly one post is trusted.
+const MATCH_TOLERANCE_MS = 5000;
+
+async function fetchFullFeed() {
+  const { rows: tokenRows } = await pool.query(
+    `select access_token, dead_reason from integration_tokens where provider = 'instagram'`
+  );
+  if (tokenRows.length === 0 || tokenRows[0].dead_reason) return null;
+
+  const feed = [];
+  let url =
+    "https://graph.instagram.com/v25.0/me/media?fields=id,timestamp,permalink&limit=100" +
+    `&access_token=${encodeURIComponent(tokenRows[0].access_token)}`;
+  while (url) {
+    const page = await (await fetch(url)).json();
+    if (page.error) throw new Error(`Instagram API: ${page.error.message}`);
+    feed.push(...(page.data || []));
+    url = page.paging?.next || null;
+  }
+  return feed;
+}
+
+const needsTimestampMatch = rows.some(
+  (r) => !r.source_key.startsWith("ig:") && !shortcodeFromPermalink(r.instagram_url)
+);
+const feed = needsTimestampMatch ? await fetchFullFeed() : null;
+
 const planned = [];
 const blocked = [];
 const alreadyDone = [];
@@ -59,12 +93,38 @@ for (const row of rows) {
   }
 
   const shortcode = shortcodeFromPermalink(row.instagram_url);
-  if (!shortcode) {
-    blocked.push({ row, reason: "no usable permalink in instagram_url" });
+  if (shortcode) {
+    planned.push({ row, shortcode, newKey: `ig:${shortcode}`, permalink: null });
     continue;
   }
 
-  planned.push({ row, shortcode, newKey: `ig:${shortcode}` });
+  if (!feed) {
+    blocked.push({
+      row,
+      reason: "no permalink, and no stored Instagram token to match it by timestamp",
+    });
+    continue;
+  }
+
+  const postedAt = new Date(row.posted_at).getTime();
+  const hits = feed.filter(
+    (f) => Math.abs(new Date(f.timestamp).getTime() - postedAt) <= MATCH_TOLERANCE_MS
+  );
+  const hitCode = hits.length === 1 ? shortcodeFromPermalink(hits[0].permalink) : null;
+
+  if (!hitCode) {
+    blocked.push({
+      row,
+      reason:
+        hits.length === 0
+          ? "no permalink and no Instagram post within 5s of its timestamp"
+          : `no permalink and ${hits.length} Instagram posts within 5s — ambiguous`,
+    });
+    continue;
+  }
+
+  // Fill in the missing permalink as well as the key, so the post links out.
+  planned.push({ row, shortcode: hitCode, newKey: `ig:${hitCode}`, permalink: hits[0].permalink });
 }
 
 // Two rows resolving to the same shortcode would violate the unique index and
@@ -75,7 +135,12 @@ for (const item of planned) {
   list.push(item);
   byNewKey.set(item.newKey, list);
 }
-const collisions = [...byNewKey.entries()].filter(([, list]) => list.length > 1);
+// Also collide with keys that are already taken — a timestamp match landing on a
+// post the table already holds would violate the unique index mid-transaction.
+const takenKeys = new Set(alreadyDone.map((r) => r.source_key));
+const collisions = [...byNewKey.entries()].filter(
+  ([key, list]) => list.length > 1 || takenKeys.has(key)
+);
 
 console.log(`\n${rows.length} posts total`);
 console.log(`  already migrated: ${alreadyDone.length}`);
@@ -85,10 +150,11 @@ console.log(`  key collisions:   ${collisions.length}`);
 
 if (planned.length > 0) {
   console.log("\nPlanned rewrites:");
-  for (const { row, newKey } of planned) {
+  for (const { row, newKey, permalink } of planned) {
     const when = new Date(row.posted_at).toISOString().split("T")[0];
+    const how = permalink ? "matched by timestamp, permalink added" : "from existing permalink";
     console.log(`  ${when}  ${row.source_key}`);
-    console.log(`         -> ${newKey}`);
+    console.log(`         -> ${newKey}  (${how})`);
   }
 }
 
@@ -118,16 +184,17 @@ if (!apply) {
 const client = await pool.connect();
 try {
   await client.query("begin");
-  for (const { row, newKey } of planned) {
+  for (const { row, newKey, permalink } of planned) {
     await client.query(
       `update instagram_posts
           set source_key    = $2,
+              instagram_url = coalesce(instagram_url, $4),
               raw_post_json = jsonb_set(
                 raw_post_json, '{legacy_source_key}', to_jsonb($3::text), true
               ),
               updated_at    = now()
         where id = $1`,
-      [row.id, newKey, row.source_key]
+      [row.id, newKey, row.source_key, permalink]
     );
   }
   await client.query("commit");
