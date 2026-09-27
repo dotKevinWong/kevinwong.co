@@ -12,7 +12,8 @@
     "instagram:token": "node scripts/instagram-token.mjs",
     "instagram:sync": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/instagram-sync.mjs",
     "instagram:repair": "node scripts/instagram-repair-source-keys.mjs",
-    "snapshots:blob": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/snapshots-blob-backfill.mjs"
+    "snapshots:blob": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/snapshots-blob-backfill.mjs",
+    "blog:image": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/blog-image.mjs"
   },
   "engines": {
     "node": ">=24 <26",

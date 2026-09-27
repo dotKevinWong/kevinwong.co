@@ -188,11 +188,9 @@ working:
      drop column cloudinary_height, drop column cloudinary_duration,
      drop column cloudinary_folder;
    ````
-4. **Keep the Cloudinary account, or move the blog first.** The cover images of four blog
-   posts (`posts/*.mdx`) are also hosted on Cloudinary. Either move those into `public/` or
-   Blob and update the posts, or delete only the `kevinwong/` snapshot folder and keep the
-   account. Keep an offline copy of the snapshot files before deleting them — Blob has no
-   versioning.
+4. **Close the Cloudinary account.** The blog covers moved to Blob on 2026-09-27 (see
+   below), so once steps 1–3 are done nothing on the site uses Cloudinary. Keep an offline
+   copy of its files first — Blob has no versioning.
 
 #### How duplicates are prevented
 
@@ -236,6 +234,21 @@ Check status any time with `npm run instagram:token` (no arguments).
 
 [ig-login]: https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login
 [cron-limits]: https://vercel.com/docs/cron-jobs/usage-and-pricing
+
+### 🖼️ Blog cover images
+
+Each post's `og_image` — its link-preview image and its thumbnail on /blog — lives in the
+same Blob store as /snapshots. To add or replace one:
+
+````sh
+npm run blog:image -- path/to/cover.jpg my-post-slug --update
+````
+
+It takes a local file or a URL, shrinks it to fit 1440×1800 as a JPEG (link-preview
+crawlers do not all accept WebP), uploads it to `blog/<slug>-<hash>.jpg`, and with
+`--update` writes the URL into `posts/<slug>.mdx`. The hash means a replacement cover gets a
+new URL — Blob files are cached by browsers for a year, so reusing a URL would keep showing
+the old image.
 
 ## 📝 License
 This project is licensed under the MIT License. See the [LICENSE](LICENSE.md) file for more information.
