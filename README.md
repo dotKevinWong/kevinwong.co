@@ -117,6 +117,13 @@ and if it reports captions as unsupported, remove `caption` from `MEDIA_FIELDS` 
 Each file lives at `snapshots/<YYYYMM>/<shortcode>-<slide>.<ext>` — the shortcode is the
 post's Instagram URL, so the store's file browser maps straight back to Instagram.
 
+The API hands out full-resolution photos (up to 4096px, ~1.4 MB), so the sync shrinks them
+with sharp to fit 1440×1800 — Instagram's own maximum, and what the export-era photos are —
+as mozjpeg quality 80, which averages ~290 KB ([`lib/image-resize.js`](lib/image-resize.js)).
+JPEGs already that small are stored untouched. Videos are stored as they come: re-encoding
+video needs ffmpeg, which a function doesn't have, and the page only downloads a video's
+metadata until someone presses play.
+
 The Hobby plan includes 1 GB of Blob storage, 2,000 uploads a month, 10,000 "simple
 operations" (a cache miss when someone views a file counts as one) and 10 GB of Blob data
 transfer. **Going over any of these is a hard stop, not a bill: Blob is locked for up to
