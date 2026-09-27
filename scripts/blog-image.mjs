@@ -7,7 +7,7 @@
  *
  * The cover is used twice: as the post's og:image (the preview when a link is
  * shared) and as its thumbnail on /blog. It goes through the same resize as
- * synced photos — at most 1440x1800, JPEG — since some link-preview crawlers do
+ * synced photos — at most 1440x1920, JPEG — since some link-preview crawlers do
  * not accept WebP or AVIF.
  *
  * The pathname carries a hash of the image, e.g. blog/homebridge-3f9a1c2e.jpg.

@@ -111,6 +111,15 @@ and if it reports captions as unsupported, remove `caption` from `MEDIA_FIELDS` 
    npm run instagram:sync -- --dry-run
    npm run instagram:sync
    ````
+8. After deploying, check the deployed function from outside. A dry run writes nothing;
+   look for `"blob":"ok"` and `"resize":"ok (sharp …, libvips …)"`:
+   ````sh
+   curl -s -H "Authorization: Bearer $CRON_SECRET" "https://kevinwong.co/api/cron/sync-instagram?dryRun=1"
+   ````
+
+`vercel.json` sets `"fluid": true`. This project predates Fluid compute being the default
+(April 2025), and without it Hobby functions stop at 60 seconds; the sync is written to
+use up to 300.
 
 #### Blob storage and the Hobby plan
 
@@ -118,9 +127,12 @@ Each file lives at `snapshots/<YYYYMM>/<shortcode>-<slide>.<ext>` — the shortc
 post's Instagram URL, so the store's file browser maps straight back to Instagram.
 
 The API hands out full-resolution photos (up to 4096px, ~1.4 MB), so the sync shrinks them
-with sharp to fit 1440×1800 — Instagram's own maximum, and what the export-era photos are —
-as mozjpeg quality 80, which averages ~290 KB ([`lib/image-resize.js`](lib/image-resize.js)).
-JPEGs already that small are stored untouched. Videos are stored as they come: re-encoding
+with sharp to 1440 wide — like the export-era photos — and at most 1920 tall, which is
+Instagram's tallest (3:4) format. They are saved as mozjpeg quality 80, which averages
+~290 KB, matching the export-era average ([`lib/image-resize.js`](lib/image-resize.js)).
+JPEGs already that small are stored untouched. sharp is loaded only when a photo needs it,
+so if it ever failed to load on Vercel, the token refresh and video posts would carry on
+and the dry run would say so. Videos are stored as they come: re-encoding
 video needs ffmpeg, which a function doesn't have, and the page only downloads a video's
 metadata until someone presses play.
 
@@ -244,7 +256,7 @@ same Blob store as /snapshots. To add or replace one:
 npm run blog:image -- path/to/cover.jpg my-post-slug --update
 ````
 
-It takes a local file or a URL, shrinks it to fit 1440×1800 as a JPEG (link-preview
+It takes a local file or a URL, shrinks it to fit 1440×1920 as a JPEG (link-preview
 crawlers do not all accept WebP), uploads it to `blog/<slug>-<hash>.jpg`, and with
 `--update` writes the URL into `posts/<slug>.mdx`. The hash means a replacement cover gets a
 new URL — Blob files are cached by browsers for a year, so reusing a URL would keep showing

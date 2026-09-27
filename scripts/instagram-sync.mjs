@@ -94,6 +94,7 @@ console.log(`  skipped:           ${summary.skipped.length}`);
 console.log(`  warnings:          ${summary.warnings.length}`);
 console.log(`  errors:            ${summary.errors.length}`);
 if (summary.blob) console.log(`  blob store:        ${summary.blob}`);
+if (summary.resize) console.log(`  image resizing:    ${summary.resize}`);
 
 if (summary.inserted.length > 0) {
   console.log(`\n${dryRun ? "Would insert" : "Inserted"}:`);
