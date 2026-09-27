@@ -187,46 +187,50 @@ export const Desktop = ({ macos }: { macos: MacOSRelease }) => {
         ))}
       </div>
 
-      {windowed &&
-        bounds &&
-        wm.wins.map((win) => {
-          const z = 10 + wm.order.indexOf(win.id);
-          const common = {
-            win,
-            zIndex: z,
-            active: wm.active === win.id,
-            bounds,
-            full: zoomFrame(bounds),
-            dispatch,
-            animate,
-            title: windowTitle(win),
-          };
-          if (win.app === "finder") {
+      {/* Below the windowed breakpoint windows are parked, not unmounted, so they come
+          back as they were (scroll, Terminal output, Dock previews). */}
+      {bounds && (
+        <div className={windowed ? undefined : styles.windowsParked}>
+          {wm.wins.map((win) => {
+            const z = 10 + wm.order.indexOf(win.id);
+            const common = {
+              win,
+              zIndex: z,
+              active: wm.active === win.id,
+              bounds,
+              full: zoomFrame(bounds),
+              dispatch,
+              animate,
+              title: windowTitle(win),
+            };
+            if (win.app === "finder") {
+              return (
+                <Window key={win.id} {...common} variant="unified" minSize={{ w: 420, h: 300 }}>
+                  <FinderApp
+                    location={win.history[win.index]}
+                    canBack={win.index > 0}
+                    canForward={win.index < win.history.length - 1}
+                    onNavigate={(location) => dispatch({ type: "navigate", id: win.id, location })}
+                    onGo={(delta) => dispatch({ type: "go", id: win.id, delta })}
+                  />
+                </Window>
+              );
+            }
+            if (win.app === "spotify") {
+              return (
+                <Window key={win.id} {...common} variant="untitled" tone="spotify" minSize={{ w: 380, h: 300 }}>
+                  <SpotifyApp paused={win.minimized || !windowed} />
+                </Window>
+              );
+            }
             return (
-              <Window key={win.id} {...common} variant="unified" minSize={{ w: 420, h: 300 }}>
-                <FinderApp
-                  location={win.history[win.index]}
-                  canBack={win.index > 0}
-                  canForward={win.index < win.history.length - 1}
-                  onNavigate={(location) => dispatch({ type: "navigate", id: win.id, location })}
-                  onGo={(delta) => dispatch({ type: "go", id: win.id, delta })}
-                />
+              <Window key={win.id} {...common} tone="terminal">
+                <TerminalApp macos={macos} />
               </Window>
             );
-          }
-          if (win.app === "spotify") {
-            return (
-              <Window key={win.id} {...common} variant="untitled" tone="spotify" minSize={{ w: 380, h: 300 }}>
-                <SpotifyApp paused={win.minimized} />
-              </Window>
-            );
-          }
-          return (
-            <Window key={win.id} {...common} tone="terminal">
-              <TerminalApp macos={macos} />
-            </Window>
-          );
-        })}
+          })}
+        </div>
+      )}
 
       <Dock
         running={running}

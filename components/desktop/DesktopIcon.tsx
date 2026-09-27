@@ -5,6 +5,10 @@ import { FolderGlyph } from "./icons";
 
 const DRAG_THRESHOLD = 4;
 const DOUBLE_TAP_MS = 450;
+const ICON_W = 92; // .icon width
+const ICON_H = 100; // roughly .icon height with a one-line label
+
+const clampTo = (v: number, min: number, max: number) => Math.min(Math.max(v, min), Math.max(min, max));
 
 /**
  * A draggable folder on the desktop. Clicks and taps are recognised on pointer
@@ -12,7 +16,9 @@ const DOUBLE_TAP_MS = 450;
  * selects and a double click opens; with `openOnTap` a single tap opens.
  *
  * Folders start where the project's `desktop` position puts them, kept clear of
- * the edges and the Dock on small screens.
+ * the edges, the Dock and the tip banner on small screens. Once dragged, a folder
+ * keeps its dropped position, clamped in CSS so it stays on the desktop if the
+ * desktop later shrinks.
  */
 export const DesktopIcon = ({
   project,
@@ -30,16 +36,19 @@ export const DesktopIcon = ({
   onSelect: () => void;
   onOpen: () => void;
 }) => {
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  // Top-left corner in the icon layer once the folder has been dragged.
+  const [dropped, setDropped] = useState<{ x: number; y: number } | null>(null);
   const [dragging, setDragging] = useState(false);
   const lastTap = useRef(0);
 
   const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     if (e.button !== 0) return;
     const el = e.currentTarget;
-    const parent = (el.offsetParent as HTMLElement | null)?.getBoundingClientRect();
+    const layer = (el.offsetParent as HTMLElement | null)?.getBoundingClientRect();
     const own = el.getBoundingClientRect();
-    const start = { x: e.clientX, y: e.clientY, offset };
+    // Start from where the folder is drawn, whatever clamping put it there.
+    const origin = layer ? { x: own.left - layer.left, y: own.top - layer.top } : { x: 0, y: 0 };
+    const start = { x: e.clientX, y: e.clientY };
     let moved = false;
     el.setPointerCapture(e.pointerId);
 
@@ -52,10 +61,9 @@ export const DesktopIcon = ({
         setDragging(true);
         onSelect();
       }
-      const clampTo = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
-      setOffset({
-        x: parent ? clampTo(start.offset.x + dx, start.offset.x - (own.left - parent.left), start.offset.x + (parent.right - own.right)) : start.offset.x + dx,
-        y: parent ? clampTo(start.offset.y + dy, start.offset.y - (own.top - parent.top), start.offset.y + (parent.bottom - own.bottom)) : start.offset.y + dy,
+      setDropped({
+        x: clampTo(origin.x + dx, 0, (layer?.width ?? Infinity) - own.width),
+        y: clampTo(origin.y + dy, 0, (layer?.height ?? Infinity) - own.height),
       });
     };
     const end = (ev: PointerEvent) => {
@@ -90,11 +98,17 @@ export const DesktopIcon = ({
       ]
         .filter(Boolean)
         .join(" ")}
-      style={{
-        left: `clamp(8px, ${project.desktop.x}%, calc(100% - 100px))`,
-        top: `clamp(10px, ${project.desktop.y}%, calc(100% - 200px))`,
-        transform: `translate(${offset.x}px, ${offset.y}px)`,
-      }}
+      style={
+        dropped
+          ? {
+              left: `clamp(0px, ${dropped.x}px, calc(100% - ${ICON_W}px))`,
+              top: `clamp(0px, ${dropped.y}px, calc(100% - ${ICON_H}px))`,
+            }
+          : {
+              left: `clamp(8px, ${project.desktop.x}%, calc(100% - ${ICON_W + 8}px))`,
+              top: `clamp(10px, ${project.desktop.y}%, calc(100% - var(--icon-floor)))`,
+            }
+      }
       aria-label={`${project.name} folder`}
       onPointerDown={onPointerDown}
       onKeyDown={(e) => {

@@ -10,10 +10,10 @@ export interface MacOSRelease {
 
 /**
  * The Darwin version neofetch prints for a macOS release. Darwin skipped 26:
- * macOS 26 runs Darwin 25 but macOS 27.0 (26A428) runs Darwin 27.0.0. Up to
- * Sequoia it follows the build instead: its number is the major and its letter
- * the minor (A = 0). Either way, security updates after x.6 stay on x.6.0
- * (macOS 26.7 and 15.7.9 are Darwin 25.6.0 and 24.6.0).
+ * macOS 26 runs Darwin 25 but macOS 27.0 (26A428) runs Darwin 27.0.0. Security
+ * updates after x.6 stay on x.6.0 (macOS 26.7 is Darwin 25.6.0). Older releases,
+ * which never show since the fallback is 27.0, roughly follow the build: its
+ * number is the major and its letter the minor (A = 0).
  */
 export const kernelFor = (version: string, build: string) => {
   const [major, minor = 0] = version.split(".").map(Number);
@@ -47,7 +47,8 @@ export const compareVersions = (a: string, b: string) => {
 };
 
 const VERSION = /^\d+(?:\.\d+){0,2}$/;
-const BUILD = /^\d{2}[A-Z]\d{1,5}[a-z]?$/;
+// Seed (beta) builds end in a lowercase letter; released ones don't.
+const RELEASED_BUILD = /^\d{2}[A-Z]\d{1,5}$/;
 
 /* ─── Apple's developer releases feed ─── */
 
@@ -84,26 +85,29 @@ const fromAppleFeed = async (): Promise<MacOSRelease[]> => {
 
 const SOFA_FEED = "https://sofafeed.macadmins.io/v1/macos_data_feed.json";
 
+type SofaInstaller = { title?: string; version?: string; build?: string };
 type SofaFeed = {
   OSVersions?: { Latest?: { ProductVersion?: string; Build?: string } }[];
-  InstallationApps?: {
-    LatestUMA?: { version?: string; build?: string };
-    AllPreviousUMA?: { version?: string; build?: string }[];
-  };
+  InstallationApps?: { LatestUMA?: SofaInstaller; AllPreviousUMA?: SofaInstaller[] };
 };
 
 /**
  * The latest release of each major version in SOFA. Its per-release Build has
  * been wrong before (26A5428 for 27.0), so builds come from its list of full
- * installers when that has the version.
+ * installers when that has the version, skipping beta installers (on release
+ * day it can still list the beta under the final version number).
  */
 export const parseSofa = (data: SofaFeed): MacOSRelease[] => {
   const installers = [data.InstallationApps?.LatestUMA, ...(data.InstallationApps?.AllPreviousUMA ?? [])];
   return (data.OSVersions ?? []).flatMap(({ Latest }) => {
     const version = Latest?.ProductVersion ?? "";
     if (!VERSION.test(version)) return [];
-    const build = installers.find((app) => app?.version === version)?.build ?? Latest?.Build ?? "";
-    return BUILD.test(build) ? [release(version, build)] : [];
+    const candidates = [
+      ...installers.filter((app) => app?.version === version && !/beta/i.test(app.title ?? "")).map((app) => app?.build),
+      Latest?.Build,
+    ];
+    const build = candidates.find((b): b is string => !!b && RELEASED_BUILD.test(b));
+    return build ? [release(version, build)] : [];
   });
 };
 
@@ -131,17 +135,27 @@ export const pickLatest = (sources: MacOSRelease[][]): MacOSRelease => {
 };
 
 /**
- * The newest public macOS release, from Apple's developer releases feed and
- * SOFA (checked in parallel; either is enough), or the fallback. `checked` is
- * false when neither feed could be read. Never throws.
+ * The newest public macOS release from Apple's developer releases feed and
+ * SOFA (checked in parallel), or the fallback. Never throws. `checked` is true
+ * only when SOFA answered with releases: Apple's feed skips most point
+ * releases, so on its own it can't confirm there's nothing newer.
  */
 export const latestMacOS = async (): Promise<{ release: MacOSRelease; checked: boolean }> => {
-  const results = await Promise.allSettled([fromAppleFeed(), fromSofa()]);
-  results.forEach((r) => {
-    if (r.status === "rejected") console.warn("Couldn't check the latest macOS release:", String(r.reason));
-  });
-  return {
-    release: pickLatest(results.map((r) => (r.status === "fulfilled" ? r.value : []))),
-    checked: results.some((r) => r.status === "fulfilled"),
-  };
+  const sources = await Promise.all(
+    [
+      { name: "Apple's releases feed", read: fromAppleFeed },
+      { name: "SOFA", read: fromSofa },
+    ].map(async ({ name, read }) => {
+      try {
+        const releases = await read();
+        if (!releases.length) console.warn(`${name} listed no macOS releases; its format may have changed.`);
+        return releases;
+      } catch (error) {
+        console.warn(`Couldn't read ${name} for the latest macOS release:`, String(error));
+        return [];
+      }
+    }),
+  );
+  const [, sofa] = sources;
+  return { release: pickLatest(sources), checked: sofa.length > 0 };
 };

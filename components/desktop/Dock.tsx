@@ -36,13 +36,14 @@ const previewSize = (w: number, h: number) => {
 
 /**
  * Where a window being minimized now will end up: the preview slot about to be
- * added at the end of the Dock. The Dock is centered, so it shifts left by half
- * of whatever it grows by.
+ * added at the end of the Dock, after any windows already on their way there.
+ * The Dock is centered, so it shifts left by half of whatever it grows by.
  */
-export const dockDropRect = (frame: Frame): RectLike | null => {
+export const dockDropRect = (id: string, frame: Frame): RectLike | null => {
   const marker = document.querySelector("[data-dock-drop]")?.getBoundingClientRect();
   if (!marker) return null;
-  const growth = SLOT + (document.querySelector("[data-dock-thumb]") ? 0 : SEPARATOR);
+  const inFlight = document.querySelectorAll(`[data-window-phase="minimizing"]:not([data-window-id="${CSS.escape(id)}"])`).length;
+  const growth = SLOT * (1 + inFlight) + (document.querySelector("[data-dock-thumb]") ? 0 : SEPARATOR);
   const slotLeft = marker.left + growth / 2 - SLOT + 2;
   const { w, h } = previewSize(frame.w, frame.h);
   return { left: slotLeft + (ICON - w) / 2, top: marker.top + (ICON - h) / 2, width: w, height: h };
@@ -60,10 +61,13 @@ export const dockPreviewRect = (id: string) =>
 const snapshotWindow = (source: HTMLElement, host: HTMLElement) => {
   const clone = source.cloneNode(true) as HTMLElement;
   clone.removeAttribute("data-window-id");
+  clone.removeAttribute("data-window-phase");
   clone.removeAttribute("role");
   clone.removeAttribute("aria-label");
   clone.classList.remove(styles.windowHidden);
-  Object.assign(clone.style, { left: "0px", top: "0px", zIndex: "auto" });
+  // Fill the host, which follows the window's frame, so the copy reflows like
+  // the real window if the desktop resizes while it's minimized.
+  Object.assign(clone.style, { left: "0px", top: "0px", width: "100%", height: "100%", zIndex: "auto" });
 
   const canvases = clone.querySelectorAll("canvas");
   source.querySelectorAll("canvas").forEach((canvas, i) => {

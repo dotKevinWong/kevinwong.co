@@ -96,10 +96,9 @@
 .desktop {
   position: relative;
   height: 100%;
-  min-height: 360px;
   overflow: hidden;
   isolation: isolate;
-  container-type: inline-size;
+  container-type: size;
   background: var(--mac-wallpaper);
 }
 
@@ -184,6 +183,9 @@
 /* ─── Desktop icons ────────────────────────────────────────── */
 
 .icons {
+  /* How far above the bottom a folder's resting spot can be: clear of the Dock. */
+  --icon-floor: 200px;
+
   position: absolute;
   inset: var(--mac-menubar-h) 0 0 0;
   pointer-events: none;
@@ -290,7 +292,8 @@
 }
 
 /* Minimized: kept laid out (not display: none) so scroll positions survive and the Dock can snapshot it. */
-.windowHidden {
+.windowHidden,
+.windowsParked {
   visibility: hidden;
   pointer-events: none;
 }
@@ -1172,8 +1175,12 @@
   }
 }
 
-/* On narrow desktops, sit above the Dock instead of over the folders. */
+/* On narrow desktops, sit above the Dock (with the folders kept above it) instead of top right. */
 @container (max-width: 699px) {
+  .icons {
+    --icon-floor: 245px;
+  }
+
   .notice {
     top: auto;
     bottom: 86px;
@@ -1182,6 +1189,13 @@
     width: min(340px, calc(100% - 24px));
     translate: -50% 0;
     animation-name: noticeUp;
+  }
+}
+
+/* Landscape phones: no room for the folders, the tip and the Dock at once, so skip the tip. */
+@container (max-height: 280px) {
+  .notice {
+    display: none;
   }
 }
 

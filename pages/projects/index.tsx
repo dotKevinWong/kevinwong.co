@@ -19,9 +19,9 @@ export default function Projects({ macos }: { macos: MacOSRelease }) {
 // Re-checked twice a day so the Terminal's neofetch follows new macOS releases.
 export const getStaticProps: GetStaticProps<{ macos: MacOSRelease }> = async () => {
   const { release, checked } = await latestMacOS();
-  // If both feeds are down during a background refresh, throwing makes Next keep
-  // serving the last good page rather than drop back to the fallback. The build
-  // itself never fails over this.
+  // If the check comes up short during a background refresh, throwing makes Next
+  // keep serving the last good page (and retry) rather than show an older
+  // version. The build itself never fails over this.
   if (!checked && process.env.NODE_ENV === "production" && process.env.NEXT_PHASE !== "phase-production-build") {
     throw new Error("Couldn't check the latest macOS release; keeping the previous page.");
   }

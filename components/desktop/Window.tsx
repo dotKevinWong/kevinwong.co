@@ -107,7 +107,7 @@ export const Window = ({
       case "minimizing": {
         const own = el.getBoundingClientRect();
         // Land exactly on the preview the Dock is about to show for this window.
-        const to = dockDropRect(win.frame) ?? { left: own.left + own.width / 2, top: window.innerHeight, width: 1, height: 1 };
+        const to = dockDropRect(id, win.frame) ?? { left: own.left + own.width / 2, top: window.innerHeight, width: 1, height: 1 };
         anim = el.animate(
           [
             { transformOrigin: "0 0", transform: "none", opacity: 1 },
@@ -210,6 +210,7 @@ export const Window = ({
     <div
       ref={ref}
       data-window-id={id}
+      data-window-phase={phase}
       role="dialog"
       aria-label={title}
       className={cx(
