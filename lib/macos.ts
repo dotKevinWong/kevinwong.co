@@ -9,17 +9,25 @@ export interface MacOSRelease {
 }
 
 /**
- * Darwin version for a macOS build: the build's leading number is Darwin's
- * major version and its letter the minor (A = 0), e.g. 25E246 -> 25.4.0.
- * Security-only updates after x.6 keep going through the alphabet but stay on
- * Darwin x.6.0 (macOS 14.7, 23H124, is Darwin 23.6.0).
+ * The Darwin version neofetch prints for a macOS release. Darwin skipped 26:
+ * macOS 26 runs Darwin 25 but macOS 27.0 (26A428) runs Darwin 27.0.0. Up to
+ * Sequoia it follows the build instead: its number is the major and its letter
+ * the minor (A = 0). Either way, security updates after x.6 stay on x.6.0
+ * (macOS 26.7 and 15.7.9 are Darwin 25.6.0 and 24.6.0).
  */
-export const kernelForBuild = (build: string) => {
+export const kernelFor = (version: string, build: string) => {
+  const [major, minor = 0] = version.split(".").map(Number);
+  if (major >= 27) return `${major}.${Math.min(minor, 6)}.0`;
+  if (major === 26) return `25.${Math.min(minor, 6)}.0`;
   const match = /^(\d+)([A-Z])/.exec(build);
   return match ? `${match[1]}.${Math.min(match[2].charCodeAt(0) - 65, 6)}.0` : "";
 };
 
-const release = (version: string, build: string): MacOSRelease => ({ version, build, kernel: kernelForBuild(build) });
+const release = (rawVersion: string, build: string): MacOSRelease => {
+  // Apple titles x.0 releases with a bare major ("macOS 26 (25A354)"); sw_vers says 26.0.
+  const version = rawVersion.includes(".") ? rawVersion : `${rawVersion}.0`;
+  return { version, build, kernel: kernelFor(version, build) };
+};
 
 /**
  * Used when neither feed can be reached. The feeds can only move the version
@@ -55,7 +63,7 @@ const APPLE_FEED = "https://developer.apple.com/news/releases/rss/releases.rss";
 const PUBLIC_RELEASE = /^macOS(?: [A-Z][a-z]+)* (\d+(?:\.\d+){0,2}) \((\d{2}[A-Z]\d{1,5}[a-z]?)\)$/;
 
 export const parseReleaseTitle = (title: string): MacOSRelease | null => {
-  const match = PUBLIC_RELEASE.exec(title.trim());
+  const match = PUBLIC_RELEASE.exec(title.replace(/\s+/g, " ").trim());
   return match ? release(match[1], match[2]) : null;
 };
 
@@ -66,7 +74,10 @@ const fromAppleFeed = async (): Promise<MacOSRelease[]> => {
   const res = await fetch(APPLE_FEED, { signal: AbortSignal.timeout(5000) });
   if (!res.ok) throw new Error(`${APPLE_FEED}: HTTP ${res.status}`);
   const feed = await rss.parseString(await res.text());
-  return (feed.items ?? []).flatMap((item) => parseReleaseTitle(item.title ?? "") ?? []);
+  // Newest first, so a release Apple re-posted with a new build (25G82, then 25G83) resolves to the later one.
+  return (feed.items ?? [])
+    .sort((a, b) => (b.isoDate ?? "").localeCompare(a.isoDate ?? ""))
+    .flatMap((item) => parseReleaseTitle(item.title ?? "") ?? []);
 };
 
 /* ─── SOFA, the Mac Admins community's macOS feed ─── */
@@ -97,7 +108,11 @@ export const parseSofa = (data: SofaFeed): MacOSRelease[] => {
 };
 
 const fromSofa = async (): Promise<MacOSRelease[]> => {
-  const res = await fetch(SOFA_FEED, { signal: AbortSignal.timeout(5000) });
+  const res = await fetch(SOFA_FEED, {
+    // SOFA asks consumers to identify themselves.
+    headers: { "User-Agent": "kevinwong.co-projects/1.0" },
+    signal: AbortSignal.timeout(5000),
+  });
   if (!res.ok) throw new Error(`${SOFA_FEED}: HTTP ${res.status}`);
   return parseSofa(await res.json());
 };
@@ -117,12 +132,16 @@ export const pickLatest = (sources: MacOSRelease[][]): MacOSRelease => {
 
 /**
  * The newest public macOS release, from Apple's developer releases feed and
- * SOFA (checked in parallel; either is enough), or the fallback. Never throws.
+ * SOFA (checked in parallel; either is enough), or the fallback. `checked` is
+ * false when neither feed could be read. Never throws.
  */
-export const latestMacOS = async (): Promise<MacOSRelease> => {
+export const latestMacOS = async (): Promise<{ release: MacOSRelease; checked: boolean }> => {
   const results = await Promise.allSettled([fromAppleFeed(), fromSofa()]);
   results.forEach((r) => {
     if (r.status === "rejected") console.warn("Couldn't check the latest macOS release:", String(r.reason));
   });
-  return pickLatest(results.map((r) => (r.status === "fulfilled" ? r.value : [])));
+  return {
+    release: pickLatest(results.map((r) => (r.status === "fulfilled" ? r.value : []))),
+    checked: results.some((r) => r.status === "fulfilled"),
+  };
 };
