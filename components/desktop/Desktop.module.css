@@ -191,7 +191,6 @@
 
 .icon {
   position: absolute;
-  right: 14px;
   width: 92px;
   display: flex;
   flex-direction: column;
@@ -290,8 +289,10 @@
     height 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+/* Minimized: kept laid out (not display: none) so scroll positions survive and the Dock can snapshot it. */
 .windowHidden {
-  display: none;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .titlebar {
@@ -1028,14 +1029,22 @@
   position: relative;
   height: var(--dock-icon);
   margin: 0 2px;
-  display: flex;
-  justify-content: center;
   flex-shrink: 0;
   transition: width 0.12s ease-out;
 }
 
-.theme .dockItem:focus-visible {
-  box-shadow: none;
+/* The clickable area, scaled along with the icon it covers. */
+.dockHit {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  z-index: 1;
+  width: var(--dock-icon);
+  height: var(--dock-icon);
+  margin-left: calc(var(--dock-icon) / -2);
+  border-radius: 12px;
+  transform-origin: 50% 100%;
+  transition: transform 0.12s ease-out;
 }
 
 .dockIcon {
@@ -1049,16 +1058,11 @@
   transition: transform 0.12s ease-out;
 }
 
-.dockIcon img {
+.dockIcon > img {
   width: 100%;
   height: 100%;
   object-fit: contain;
   pointer-events: none;
-}
-
-.dockItem:focus-visible .dockIcon {
-  border-radius: 12px;
-  box-shadow: 0 0 0 3px var(--mac-focus);
 }
 
 .dockBounce .dockIcon {
@@ -1106,7 +1110,7 @@
   }
 }
 
-.dockItem:focus-visible .dockTooltip {
+.dockHit:focus-visible ~ .dockTooltip {
   opacity: 1;
 }
 
@@ -1117,28 +1121,20 @@
   background: var(--mac-dock-sep);
 }
 
-.dockThumb {
+.dockPreview {
   position: absolute;
-  inset: 5px 0;
-  border-radius: 4px;
   overflow: hidden;
+  border-radius: 3px;
   background: var(--mac-window-bg);
-  box-shadow: 0 0 0 0.5px var(--mac-window-outline), 0 2px 6px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 0 0 0.5px var(--mac-window-outline), 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
-.dockThumbBar {
-  height: 7px;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 0 3px;
-  background: var(--mac-titlebar-bg);
-}
-
-.dockThumbBar span {
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
+.dockPreviewHost {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
 }
 
 .dockIcon .dockThumbBadge {
@@ -1176,13 +1172,7 @@
   }
 }
 
-/* Keep clear of the desktop icons: beside them when there's room, above the Dock when not. */
-@container (min-width: 700px) {
-  .notice {
-    right: 124px;
-  }
-}
-
+/* On narrow desktops, sit above the Dock instead of over the folders. */
 @container (max-width: 699px) {
   .notice {
     top: auto;

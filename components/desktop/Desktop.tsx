@@ -1,10 +1,11 @@
 import { useRouter } from "next/router";
 import React, { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
+import type { MacOSRelease } from "../../lib/macos";
 import { PROJECTS, getProject, type ProjectId } from "../projects/data";
 import { AppScreen } from "./AppScreen";
 import styles from "./Desktop.module.css";
 import { DesktopIcon } from "./DesktopIcon";
-import { APP_ICONS, Dock, type DockThumb } from "./Dock";
+import { APP_ICONS, Dock, dockPreviewRect, type DockThumb } from "./Dock";
 import { FinderApp, locationTitle } from "./FinderApp";
 import { useMediaQuery, useReducedMotion } from "./hooks";
 import { MenuBar } from "./MenuBar";
@@ -43,7 +44,7 @@ const windowTitle = (win: Win) =>
  * Finder windows and the Dock launches Spotify and Terminal. On smaller
  * screens folders open the project page and Dock apps open full screen.
  */
-export const Desktop = () => {
+export const Desktop = ({ macos }: { macos: MacOSRelease }) => {
   const router = useRouter();
   const windowed = useMediaQuery("(min-width: 64em)");
   const reducedMotion = useReducedMotion();
@@ -99,9 +100,8 @@ export const Desktop = () => {
     dispatch({ type: "open", app, location, frame: defaultFrame(app, bounds, count), animate });
   };
 
-  const restore = (id: string, from?: RectLike) => {
-    const thumb = from ?? document.querySelector(`[data-dock-thumb="${id}"]`)?.getBoundingClientRect();
-    dispatch({ type: "restore", id, from: thumb, animate });
+  const restore = (id: string, from: RectLike | undefined = dockPreviewRect(id)) => {
+    dispatch({ type: "restore", id, from, animate });
   };
 
   /** Brings an app forward: focus a visible window, else restore a minimized one, else launch. */
@@ -155,7 +155,7 @@ export const Desktop = () => {
     ? wm.wins
         .filter((w) => w.minimized)
         .sort((a, b) => (a.minimizedSeq ?? 0) - (b.minimizedSeq ?? 0))
-        .map((w) => ({ id: w.id, app: w.app, title: windowTitle(w) }))
+        .map((w) => ({ id: w.id, app: w.app, title: windowTitle(w), frame: w.frame }))
     : [];
 
   return (
@@ -171,11 +171,10 @@ export const Desktop = () => {
       <MenuBar app={activeWin?.app ?? "finder"} />
 
       <div className={styles.icons}>
-        {PROJECTS.map((project, i) => (
+        {PROJECTS.map((project) => (
           <DesktopIcon
             key={project.id}
             project={project}
-            index={i}
             selected={selected === project.id}
             focused={!activeWin}
             openOnTap={!windowed}
@@ -224,7 +223,7 @@ export const Desktop = () => {
           }
           return (
             <Window key={win.id} {...common} tone="terminal">
-              <TerminalApp />
+              <TerminalApp macos={macos} />
             </Window>
           );
         })}
@@ -248,7 +247,7 @@ export const Desktop = () => {
         />
       )}
 
-      <AppScreen app={screenApp} onBack={closeScreen} />
+      <AppScreen app={screenApp} macos={macos} onBack={closeScreen} />
     </div>
   );
 };

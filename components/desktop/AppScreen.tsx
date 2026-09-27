@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { LuChevronLeft } from "react-icons/lu";
+import type { MacOSRelease } from "../../lib/macos";
 import styles from "./Desktop.module.css";
 import { APP_ICONS } from "./Dock";
 import { FinderList } from "./FinderApp";
@@ -13,7 +14,7 @@ import type { AppId } from "./windowManager";
  * Phone-style full-screen app. Stays mounted while `app` goes back to null so
  * it can animate closed. Portalled to <body> so it covers the site navbar.
  */
-export const AppScreen = ({ app, onBack }: { app: AppId | null; onBack: () => void }) => {
+export const AppScreen = ({ app, macos, onBack }: { app: AppId | null; macos: MacOSRelease; onBack: () => void }) => {
   const reducedMotion = useReducedMotion();
   const [shown, setShown] = useState<AppId | null>(app);
   if (app && app !== shown) setShown(app);
@@ -50,7 +51,7 @@ export const AppScreen = ({ app, onBack }: { app: AppId | null; onBack: () => vo
       <div className={styles.appScreenBody}>
         {shown === "finder" && <FinderList />}
         {shown === "spotify" && <SpotifyMobile />}
-        {shown === "terminal" && <TerminalApp />}
+        {shown === "terminal" && <TerminalApp macos={macos} />}
       </div>
     </div>,
     document.body,

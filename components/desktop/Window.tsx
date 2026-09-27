@@ -1,5 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from "react";
 import styles from "./Desktop.module.css";
+import { dockDropRect } from "./Dock";
 import { CloseGlyph, MinimizeGlyph, ZoomGlyph } from "./icons";
 import { clampFrame, MENUBAR_H, type Bounds, type Frame, type RectLike, type Win, type WMAction } from "./windowManager";
 
@@ -105,10 +106,8 @@ export const Window = ({
         break;
       case "minimizing": {
         const own = el.getBoundingClientRect();
-        const drop = document.querySelector("[data-dock-drop]")?.getBoundingClientRect();
-        const to = drop
-          ? { left: drop.left, top: drop.top + 5, width: 50, height: 40 }
-          : { left: own.left + own.width / 2, top: window.innerHeight, width: 1, height: 1 };
+        // Land exactly on the preview the Dock is about to show for this window.
+        const to = dockDropRect(win.frame) ?? { left: own.left + own.width / 2, top: window.innerHeight, width: 1, height: 1 };
         anim = el.animate(
           [
             { transformOrigin: "0 0", transform: "none", opacity: 1 },
@@ -210,6 +209,7 @@ export const Window = ({
   return (
     <div
       ref={ref}
+      data-window-id={id}
       role="dialog"
       aria-label={title}
       className={cx(

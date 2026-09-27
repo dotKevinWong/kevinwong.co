@@ -195,7 +195,7 @@ const DEFAULT_SIZES: Record<AppId, [number, number]> = {
   spotify: [600, 440],
 };
 
-/** Where a new window goes: a little left of center, cascading with each open window. */
+/** Where a new window goes: centered, cascading with each open window. */
 export const defaultFrame = (app: AppId, bounds: Bounds, openCount: number): Frame => {
   const [dw, dh] = DEFAULT_SIZES[app];
   const availH = bounds.h - MENUBAR_H - DOCK_RESERVE - 12;
@@ -206,7 +206,7 @@ export const defaultFrame = (app: AppId, bounds: Bounds, openCount: number): Fra
     {
       w,
       h,
-      x: Math.round(Math.max(12, (bounds.w - w) / 2 - 56) + step),
+      x: Math.round(Math.max(12, (bounds.w - w) / 2 - 40) + step),
       y: Math.round(MENUBAR_H + Math.max(10, (availH - h) * 0.35) + step),
     },
     bounds,

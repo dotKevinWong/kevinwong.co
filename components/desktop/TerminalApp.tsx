@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import type { MacOSRelease } from "../../lib/macos";
 import styles from "./Desktop.module.css";
 import { useReducedMotion } from "./hooks";
 
@@ -55,12 +56,12 @@ const uptime = (now: Date) => {
   );
 };
 
-const buildInfo = (): [string | null, string][] => [
+const buildInfo = (macos: MacOSRelease): [string | null, string][] => [
   [null, HOST],
   [null, "-".repeat(HOST.length)],
-  ["OS", "macOS 26.4 25E246 arm64"],
+  ["OS", `macOS ${macos.version} ${macos.build} arm64`],
   ["Host", "MacBookPro18,4"],
-  ["Kernel", "25.4.0"],
+  ["Kernel", macos.kernel],
   ["Uptime", uptime(new Date())],
   ["Shell", "zsh 5.9"],
   ["Resolution", "1800x1169"],
@@ -82,10 +83,13 @@ const Prompt = () => (
   </>
 );
 
-/** `neofetch`, typed out line by line. Wraps the info below the logo in narrow windows. */
-export const TerminalApp = () => {
+/**
+ * `neofetch`, typed out line by line. Wraps the info below the logo in narrow
+ * windows. `macos` is the latest public release, fetched when the page is built.
+ */
+export const TerminalApp = ({ macos }: { macos: MacOSRelease }) => {
   const reducedMotion = useReducedMotion();
-  const [info] = useState(buildInfo);
+  const [info] = useState(() => buildInfo(macos));
   const rows = Math.max(LOGO.length, info.length);
   // One step per row, then the color swatches, then the next prompt.
   const steps = rows + 2;

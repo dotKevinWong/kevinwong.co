@@ -143,8 +143,9 @@ const Visualizer = ({ playing, paused = false }: { playing: boolean; paused?: bo
     };
     const start = () => {
       cancelAnimationFrame(raf);
-      resize();
+      // While minimized, keep the last frame on the canvas for the Dock preview.
       if (paused) return;
+      resize();
       if (reducedMotion) {
         // Build up one still frame instead of animating.
         for (let i = 0; i < 12; i++) draw();

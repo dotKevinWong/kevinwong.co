@@ -18,6 +18,8 @@ export interface Project {
   name: string;
   subtitle: string;
   href: string;
+  /** Where the folder sits on the Projects desktop, as percentages of its width and height. */
+  desktop: { x: number; y: number };
   logo: string;
   /** "cover" for logos that fill their square, "contain" for round seals on transparency. */
   logoFit: "cover" | "contain";
@@ -34,6 +36,7 @@ export const PROJECTS: Project[] = [
     name: "Cahill Club",
     subtitle: "CahillClub.com",
     href: "/projects/cahillclub",
+    desktop: { x: 20, y: 18 },
     logo: "/cahillclub.png",
     logoFit: "contain",
     sections: [
@@ -66,6 +69,7 @@ export const PROJECTS: Project[] = [
     name: "DragonBot",
     subtitle: "DragonBot#5561",
     href: "/projects/dragonbot",
+    desktop: { x: 64, y: 47 },
     logo: "/dragonbot.png",
     logoFit: "cover",
     sections: [

@@ -10,10 +10,12 @@ const DOUBLE_TAP_MS = 450;
  * A draggable folder on the desktop. Clicks and taps are recognised on pointer
  * up so the same code handles mouse and touch: in windowed mode a single click
  * selects and a double click opens; with `openOnTap` a single tap opens.
+ *
+ * Folders start where the project's `desktop` position puts them, kept clear of
+ * the edges and the Dock on small screens.
  */
 export const DesktopIcon = ({
   project,
-  index,
   selected,
   focused,
   openOnTap,
@@ -21,7 +23,6 @@ export const DesktopIcon = ({
   onOpen,
 }: {
   project: Project;
-  index: number;
   selected: boolean;
   /** Whether the desktop (rather than a window) has focus; selection turns blue. */
   focused: boolean;
@@ -89,7 +90,11 @@ export const DesktopIcon = ({
       ]
         .filter(Boolean)
         .join(" ")}
-      style={{ top: 14 + index * 106, transform: `translate(${offset.x}px, ${offset.y}px)` }}
+      style={{
+        left: `clamp(8px, ${project.desktop.x}%, calc(100% - 100px))`,
+        top: `clamp(10px, ${project.desktop.y}%, calc(100% - 200px))`,
+        transform: `translate(${offset.x}px, ${offset.y}px)`,
+      }}
       aria-label={`${project.name} folder`}
       onPointerDown={onPointerDown}
       onKeyDown={(e) => {
