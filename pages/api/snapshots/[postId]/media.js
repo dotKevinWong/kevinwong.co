@@ -38,10 +38,12 @@ export default async function handler(req, res) {
           m.id,
           m.position,
           m.kind,
-          m.cloudinary_url as url,
-          m.cloudinary_public_id as "publicId",
-          m.cloudinary_width as width,
-          m.cloudinary_height as height
+          -- asset_* is the Vercel Blob copy; cloudinary_* is the fallback
+          -- while rows are still being moved across.
+          coalesce(m.asset_url, m.cloudinary_url) as url,
+          coalesce(m.asset_pathname, m.cloudinary_public_id) as "publicId",
+          coalesce(m.asset_width, m.cloudinary_width) as width,
+          coalesce(m.asset_height, m.cloudinary_height) as height
         from instagram_media m
         where m.post_id = $1
           and m.position >= $2

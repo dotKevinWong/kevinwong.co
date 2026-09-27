@@ -8,13 +8,14 @@
  *   npm run instagram:sync -- --max-uploads=200   # drain a backlog in one go
  *   npm run instagram:sync -- --probe-caption     # re-test whether caption is readable
  *
- * A dry run still calls the Instagram API (and so needs a valid stored token),
- * but touches neither Cloudinary nor the database.
+ * A dry run still calls the Instagram API (and so needs a valid stored token)
+ * and reads the database, but downloads and writes nothing. It makes one Blob
+ * head() request to confirm the store is reachable.
  */
 
 import { loadEnvFiles } from "./load-env.mjs";
 
-// lib/cloudinary.js reads process.env at import time, so the env files have to
+// lib/blob-store.js reads process.env at import time, so the env files have to
 // be applied before any lib module is loaded — hence the dynamic imports below.
 const fileEnv = loadEnvFiles();
 for (const [key, value] of Object.entries(fileEnv)) {
@@ -43,7 +44,7 @@ if (flag("help") || flag("h")) {
   console.log(`
 Usage: npm run instagram:sync -- [options]
 
-  --dry-run            Fetch and report without writing to Cloudinary or Postgres
+  --dry-run            Fetch and report without writing to Blob or Postgres
   --max-posts=N        How many recent posts to read from the API (default 50)
   --max-uploads=N      Cap media uploads this run (default 25; backlogs resume later)
   --probe-caption      Test whether this token can read the caption field
@@ -90,7 +91,9 @@ console.log(`  ${dryRun ? "would insert" : "inserted"}:      ${summary.inserted.
 console.log(`  media ${dryRun ? "to upload" : "uploaded"}:   ${summary.uploads}`);
 console.log(`  deferred to later: ${summary.deferred}`);
 console.log(`  skipped:           ${summary.skipped.length}`);
+console.log(`  warnings:          ${summary.warnings.length}`);
 console.log(`  errors:            ${summary.errors.length}`);
+if (summary.blob) console.log(`  blob store:        ${summary.blob}`);
 
 if (summary.inserted.length > 0) {
   console.log(`\n${dryRun ? "Would insert" : "Inserted"}:`);
@@ -103,6 +106,11 @@ if (summary.inserted.length > 0) {
 if (summary.skipped.length > 0) {
   console.log("\nSkipped:");
   for (const s of summary.skipped) console.log(`  ${s.id}: ${s.reason}`);
+}
+
+if (summary.warnings.length > 0) {
+  console.log("\nWarnings:");
+  for (const w of summary.warnings) console.log(`  ${w.id}: ${w.warning}`);
 }
 
 if (summary.errors.length > 0) {

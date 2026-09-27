@@ -98,10 +98,12 @@ export default async function handler(req, res) {
                   'id', m.id,
                   'position', m.position,
                   'kind', m.kind,
-                  'url', m.cloudinary_url,
-                  'publicId', m.cloudinary_public_id,
-                  'width', m.cloudinary_width,
-                  'height', m.cloudinary_height
+                  -- asset_* is the Vercel Blob copy; cloudinary_* is the
+                  -- fallback while rows are still being moved across.
+                  'url', coalesce(m.asset_url, m.cloudinary_url),
+                  'publicId', coalesce(m.asset_pathname, m.cloudinary_public_id),
+                  'width', coalesce(m.asset_width, m.cloudinary_width),
+                  'height', coalesce(m.asset_height, m.cloudinary_height)
                 )
                 order by m.position asc
               ) filter (where m.position = 0),

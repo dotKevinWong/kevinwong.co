@@ -2,12 +2,18 @@ import { syncInstagram } from "../../../lib/instagram-sync";
 import { InstagramReauthRequiredError } from "../../../lib/instagram";
 
 export const config = {
-  // Mirroring a backlog of carousels means several Cloudinary round trips per
-  // post. Hobby projects with Fluid compute allow up to 300s; without Fluid the
-  // ceiling is 60s and the DEFAULT is only 10s, which this job would blow
-  // through — so set it explicitly either way.
+  // Each media item is a download from Instagram plus an upload to Blob, and a
+  // backlog of carousels adds up. Hobby projects with Fluid compute allow up to
+  // 300s; without Fluid the ceiling is 60s and the DEFAULT is only 10s, which
+  // this job would blow through — so set it explicitly either way.
   maxDuration: 300,
 };
+
+// Stop starting new posts after this long. The worst single post — a 20-slide
+// carousel of videos — needs roughly 20 x (download + upload), so this leaves
+// headroom inside maxDuration for the one already in flight to finish and for
+// the summary to be returned. Anything not reached is picked up tomorrow.
+const TIME_BUDGET_MS = 150_000;
 
 export default async function handler(req, res) {
   // A cached response is invisible in Vercel's logs and can stop a cron from
@@ -25,7 +31,7 @@ export default async function handler(req, res) {
   // when the variable is set, but documents nothing about the unset case — so
   // an absent secret is treated as a misconfiguration, never as "allow all".
   // Otherwise this route would be an unauthenticated endpoint that writes to the
-  // database and spends Cloudinary quota.
+  // database and spends the Blob store's monthly upload allowance.
   if (!secret) {
     console.error("[cron/sync-instagram] CRON_SECRET is not set; refusing to run.");
     return res.status(500).json({ error: "CRON_SECRET is not configured" });
@@ -38,12 +44,13 @@ export default async function handler(req, res) {
   const dryRun = req.query.dryRun === "1" || req.query.dryRun === "true";
 
   try {
-    const summary = await syncInstagram({ dryRun });
+    const summary = await syncInstagram({ dryRun, timeBudgetMs: TIME_BUDGET_MS });
 
     console.log(
       `[cron/sync-instagram] fetched=${summary.fetched} new=${summary.inserted.length} ` +
         `present=${summary.alreadyPresent} uploads=${summary.uploads} ` +
-        `deferred=${summary.deferred} skipped=${summary.skipped.length} errors=${summary.errors.length}`
+        `deferred=${summary.deferred} skipped=${summary.skipped.length} ` +
+        `warnings=${summary.warnings.length} errors=${summary.errors.length}`
     );
 
     // Surface per-post failures in the response as well as the logs; the run as

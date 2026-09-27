@@ -62,8 +62,9 @@ Set a reminder for ~5 months out so this happens before the token dies rather th
 ### 📸 Instagram sync
 
 `/snapshots` is served from Postgres (`instagram_posts` / `instagram_media`) with the
-media mirrored to Cloudinary. A daily Vercel Cron job pulls new posts from the Instagram
-API and fills those tables.
+media stored in [Vercel Blob](https://vercel.com/docs/vercel-blob). A daily Vercel Cron
+job pulls new posts from the Instagram API, downloads each photo and video, measures it,
+uploads it to Blob, and fills those tables.
 
 **Account requirement.** The Instagram Basic Display API was shut down on 2024-12-04 and
 personal accounts now have no API access at all. The account must be an Instagram
@@ -86,27 +87,105 @@ and if it reports captions as unsupported, remove `caption` from `MEDIA_FIELDS` 
 #### One-time setup
 
 1. Apply the migrations in [`sql/`](sql/), in filename order.
-2. Set these environment variables locally and in Vercel:
-   `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, and
-   `CRON_SECRET` (any long random string — the cron endpoint refuses to run without it).
-3. In the Meta App Dashboard, go to **Instagram → API setup with Instagram business
+2. Create a **Public** Blob store (Vercel dashboard → Storage → Create → Blob) and
+   connect it to the project, which gives production its credentials. Locally, put the
+   store's `BLOB_READ_WRITE_TOKEN` in `.env`. The store must be Public: /snapshots serves
+   the files straight into `<img>` and `<video>`.
+3. Set `CRON_SECRET` in Vercel (any long random string — the cron endpoint refuses to
+   run without it). Generate one with `openssl rand -hex 32`.
+4. In the Meta App Dashboard, go to **Instagram → API setup with Instagram business
    login** and click **Generate token**. No OAuth redirect flow is needed for a single
    account.
-4. Store it, which also validates it against the API. Pass it through the
+5. Store it, which also validates it against the API. Pass it through the
    environment rather than as an argument, so it stays out of your shell history:
    ````sh
    INSTAGRAM_ACCESS_TOKEN=<TOKEN> npm run instagram:token
    ````
-5. Reconcile the posts that came from the old data-export import:
+6. Reconcile the posts that came from the old data-export import:
    ````sh
    npm run instagram:repair            # dry run
    npm run instagram:repair -- --apply
    ````
-6. Dry-run the sync, then let it run for real:
+7. Dry-run the sync, then let it run for real:
    ````sh
    npm run instagram:sync -- --dry-run
    npm run instagram:sync
    ````
+
+#### Blob storage and the Hobby plan
+
+Each file lives at `snapshots/<YYYYMM>/<shortcode>-<slide>.<ext>` — the shortcode is the
+post's Instagram URL, so the store's file browser maps straight back to Instagram.
+
+The Hobby plan includes 1 GB of Blob storage, 2,000 uploads a month, 10,000 "simple
+operations" (a cache miss when someone views a file counts as one) and 10 GB of Blob data
+transfer. **Going over any of these is a hard stop, not a bill: Blob is locked for up to
+30 days and every image on /snapshots goes blank.** Today's ~80 MB and a few uploads a
+day are far inside that; the thing to watch is transfer if the page ever gets heavy
+traffic or hotlinking. Usage is under the store's **Usage** tab.
+
+#### Moving from Cloudinary
+
+The media was originally mirrored to Cloudinary. It moves to Blob in two stages, so the
+live site keeps working throughout:
+
+1. **Copy (done 2026-09-26).** `sql/003` added nullable `asset_*` columns, and the
+   backfill copied all 133 files into Blob and filled them in. `cloudinary_*` was not
+   touched, so the code already deployed kept reading Cloudinary.
+   ````sh
+   npm run snapshots:blob               # dry run
+   npm run snapshots:blob -- --apply    # copy (resumable)
+   npm run snapshots:blob -- --verify   # every object present, sizes match, videos serve 206
+   ````
+2. **Switch.** Deploying this code makes the read path prefer `asset_*` (falling back to
+   `cloudinary_*` for any row not yet copied), and new posts go straight to Blob.
+
+#### Retiring Cloudinary
+
+Wait at least 30 days after the switch is deployed and working: until then, rolling back
+to the old code still needs the Cloudinary files. Then, in this order — each step leaves
+every deployment that could still be serving (including the Instant Rollback target)
+working:
+
+1. **Relax the schema.** Safe for every version of the code, because the switch-era code
+   already writes `asset_*` on every insert and the old code only reads. First confirm
+   nothing is missing — this must return 0:
+   ````sql
+   select count(*) from instagram_media where asset_url is null or asset_pathname is null;
+   ````
+   then:
+   ````sql
+   set lock_timeout = '5s';
+   alter table instagram_media
+     alter column asset_url set not null,
+     alter column asset_pathname set not null,
+     alter column cloudinary_url drop not null,
+     alter column cloudinary_public_id drop not null,
+     alter column cloudinary_folder drop not null;
+   ````
+2. **Stop using the old columns in code.** In [`lib/instagram-sync.js`](lib/instagram-sync.js)
+   stop `insertPost` writing `cloudinary_*`; in both `pages/api/snapshots` routes remove the
+   `coalesce(..., m.cloudinary_*)` fallbacks; delete `scripts/snapshots-blob-backfill.mjs` and
+   its `snapshots:blob` npm script (it reads `cloudinary_*`). Deploy, then **Redeploy once
+   more** (Vercel → Deployments → Redeploy). On Hobby, Instant Rollback can only go to the
+   immediately previous deployment; the extra deploy makes sure that target no longer reads
+   the columns step 3 removes.
+3. **Drop the columns.** This is deliberately **not** a file in `sql/`, because the setup
+   steps apply that folder in order and running it early would break the old code:
+   ````sql
+   set lock_timeout = '5s';
+   alter table instagram_media
+     drop column cloudinary_public_id, drop column cloudinary_url,
+     drop column cloudinary_version, drop column cloudinary_resource_type,
+     drop column cloudinary_format, drop column cloudinary_width,
+     drop column cloudinary_height, drop column cloudinary_duration,
+     drop column cloudinary_folder;
+   ````
+4. **Keep the Cloudinary account, or move the blog first.** The cover images of four blog
+   posts (`posts/*.mdx`) are also hosted on Cloudinary. Either move those into `public/` or
+   Blob and update the posts, or delete only the `kevinwong/` snapshot folder and keep the
+   account. Keep an offline copy of the snapshot files before deleting them — Blob has no
+   versioning.
 
 #### How duplicates are prevented
 
