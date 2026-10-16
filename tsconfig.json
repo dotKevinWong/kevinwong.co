@@ -17,12 +17,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
-    "incremental": true,
-    "paths": {
-      "@/*": [
-        "./src/*"
-      ]
-    }
+    "incremental": true
   },
   "include": [
     "next-env.d.ts",
@@ -31,9 +26,7 @@
     "lib/mdx.js",
     "lib/formatter.js",
     "lib/spotify.js",
-    "lib/fetcher.js",
-    "components/Box2.jsx",
-    "components/Box1.jsx"
+    "lib/fetcher.js"
   ],
   "exclude": [
     "node_modules"

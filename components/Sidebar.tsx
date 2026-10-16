@@ -1,5 +1,5 @@
 import { Flex, Heading, HStack, Icon, Stack, Text } from '@chakra-ui/react'
-import { useRouter } from 'next/router'
+import * as React from 'react'
 import {
   FiArchive,
   FiAtSign,
@@ -10,6 +10,8 @@ import {
   FiSmile,
 } from 'react-icons/fi'
 import { LuPanelLeftClose, LuPanelLeftOpen } from 'react-icons/lu'
+import { SWRConfig, type Middleware } from 'swr'
+import { useMediaQuery } from './desktop/hooks'
 import { NavButton } from './NavButton'
 import { NowPlaying } from './NowPlaying'
 import { useSidebar } from './SidebarContext'
@@ -17,16 +19,31 @@ import { ColorModeButton } from './ui/color-mode'
 import { Tooltip } from './ui/tooltip'
 import Link from 'next/link'
 
+// SWR fetches nothing for a null key and fetches straight away once a real key
+// comes back, so this pauses a widget's polling without unmounting it.
+const pauseWhen = (paused: boolean): Middleware => (useSWRNext) => (key, fetcher, config) =>
+  useSWRNext(paused ? null : key, fetcher, config)
+
 export const Sidebar = ({ inDrawer = false }: { inDrawer?: boolean }) => {
-  const router = useRouter()
   const { collapsed, setCollapsed } = useSidebar()
 
   // In drawer context, never show collapsed state
   const isCollapsed = inDrawer ? false : collapsed
 
+  // PageShell hides the desktop sidebar below `lg` (64em) with CSS but keeps it
+  // mounted, so on phones its NowPlaying would poll every 15s for nobody. Hold
+  // its requests until the sidebar is on screen; unmounting it instead would
+  // make the widget pop in after hydration on desktop. `isLarge` is false while
+  // hydrating, so desktop starts polling right after.
+  const isLarge = useMediaQuery('(min-width: 64em)')
+  const nowPlayingConfig = React.useMemo(
+    () => ({ use: [pauseWhen(!inDrawer && !isLarge)] }),
+    [inDrawer, isLarge],
+  )
+
   return (
     <Flex
-      boxShadow={{ base: 'sm', _dark: 'sm-dark' }}
+      boxShadow="sm"
       w={isCollapsed ? '68px' : 'xs'}
       minW={isCollapsed ? '68px' : 'xs'}
       h={inDrawer ? 'full' : undefined}
@@ -49,6 +66,7 @@ export const Sidebar = ({ inDrawer = false }: { inDrawer?: boolean }) => {
               <Tooltip content="Expand sidebar" positioning={{ placement: 'right' }}>
                 <Flex
                   as="button"
+                  aria-label="Expand sidebar"
                   onClick={() => setCollapsed(false)}
                   align="center"
                   justify="center"
@@ -74,6 +92,7 @@ export const Sidebar = ({ inDrawer = false }: { inDrawer?: boolean }) => {
                 <Tooltip content="Collapse sidebar" positioning={{ placement: 'right' }}>
                   <Flex
                     as="button"
+                    aria-label="Collapse sidebar"
                     onClick={() => setCollapsed(true)}
                     align="center"
                     justify="center"
@@ -93,16 +112,18 @@ export const Sidebar = ({ inDrawer = false }: { inDrawer?: boolean }) => {
             </Flex>
           )}
           <Stack>
-            <NavButton label="I am" icon={FiSmile} collapsed={isCollapsed} onClick={() => router.push('/')} />
-            <NavButton label="Statistics" icon={FiBarChart2} collapsed={isCollapsed} onClick={() => router.push('/stats')} />
-            <NavButton label="Bookshelf" icon={FiBookOpen} collapsed={isCollapsed} onClick={() => router.push('/bookshelf')} />
-            <NavButton label="Snapshots" icon={FiCamera} collapsed={isCollapsed} onClick={() => router.push('/snapshots')} />
-            <NavButton label="Projects" icon={FiArchive} collapsed={isCollapsed} onClick={() => router.push('/projects')} />
-            <NavButton label="Blog" icon={FiBook} collapsed={isCollapsed} onClick={() => router.push('/blog')} />
-            <NavButton label="Contact" icon={FiAtSign} collapsed={isCollapsed} onClick={() => router.push('/contact')} />
+            <NavButton label="I am" icon={FiSmile} collapsed={isCollapsed} href="/" />
+            <NavButton label="Statistics" icon={FiBarChart2} collapsed={isCollapsed} href="/stats" />
+            <NavButton label="Bookshelf" icon={FiBookOpen} collapsed={isCollapsed} href="/bookshelf" />
+            <NavButton label="Snapshots" icon={FiCamera} collapsed={isCollapsed} href="/snapshots" />
+            <NavButton label="Projects" icon={FiArchive} collapsed={isCollapsed} href="/projects" />
+            <NavButton label="Blog" icon={FiBook} collapsed={isCollapsed} href="/blog" />
+            <NavButton label="Contact" icon={FiAtSign} collapsed={isCollapsed} href="/contact" />
           </Stack>
         </Stack>
-        <NowPlaying collapsed={isCollapsed} />
+        <SWRConfig value={nowPlayingConfig}>
+          <NowPlaying collapsed={isCollapsed} />
+        </SWRConfig>
       </Stack>
     </Flex>
   )

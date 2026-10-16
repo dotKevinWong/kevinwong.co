@@ -49,7 +49,8 @@ export const useMinuteClock = () => {
 
 export type NowPlayingData = {
   album?: string;
-  albumImageUrl?: string;
+  /** null when the track has no album art. */
+  albumImageUrl?: string | null;
   albumUrl?: string;
   artist?: string;
   artistUrl?: string;
@@ -65,13 +66,25 @@ export const formatDuration = (ms: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
 
-/** Spotify now-playing state with a progress value that ticks between polls. */
-export const useNowPlaying = () => {
-  // Same key and fetcher as the sidebar widget, so the two share one request.
-  const { data } = useSWR<NowPlayingData>("/api/nowplaying", fetcher, {
-    refreshInterval: 15000,
+/**
+ * Spotify now-playing state with a progress value that ticks between polls.
+ * `poll` says whether this caller refetches every 15s; either way SWR still
+ * fetches on mount and when the tab regains focus.
+ */
+export const useNowPlaying = ({ poll }: { poll: boolean }) => {
+  // Same key and fetcher as the sidebar's NowPlaying, so they share one cache
+  // entry. SWR runs a timer for every hook that sets refreshInterval, so only one
+  // caller polls at a time. The Spotify window is only on screen from 64em up,
+  // where the sidebar's widget already polls, so it passes false (and stays quiet
+  // while parked below 64em). The full-screen app only mounts below 64em, where
+  // the Sidebar holds its requests while PageShell hides it, so it passes true.
+  const { data: response, error } = useSWR<NowPlayingData>("/api/nowplaying", fetcher, {
+    refreshInterval: poll ? 15000 : 0,
     dedupingInterval: 1000,
   });
+  // As in the sidebar: SWR keeps the last good response when a poll fails, so a
+  // failed poll reads as Not Playing rather than an old song still ticking along.
+  const data = error ? undefined : response;
   const hasTrack = !!data?.songUrl;
   const isPlaying = hasTrack && !!data?.isPlaying;
 

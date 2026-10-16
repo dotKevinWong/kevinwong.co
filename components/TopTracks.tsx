@@ -15,11 +15,11 @@ import fetcher from "../lib/fetcher";
 import { FiExternalLink } from "react-icons/fi";
 
 export const TopTracks = () => {
-    const { data } = useSWR("/api/toptracks", fetcher);
+    const { data, error } = useSWR("/api/toptracks", fetcher);
 
     // `tracks` is absent while loading, and also whenever the API degrades —
     // which it does for real once the Spotify refresh token hits its six-month
-    // expiry and returns { is_working: false }.
+    // expiry and returns { is_working: false } — or the request fails outright.
     const tracks = data?.tracks;
 
     return (
@@ -28,7 +28,7 @@ export const TopTracks = () => {
             maxW="420px"
             bg={{ base: 'gray.100', _dark: '#111111' }}
             rounded={{ sm: 'lg' }}
-            shadow={{ md: 'base' }}
+            shadow={{ md: 'sm' }}
             p={{ base: '6', md: '8' }}
             height="auto"
             alignSelf="flex-start"
@@ -36,7 +36,7 @@ export const TopTracks = () => {
             <VStack align="left">
                 <Heading>Top Tracks</Heading>
                 <Text mb={4}>Curious to what I&#39;m currently listening to? Here are my current top tracks</Text>
-                {data && !tracks ? (
+                {(data || error) && !tracks ? (
                     <Text color={{ base: 'gray.500', _dark: 'gray.400' }}>
                         Top tracks are unavailable right now.
                     </Text>
@@ -48,13 +48,13 @@ export const TopTracks = () => {
                     }}
                 >
                     <Table.Body>
-                        {tracks?.map((item: { albumImageUrl: string; album: string; name: string; artist: string; songUrl: string; albumUrl: string, artistUrl: string }, index: React.Key) => (
+                        {tracks?.map((item: { albumImageUrl: string | null; album: string; name: string; artist: string; songUrl: string; albumUrl: string, artistUrl: string }, index: React.Key) => (
                             <Table.Row key={index} css={{
                                 "backgroundColor": 'inherit',
                                 "width": '100%',
                             }}>
                                 <Table.Cell>
-                                    <Link as="a" href={item.albumUrl} target="_blank" rel="noreferrer"><Image boxSize="96px" objectFit='scale-down' src={item.albumImageUrl} alt={item.album}></Image></Link>
+                                    <Link as="a" href={item.albumUrl} target="_blank" rel="noreferrer"><Image boxSize="96px" objectFit='scale-down' src={item.albumImageUrl || "/album.png"} alt={item.album}></Image></Link>
                                 </Table.Cell>
                                 <Table.Cell >
                                     <List.Root unstyled>
@@ -62,7 +62,7 @@ export const TopTracks = () => {
                                             <Link as="a" href={item.songUrl} target="_blank" rel="noreferrer"><Text fontWeight="bold">{item.name}</Text><FiExternalLink /></Link>
                                         </List.Item>
                                         <List.Item>
-                                            <Link as="a" href={item.albumUrl} target="_blank" rel="noreferrer"><Text colorScheme="gray">{item.album}</Text></Link>
+                                            <Link as="a" href={item.albumUrl} target="_blank" rel="noreferrer"><Text color="fg.muted">{item.album}</Text></Link>
                                         </List.Item>
                                         <List.Item>
                                             <Link as="a" href={item.artistUrl} target="_blank" rel="noreferrer"><Text fontWeight="bold">{item.artist}</Text></Link>

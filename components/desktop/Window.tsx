@@ -2,7 +2,16 @@ import React, { useLayoutEffect, useRef, useState } from "react";
 import styles from "./Desktop.module.css";
 import { dockDropRect } from "./Dock";
 import { CloseGlyph, MinimizeGlyph, ZoomGlyph } from "./icons";
-import { clampFrame, MENUBAR_H, type Bounds, type Frame, type RectLike, type Win, type WMAction } from "./windowManager";
+import {
+  clampFrame,
+  isVisible,
+  MENUBAR_H,
+  type Bounds,
+  type Frame,
+  type RectLike,
+  type Win,
+  type WMAction,
+} from "./windowManager";
 
 type ResizeDir = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 const RESIZE_DIRS: ResizeDir[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
@@ -83,6 +92,8 @@ export const Window = ({
   const ref = useRef<HTMLDivElement>(null);
   // Frame while a drag or resize is in progress; committed on pointer up.
   const [live, setLive] = useState<Frame | null>(null);
+  // The pointer driving that drag or resize. Other fingers are ignored until it lifts.
+  const tracking = useRef<number | null>(null);
   const frame = live ?? win.frame;
   const { id, phase } = win;
 
@@ -145,22 +156,30 @@ export const Window = ({
 
   const track = (target: Element, pointerId: number, compute: (dx: number, dy: number) => Frame, x0: number, y0: number) => {
     target.setPointerCapture(pointerId);
+    tracking.current = pointerId;
     let last: Frame | null = null;
+    // The listeners sit on the window (or a resize handle), so events from a
+    // second finger on its content bubble into them too.
     const move = (e: Event) => {
       const ev = e as PointerEvent;
+      if (ev.pointerId !== pointerId) return;
       last = compute(ev.clientX - x0, ev.clientY - y0);
       setLive(last);
     };
-    const end = () => {
+    const end = (e: Event) => {
+      if ((e as PointerEvent).pointerId !== pointerId) return;
       target.removeEventListener("pointermove", move);
       target.removeEventListener("pointerup", end);
       target.removeEventListener("pointercancel", end);
+      target.removeEventListener("lostpointercapture", end);
+      tracking.current = null;
       if (last) dispatch({ type: "frame", id, frame: last });
       setLive(null);
     };
     target.addEventListener("pointermove", move);
     target.addEventListener("pointerup", end);
     target.addEventListener("pointercancel", end);
+    target.addEventListener("lostpointercapture", end);
   };
 
   const isDragTarget = (target: EventTarget) => {
@@ -169,14 +188,14 @@ export const Window = ({
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0 || !isDragTarget(e.target) || !ref.current) return;
+    if (e.button !== 0 || tracking.current !== null || !isDragTarget(e.target) || !ref.current) return;
     e.preventDefault();
     const start = win.frame;
     track(ref.current, e.pointerId, (dx, dy) => clampFrame({ ...start, x: start.x + dx, y: start.y + dy }, bounds), e.clientX, e.clientY);
   };
 
   const onResizeStart = (dir: ResizeDir) => (e: React.PointerEvent) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || tracking.current !== null) return;
     e.preventDefault();
     e.stopPropagation();
     const s = win.frame;
@@ -225,6 +244,10 @@ export const Window = ({
       style={{ left: frame.x, top: frame.y, width: frame.w, height: frame.h, zIndex }}
       onPointerDownCapture={() => {
         if (!active) dispatch({ type: "focus", id });
+      }}
+      // Tabbing into a window behind the key window brings it forward, as a click does.
+      onFocusCapture={() => {
+        if (!active && isVisible(win)) dispatch({ type: "focus", id });
       }}
       onPointerDown={onPointerDown}
       onDoubleClick={(e) => {

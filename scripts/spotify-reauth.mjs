@@ -115,8 +115,9 @@ const server = http.createServer(async (req, res) => {
 		console.log(tokens.refresh_token);
 		console.log(`\nGranted scopes: ${tokens.scope}`);
 		console.log(`Expires around: ${expiry.toISOString().split("T")[0]} (six months)\n`);
-		console.log("Set it as `refresh_token` in .env.local and in the Vercel project");
-		console.log("env vars, then redeploy — env var changes need a deploy to take effect.\n");
+		console.log("Set it as `refresh_token` in .env (and in .env.local too, if you have one:");
+		console.log("it overrides .env) and in the Vercel project's env vars, then redeploy —");
+		console.log("env var changes need a deploy to take effect.\n");
 	} catch (exchangeError) {
 		reply(res, 500, "Token exchange failed — check your terminal.");
 		console.error(`\n${exchangeError.message}`);

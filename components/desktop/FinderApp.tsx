@@ -1,5 +1,5 @@
 import Link from "next/link";
-import React, { useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { LuChevronLeft, LuChevronRight, LuFolder, LuSquareArrowOutUpRight } from "react-icons/lu";
 import { PROJECTS, getProject, type ProjectId } from "../projects/data";
 import { ProjectDetail } from "../projects/ProjectDetail";

@@ -1,4 +1,4 @@
-import React, { useId } from "react";
+import { useId } from "react";
 
 export const AppleLogo = () => (
   <svg width="13" height="16" viewBox="0 0 814 1000" fill="currentColor" aria-hidden>

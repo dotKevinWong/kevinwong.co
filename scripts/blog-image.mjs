@@ -21,6 +21,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import sharp from "sharp";
 import { loadEnvFiles } from "./load-env.mjs";
 
 // lib/blob-store.js reads process.env when it loads, so apply the env files first.
@@ -64,9 +65,15 @@ if (probe.kind !== "image") {
   process.exit(1);
 }
 
-const image = needsResize(probe)
-  ? await resizeForWeb(original)
-  : { buffer: original, width: probe.width, height: probe.height, ext: probe.ext, mime: probe.mime };
+// A JPEG that already fits would be kept byte-for-byte, but only a re-encode
+// strips metadata — and a phone photo's EXIF can carry the GPS position it was
+// taken at, which would then sit on a public URL cached for a year. So one that
+// carries any goes through resizeForWeb() too.
+const { exif, xmp, iptc } = await sharp(original).metadata();
+const image =
+  needsResize(probe) || exif || xmp || iptc
+    ? await resizeForWeb(original)
+    : { buffer: original, width: probe.width, height: probe.height, ext: probe.ext, mime: probe.mime };
 
 const hash = crypto.createHash("sha256").update(image.buffer).digest("hex").slice(0, 8);
 const blob = await uploadToBlob(`blog/${slug}-${hash}.${image.ext}`, image.buffer, image.mime);

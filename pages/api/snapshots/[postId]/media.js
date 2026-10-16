@@ -20,7 +20,10 @@ export default async function handler(req, res) {
   }
 
   const postId = String(req.query.postId || "");
-  const position = clampInt(req.query.position, { min: 0, max: Infinity, fallback: 0 });
+  // Needs a finite ceiling: an unbounded parse reaches Postgres as "1e+21" or
+  // past the integer range, and the query fails with a 500. Carousels top out
+  // around 20 slides, so anything clamped to 1000 simply returns no media.
+  const position = clampInt(req.query.position, { min: 0, max: 1000, fallback: 0 });
   const limit = clampInt(req.query.limit, { min: 1, max: 6, fallback: 1 });
 
   if (!postId) {

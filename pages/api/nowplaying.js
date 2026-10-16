@@ -7,7 +7,7 @@ export default async function handler(_, res) {
 
   try {
     response = await getNowPlaying();
-  } catch (error) {
+  } catch {
     // Includes SpotifyReauthRequiredError. The widget just shows "Not Playing"
     // until the refresh token is replaced; lib/spotify.js has already logged
     // what went wrong.
@@ -18,20 +18,30 @@ export default async function handler(_, res) {
     return res.status(200).json({ isPlaying: false });
   }
 
-  const song = await response.json();
+  let song;
 
-  if (song.item === null) {
+  try {
+    song = await response.json();
+  } catch {
+    // A malformed body, or the request timing out mid-body.
     return res.status(200).json({ isPlaying: false });
   }
 
+  if (!song?.item) {
+    return res.status(200).json({ isPlaying: false });
+  }
+
+  // Local files (is_local: true) come back with no album art and empty
+  // external_urls, so nothing past `item` can be assumed present. A null
+  // albumImageUrl tells the widget to show its placeholder.
   const isPlaying = song.is_playing;
   const title = song.item.name;
-  const artist = song.item.artists.map((_artist) => _artist.name).join(", ");
-  const album = song.item.album.name;
-  const albumImageUrl = song.item.album.images[0].url;
-  const songUrl = song.item.external_urls.spotify;
-  const albumUrl = song.item.album.external_urls.spotify;
-  const artistUrl = song.item.artists[0].external_urls.spotify;
+  const artist = (song.item.artists ?? []).map((_artist) => _artist.name).join(", ");
+  const album = song.item.album?.name;
+  const albumImageUrl = song.item.album?.images?.[0]?.url ?? null;
+  const songUrl = song.item.external_urls?.spotify;
+  const albumUrl = song.item.album?.external_urls?.spotify;
+  const artistUrl = song.item.artists?.[0]?.external_urls?.spotify;
   const currentDuration = song.progress_ms;
   const totalDuration = song.item.duration_ms;
 

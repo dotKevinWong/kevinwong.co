@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Box, Flex, Spinner, Text, useBreakpointValue } from "@chakra-ui/react"
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Box, Button, Flex, Heading, Spinner, Text } from "@chakra-ui/react"
 import useSWRInfinite from "swr/infinite"
 import { PhotoPost } from "../PhotoPost"
 
@@ -45,7 +45,9 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
     month: "long",
     day: "2-digit",
     year: "numeric",
-    timeZone: "UTC",
+    // Where the posts are made. UTC would put anything posted after about 8pm
+    // Eastern on the next day, unlike Instagram.
+    timeZone: "America/New_York",
 })
 
 const formatPostedAt = (value: string | null) => {
@@ -61,53 +63,30 @@ const formatPostedAt = (value: string | null) => {
     return dateFormatter.format(date)
 }
 
-const getScrollContainers = (node: HTMLElement | null): HTMLElement[] => {
-    if (!node) {
-        return []
-    }
-
-    const containers: HTMLElement[] = [node]
-    let parent: HTMLElement | null = node.parentElement
-
-    while (parent) {
-        const style = window.getComputedStyle(parent)
-        const overflowY = style.overflowY
-        if (overflowY === "auto" || overflowY === "scroll") {
-            containers.push(parent)
-        }
-
-        parent = parent.parentElement
-    }
-
-    return [...new Set(containers)]
+// Three rows of however many 320px cards fit across the section.
+const pageSizeFor = (containerWidth: number) => {
+    const columns = Math.max(1, Math.floor((containerWidth + 32) / (320 + 32)))
+    return Math.max(3, Math.min(12, columns * 3))
 }
 
 export const SnapshotsPage = () => {
-    const isMobile = useBreakpointValue({ base: true, md: false })
-    const [pageSize, setPageSize] = useState(6)
+    // Null until the section has been measured, and no request goes out before
+    // then. It is measured once: a new size changes every SWR key, which would
+    // throw away the pages already loaded.
+    const [pageSize, setPageSize] = useState<number | null>(null)
+    const sentinelRef = useRef<HTMLDivElement | null>(null)
 
-    const containerRef = useRef<HTMLDivElement | null>(null)
-    const scrollContainersRef = useRef<HTMLElement[]>([])
-    const hasUserScrolledRef = useRef(false)
-    const loadRequestedRef = useRef(false)
-
-    const recomputePageSize = useCallback(() => {
-        const el = containerRef.current
-        if (!el) {
-            return
+    const measureSection = useCallback((node: HTMLDivElement | null) => {
+        if (node) {
+            setPageSize((current) => current ?? pageSizeFor(node.clientWidth))
         }
-
-        const containerWidth = el.clientWidth
-        if (containerWidth <= 0) {
-            return
-        }
-
-        const columns = Math.max(1, Math.floor((containerWidth + 32) / (320 + 32)))
-        const dynamicLimit = Math.max(3, Math.min(12, columns * 3))
-        setPageSize((prev) => prev === dynamicLimit ? prev : dynamicLimit)
     }, [])
 
     const getKey = useCallback((pageIndex: number, previousPageData: SnapshotsResponse | null) => {
+        if (pageSize === null) {
+            return null
+        }
+
         if (previousPageData && !previousPageData.pagination.hasMore) {
             return null
         }
@@ -124,50 +103,11 @@ export const SnapshotsPage = () => {
         return `/api/snapshots?${search.toString()}`
     }, [pageSize])
 
-    const { data, error, isLoading, isValidating, size, setSize } = useSWRInfinite<SnapshotsResponse>(
+    const { data, error, isLoading, isValidating, setSize } = useSWRInfinite<SnapshotsResponse>(
         getKey,
         fetcher,
         { revalidateFirstPage: false }
     )
-
-    useEffect(() => {
-        recomputePageSize()
-
-        const el = containerRef.current
-        if (!el) {
-            return
-        }
-
-        if (typeof ResizeObserver !== "undefined") {
-            const observer = new ResizeObserver(() => {
-                recomputePageSize()
-            })
-            observer.observe(el)
-
-            return () => {
-                observer.disconnect()
-            }
-        }
-
-        const onResize = () => recomputePageSize()
-        window.addEventListener("resize", onResize)
-
-        return () => {
-            window.removeEventListener("resize", onResize)
-        }
-    }, [recomputePageSize])
-
-    useEffect(() => {
-        hasUserScrolledRef.current = false
-        loadRequestedRef.current = false
-        void setSize(1)
-    }, [pageSize, setSize])
-
-    useEffect(() => {
-        if (!isValidating) {
-            loadRequestedRef.current = false
-        }
-    }, [isValidating])
 
     const posts = useMemo(() => {
         const seen = new Set<string>()
@@ -187,115 +127,105 @@ export const SnapshotsPage = () => {
         return merged
     }, [data])
 
+    const loadedPages = data?.length ?? 0
     const hasMore = data?.[data.length - 1]?.pagination.hasMore ?? false
+    const canLoadMore = hasMore && !isValidating
 
-    const getRemainingScroll = useCallback((el: HTMLElement) => {
-        return el.scrollHeight - el.scrollTop - el.clientHeight
-    }, [])
+    const loadMore = useCallback(() => {
+        void setSize(loadedPages + 1)
+    }, [loadedPages, setSize])
 
-    const maybeLoadMore = useCallback(() => {
-        const containers = scrollContainersRef.current
-        if (!containers.length || !hasMore || isValidating || loadRequestedRef.current || !hasUserScrolledRef.current) {
-            return
-        }
-
-        const remainingScroll = Math.min(...containers.map((el) => getRemainingScroll(el)))
-        if (remainingScroll > 220) {
-            return
-        }
-
-        loadRequestedRef.current = true
-        void setSize((prev) => prev + 1)
-    }, [getRemainingScroll, hasMore, isValidating, setSize])
-
+    // The sentinel covers the last 220px of the grid. With no explicit root the
+    // observer is clipped by every scrolling ancestor as well as the viewport,
+    // so it works in whichever layout the page is in. It also reports once on
+    // observe(), so a first page that doesn't fill a tall screen keeps loading
+    // until it does. After an error it stops, and the button below retries.
     useEffect(() => {
-        maybeLoadMore()
-    }, [posts.length, maybeLoadMore])
-
-    useEffect(() => {
-        const node = containerRef.current
-        if (!node) {
+        const sentinel = sentinelRef.current
+        if (!sentinel || !canLoadMore || error || typeof IntersectionObserver === "undefined") {
             return
         }
 
-        const containers = getScrollContainers(node)
-        scrollContainersRef.current = containers
-
-        const onElementScroll = (event: Event) => {
-            const currentTarget = event.currentTarget as HTMLElement
-            if (currentTarget.scrollTop > 8) {
-                hasUserScrolledRef.current = true
+        const observer = new IntersectionObserver((entries) => {
+            if (entries.some((entry) => entry.isIntersecting)) {
+                observer.disconnect()
+                loadMore()
             }
-            maybeLoadMore()
-        }
-
-        const onWindowScroll = () => {
-            if (window.scrollY > 8) {
-                hasUserScrolledRef.current = true
-            }
-            maybeLoadMore()
-        }
-
-        containers.forEach((el) => el.addEventListener("scroll", onElementScroll, { passive: true }))
-        window.addEventListener("scroll", onWindowScroll, { passive: true })
-        maybeLoadMore()
+        })
+        observer.observe(sentinel)
 
         return () => {
-            containers.forEach((el) => el.removeEventListener("scroll", onElementScroll))
-            window.removeEventListener("scroll", onWindowScroll)
+            observer.disconnect()
         }
-    }, [maybeLoadMore, pageSize])
+    }, [canLoadMore, error, loadMore])
 
-    if (isLoading && posts.length === 0) {
-        return (
-            <Box as="section" flex="1" p="6" overflow="auto">
+    let content: ReactNode
+
+    if (posts.length === 0) {
+        if (pageSize === null || isLoading) {
+            content = (
                 <Flex align="center" gap={3}>
                     <Spinner size="sm" />
                     <Text>Loading snapshots...</Text>
                 </Flex>
-            </Box>
-        )
-    }
+            )
+        } else if (error) {
+            content = <Text color="red.500">Could not load snapshots from the database.</Text>
+        } else {
+            content = <Text>No snapshots found yet.</Text>
+        }
+    } else {
+        content = (
+            <>
+                <Flex position="relative" wrap="wrap" gap={8} justify={{ base: "center", md: "left" }} maxW="1640px">
+                    {posts.map((post) => (
+                        <PhotoPost
+                            key={post.id}
+                            postId={post.id}
+                            media={post.media}
+                            mediaCount={post.mediaCount}
+                            description={post.caption}
+                            date={formatPostedAt(post.postedAt)}
+                            sourceHref={post.instagramUrl}
+                            sourceName="Instagram"
+                        />
+                    ))}
+                    <Box
+                        ref={sentinelRef}
+                        aria-hidden
+                        position="absolute"
+                        left="0"
+                        right="0"
+                        bottom="0"
+                        h="220px"
+                        pointerEvents="none"
+                    />
+                </Flex>
 
-    if (error) {
-        return (
-            <Box as="section" flex="1" p="6" overflow="auto">
-                <Text color="red.500">Could not load snapshots from the database.</Text>
-            </Box>
-        )
-    }
-
-    if (posts.length === 0) {
-        return (
-            <Box as="section" flex="1" p="6" overflow="auto">
-                <Text>No snapshots found yet.</Text>
-            </Box>
+                {/* The button stays mounted while a page loads, so pressing it
+                    doesn't drop keyboard focus; it just ignores presses until then. */}
+                {hasMore ? (
+                    <Flex direction="column" align="center" py={6} gap={3}>
+                        {error && !isValidating ? <Text color="red.500">Could not load more snapshots.</Text> : null}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            aria-disabled={isValidating || undefined}
+                            onClick={isValidating ? undefined : loadMore}
+                        >
+                            {isValidating ? <Spinner size="sm" /> : null}
+                            {isValidating ? "Loading more snapshots..." : "Load more"}
+                        </Button>
+                    </Flex>
+                ) : null}
+            </>
         )
     }
 
     return (
-        <Box as="section" flex="1" p="6" overflow="auto" ref={containerRef}>
-            <Flex wrap="wrap" gap={8} justify={isMobile ? "center" : "left"} maxW="1640px">
-                {posts.map((post) => (
-                    <PhotoPost
-                        key={post.id}
-                        postId={post.id}
-                        media={post.media}
-                        mediaCount={post.mediaCount}
-                        description={post.caption}
-                        date={formatPostedAt(post.postedAt)}
-                        sourceHref={post.instagramUrl}
-                        sourceName="Instagram"
-                    />
-                ))}
-            </Flex>
-
-            {isValidating && hasMore ? (
-                <Flex align="center" justify="center" py={6} gap={3}>
-                    <Spinner size="sm" />
-                    <Text>Loading more snapshots...</Text>
-                </Flex>
-            ) : null}
+        <Box as="section" flex="1" p="6" overflow="auto" ref={measureSection}>
+            <Heading as="h1" srOnly>Snapshots</Heading>
+            {content}
         </Box>
     )
 }

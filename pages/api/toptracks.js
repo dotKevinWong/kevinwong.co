@@ -5,7 +5,7 @@ export default async function handler(_, res) {
 
   try {
     response = await getTopTracks();
-  } catch (error) {
+  } catch {
     return res.status(200).json({ is_working: false });
   }
 
@@ -13,15 +13,21 @@ export default async function handler(_, res) {
     return res.status(200).json({ is_working: false });
   }
 
-  const list = await response.json();
+  let list;
 
-  // loop through the list and get the data we need 
-    const tracks = list.items.map((item) => {
+  try {
+    list = await response.json();
+  } catch {
+    return res.status(200).json({ is_working: false });
+  }
+
+  // loop through the list and get the data we need
+    const tracks = (list?.items ?? []).map((item) => {
         return {
             name: item.name,
             artist: item.artists[0].name,
             album: item.album.name,
-            albumImageUrl: item.album.images[0].url,
+            albumImageUrl: item.album.images?.[0]?.url ?? null,
             songUrl: item.external_urls.spotify,
             albumUrl: item.album.external_urls.spotify,
             artistUrl: item.artists[0].external_urls.spotify,

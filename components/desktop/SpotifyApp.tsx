@@ -185,7 +185,8 @@ const ProgressBar = ({ pct }: { pct: number }) => (
 /* ─── Window layout ──────────────────────────────────────────── */
 
 export const SpotifyApp = ({ paused }: { paused?: boolean }) => {
-  const { data, hasTrack, isPlaying, current, total, pct } = useNowPlaying();
+  // The sidebar polls wherever this window can be seen; see useNowPlaying.
+  const { data, hasTrack, isPlaying, current, total, pct } = useNowPlaying({ poll: false });
   const eyebrow = isPlaying ? "Now playing" : hasTrack ? "Paused" : "Spotify";
 
   return (
@@ -213,7 +214,7 @@ export const SpotifyApp = ({ paused }: { paused?: boolean }) => {
         <div className={styles.spTrack}>
           <ExternalLink href={data?.albumUrl}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className={styles.spArt} src={hasTrack ? data?.albumImageUrl : "/album.png"} alt={data?.album ?? ""} />
+            <img className={styles.spArt} src={(hasTrack && data?.albumImageUrl) || "/album.png"} alt={data?.album ?? ""} />
           </ExternalLink>
           <div className={styles.spTrackText}>
             <ExternalLink href={data?.songUrl} className={styles.spTrackTitle}>
@@ -252,8 +253,9 @@ export const SpotifyApp = ({ paused }: { paused?: boolean }) => {
 /* ─── Full-screen (phone) layout ─────────────────────────────── */
 
 export const SpotifyMobile = () => {
-  const { data, hasTrack, isPlaying, current, total, pct } = useNowPlaying();
-  const art = hasTrack ? data?.albumImageUrl : "/album.png";
+  // Only mounted below 64em, where the sidebar doesn't poll; see useNowPlaying.
+  const { data, hasTrack, isPlaying, current, total, pct } = useNowPlaying({ poll: true });
+  const art = (hasTrack && data?.albumImageUrl) || "/album.png";
 
   return (
     <div className={styles.spMobile}>

@@ -1,5 +1,5 @@
 import { useRouter } from "next/router";
-import React, { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 import type { MacOSRelease } from "../../lib/macos";
 import { PROJECTS, getProject, type ProjectId } from "../projects/data";
 import { AppScreen } from "./AppScreen";
@@ -38,6 +38,27 @@ const readTipDismissed = () => {
 
 const windowTitle = (win: Win) =>
   win.app === "finder" ? locationTitle(win.history[win.index]) : win.app === "terminal" ? TERMINAL_TITLE : "Spotify";
+
+/**
+ * Focuses a window (or the desktop) that isn't otherwise focusable, only until
+ * focus moves on or the pointer goes down inside it. Left focusable, a click on
+ * its content would focus the whole window, and the keyboard would scroll from
+ * there instead of the list under the pointer (and ring the window).
+ */
+const handOffFocus = (el: HTMLElement) => {
+  const release = () => {
+    el.removeEventListener("blur", release);
+    el.removeEventListener("pointerdown", release, true);
+    el.removeAttribute("tabindex");
+    delete el.dataset.focusHandoff;
+  };
+  el.tabIndex = -1;
+  el.dataset.focusHandoff = "";
+  el.focus({ preventScroll: true });
+  if (document.activeElement !== el) return release();
+  el.addEventListener("blur", release);
+  el.addEventListener("pointerdown", release, true);
+};
 
 /**
  * The Projects page as a macOS desktop. On large screens folders open in
@@ -93,6 +114,24 @@ export const Desktop = ({ macos }: { macos: MacOSRelease }) => {
   /* ─── Windows (large screens) ─── */
 
   const ordered = wm.order.map((id) => wm.wins.find((w) => w.id === id)!);
+
+  // When the key window changes because the focused control went away (its
+  // window closed or minimized, or its Dock preview was restored), focus moves
+  // to the window now in front, or to the desktop, instead of dropping to <body>.
+  const lastActive = useRef(wm.active);
+  useEffect(() => {
+    const prev = lastActive.current;
+    lastActive.current = wm.active;
+    if (prev === wm.active) return;
+    const focused = document.activeElement;
+    const holder = focused?.closest<HTMLElement>("[data-window-id]")?.dataset.windowId;
+    const stranded =
+      !focused || focused === document.body || (holder !== undefined && !wm.wins.some((w) => w.id === holder && isVisible(w)));
+    if (!stranded) return;
+    const next = wm.active ? rootRef.current?.querySelector<HTMLElement>(`[data-window-id="${CSS.escape(wm.active)}"]`) : null;
+    const target = next ?? rootRef.current;
+    if (target) handOffFocus(target);
+  }, [wm.active, wm.wins]);
 
   const openWindow = (app: AppId, location?: ProjectId) => {
     if (!bounds) return;

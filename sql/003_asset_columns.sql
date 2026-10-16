@@ -13,7 +13,14 @@
 -- Fail fast rather than queue behind a long-running transaction: the ALTER needs
 -- an ACCESS EXCLUSIVE lock, and while it waits every live SELECT on the table
 -- would queue behind it.
-set lock_timeout = '5s';
+--
+-- `set local` inside one transaction, not a session-level `set`: through the
+-- transaction-mode pooler (see 004) a bare SET and the ALTER after it can land
+-- on different server connections, so the timeout might not apply to the ALTER
+-- at all — and could linger on a pooled connection the app later uses.
+begin;
+
+set local lock_timeout = '5s';
 
 alter table instagram_media
   add column if not exists asset_url          text,
@@ -22,3 +29,5 @@ alter table instagram_media
   add column if not exists asset_bytes        bigint,
   add column if not exists asset_width        integer,
   add column if not exists asset_height       integer;
+
+commit;

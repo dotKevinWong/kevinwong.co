@@ -1,34 +1,24 @@
-import { Box, Image, Text, Link, HStack, VStack, useBreakpointValue } from "@chakra-ui/react"
-import React from "react"
+import { Box, Heading, Image, Text, Link, HStack, VStack } from "@chakra-ui/react"
 
 
 export const HomePage = () => {
-    const isMobile = useBreakpointValue({ base: true, md: false })
-
-    const justifyStyle =
-        isMobile ? {
-            justify: "center"
-        } : {
-            justify: "left"
-        }
-
-    const marginStyle = isMobile ? {
-         } :
-        { marginRight: 4}
-
-    
+    // The mobile/desktop differences are responsive props rather than a
+    // `useBreakpointValue` switch, so the server-rendered HTML already matches.
     return (
         <Box as="section" flex="1" p="6" overflow="auto">
+            <Heading as="h1" srOnly>Kevin Wong</Heading>
             <HStack
             align="start"
-            wrap={isMobile ? "wrap" : "nowrap"}
-            {...justifyStyle}
+            wrap={{ base: "wrap", md: "nowrap" }}
+            justify={{ base: "center", md: "left" }}
             >
+            {/* me.jpg is square: the aspect ratio reserves its space before it loads. */}
             <Image
-                height="100%"
                 width="400px"
-                {...marginStyle}
-                marginBottom={isMobile ? 6 : 0}
+                height="auto"
+                aspectRatio={1}
+                marginRight={{ md: 4 }}
+                marginBottom={{ base: 6, md: 0 }}
                 alt="Kevin Wong"
                 src={"/me.jpg"}
             />
@@ -36,13 +26,13 @@ export const HomePage = () => {
                 <VStack align="left">
                 <Text>
                     <b>Business Process Consultant</b> at{" "}
-                    <Link color="blue.500" href="https://sap.com" target="_blank">
+                    <Link color="blue.500" href="https://sap.com" target="_blank" rel="noopener noreferrer">
                     <b>SAP</b>
                     </Link>
                 </Text>
                 <Text>
                     <b>Managing Partner</b> at{" "}
-                    <Link color="blue.500" href="https://eienhq.com" target="_blank">
+                    <Link color="blue.500" href="https://eienhq.com" target="_blank" rel="noopener noreferrer">
                     <b>Eien Capital Partners</b>
                     </Link>
                 </Text>
@@ -50,7 +40,7 @@ export const HomePage = () => {
                 <VStack align="left">
                 <Text>
                     <b>Editor-in-Chief</b> at{" "}
-                    <Link color="blue.500" href="https://mocktrialtips.com" target="_blank">
+                    <Link color="blue.500" href="https://mocktrialtips.com" target="_blank" rel="noopener noreferrer">
                     <b>Mock Trial Tips</b>
                     </Link>
                 </Text>
@@ -64,13 +54,13 @@ export const HomePage = () => {
                 </Text>
                 <Text>
                     <b>Alumnus, Trustee, Marketing Chair</b> at{" "}
-                    <Link color="blue.500" href="https://www.romancatholichs.com" target="_blank">
+                    <Link color="blue.500" href="https://www.romancatholichs.com" target="_blank" rel="noopener noreferrer">
                     <b>Roman Catholic High School</b>
                     </Link>
                 </Text>
                 <Text>
                     <b>Vice President</b> at{" "}
-                    <Link color="blue.500" href="https://cahillclub.com" target="_blank">
+                    <Link color="blue.500" href="https://cahillclub.com" target="_blank" rel="noopener noreferrer">
                     <b>Cahill Club</b>
                     </Link>
                 </Text>

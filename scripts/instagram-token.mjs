@@ -28,10 +28,14 @@ const exchange = args.includes("--exchange");
 // shell history and is visible to anyone who can run `ps`. argv still works, but
 // warns, because it is the documented-elsewhere habit and silently dropping it
 // would be worse than nagging about it.
+//
+// Deliberately not read from .env/.env.local: a token saved there would turn
+// every no-argument status check into a re-seed, overwriting the token the cron
+// has been refreshing in Postgres with a possibly stale copy.
 const argToken = args.find((a) => !a.startsWith("--"));
-const token = process.env.INSTAGRAM_ACCESS_TOKEN ?? fileEnv.INSTAGRAM_ACCESS_TOKEN ?? argToken;
+const token = process.env.INSTAGRAM_ACCESS_TOKEN ?? argToken;
 
-if (argToken && !process.env.INSTAGRAM_ACCESS_TOKEN && !fileEnv.INSTAGRAM_ACCESS_TOKEN) {
+if (argToken && !process.env.INSTAGRAM_ACCESS_TOKEN) {
   console.warn(
     "\nWarning: the token was passed as a command-line argument, so it is now in\n" +
       "your shell history and was visible in the process list. Prefer:\n" +

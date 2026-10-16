@@ -49,10 +49,13 @@ export const DesktopIcon = ({
     // Start from where the folder is drawn, whatever clamping put it there.
     const origin = layer ? { x: own.left - layer.left, y: own.top - layer.top } : { x: 0, y: 0 };
     const start = { x: e.clientX, y: e.clientY };
+    const { pointerId } = e;
     let moved = false;
-    el.setPointerCapture(e.pointerId);
+    el.setPointerCapture(pointerId);
 
+    // Only the finger that picked the folder up moves it.
     const move = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
       const dx = ev.clientX - start.x;
       const dy = ev.clientY - start.y;
       if (!moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
@@ -67,6 +70,7 @@ export const DesktopIcon = ({
       });
     };
     const end = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
       el.removeEventListener("pointermove", move);
       el.removeEventListener("pointerup", end);
       el.removeEventListener("pointercancel", end);
