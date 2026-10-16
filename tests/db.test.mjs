@@ -26,6 +26,13 @@ test("sslFor fails closed on a string it cannot parse", () => {
   assert.deepEqual(sslFor(""), VERIFY);
 });
 
+test("sslFor verifies TLS when a query parameter can redirect the host", () => {
+  assert.deepEqual(sslFor("postgres://postgres:pw@127.0.0.1:55432/kw_test?host=ep-x.neon.tech"), VERIFY);
+  assert.deepEqual(sslFor("postgres://postgres:pw@localhost/kw_test?hostaddr=10.0.0.5"), VERIFY);
+  assert.deepEqual(sslFor("postgres://postgres:pw@localhost/kw_test?service=prod"), VERIFY);
+  assert.equal(sslFor("postgres://postgres:pw@127.0.0.1:55432/kw_test?sslmode=disable"), false);
+});
+
 test("getDbPool passes sslFor(DATABASE_URL) to the pool", async () => {
   process.env.DATABASE_URL = "postgres://postgres:pw@127.0.0.1:55432/kw_test";
   const pool = getDbPool();

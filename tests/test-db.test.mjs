@@ -38,6 +38,12 @@ test("tests/helpers/db.mjs refuses to load while DATABASE_URL points at a remote
   assert.ok(!r.stderr.includes("npg_SECRETVALUE"));
 });
 
+test("tests/helpers/db.mjs refuses a local DATABASE_URL whose host parameter points elsewhere", () => {
+  const r = importHelper("postgres://postgres:pw@127.0.0.1:55432/kw_test?host=ep-x.neon.tech");
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /Refusing to run integration tests: DATABASE_URL points at a remote database/);
+});
+
 test("tests/helpers/db.mjs loads with a local DATABASE_URL or none", () => {
   for (const databaseUrl of [undefined, "postgres://postgres:pw@127.0.0.1:55432/kw_test"]) {
     const r = importHelper(databaseUrl);
@@ -109,6 +115,31 @@ test("assertResettable allows only a local database whose name starts with kw_te
     () => assertResettable("postgres://postgres:pw@127.0.0.1:55432/neondb"),
     /must start with kw_test/
   );
+});
+
+test("assertResettable refuses a local URL whose host parameter points elsewhere", () => {
+  assert.throws(
+    () => assertResettable("postgres://postgres:pw@127.0.0.1:55432/kw_test?host=ep-x.neon.tech"),
+    /Refusing to reset .*: not a local database/
+  );
+});
+
+test("assertResettable refuses the ports that belong to other projects", () => {
+  assert.throws(
+    () => assertResettable("postgres://postgres:pw@127.0.0.1:5432/kw_test"),
+    /Refusing to reset 127\.0\.0\.1:5432\/kw_test: port 5432 belongs to another project/
+  );
+  assert.throws(
+    () => assertResettable("postgres://postgres:pw@localhost/kw_test"),
+    /Refusing to reset localhost\/kw_test: port 5432 belongs to another project/
+  );
+  for (const port of [5433, 5434, 54329]) {
+    assert.throws(
+      () => assertResettable(`postgres://postgres:pw@127.0.0.1:${port}/kw_test`),
+      new RegExp(`port ${port} belongs to another project`)
+    );
+  }
+  assert.equal(assertResettable("postgres://postgres:pw@127.0.0.1:55432/kw_test"), "kw_test");
 });
 
 test("migrationFiles lists sql/005 and later in filename order", () => {

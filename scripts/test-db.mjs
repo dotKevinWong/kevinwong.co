@@ -32,6 +32,9 @@ export const TEST_ENV_FILE = path.join(ROOT, ".env.test.local");
 
 const USAGE = "Usage: npm run db:test -- dump-schema | reset";
 
+// Local Postgres containers of Kevin's other projects listen on these ports.
+const OTHER_PROJECT_PORTS = new Set([5432, 5433, 5434, 54329]);
+
 export function majorFromVersionNum(value) {
   const n = Number(value);
   if (!Number.isInteger(n) || n < 100000) throw new Error(`Unexpected server_version_num: ${value}`);
@@ -68,12 +71,17 @@ export function pgEnvFromUrl(connectionString) {
   };
 }
 
-/** The database name, once the URL is known to be a local kw_test* database. */
+/** The database name, once the URL is known to be a local kw_test* database on a port no other project uses. */
 export function assertResettable(connectionString) {
   if (sslFor(connectionString) !== false) {
     throw new Error(`Refusing to reset ${describeTarget(connectionString)}: not a local database`);
   }
-  const name = decodeURIComponent(new URL(connectionString).pathname.slice(1));
+  const url = new URL(connectionString);
+  const port = Number(url.port || 5432);
+  if (OTHER_PROJECT_PORTS.has(port)) {
+    throw new Error(`Refusing to reset ${describeTarget(connectionString)}: port ${port} belongs to another project`);
+  }
+  const name = decodeURIComponent(url.pathname.slice(1));
   // The pattern also keeps the name safe to quote in `create database`.
   if (!/^kw_test[a-z0-9_]*$/.test(name)) {
     throw new Error(
