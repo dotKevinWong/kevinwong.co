@@ -177,7 +177,7 @@ The live site reads none of the new tables or columns until the code that needs 
 |---|---|
 | `sql/005_integration_tokens_spotify.sql` | `refresh_token`, `authorized_at`, `account_id`, `scopes` on `integration_tokens`; `access_token` becomes nullable; a CHECK that every row has an access or refresh token (added via DROP/ADD or a `DO` block, since `ADD CONSTRAINT` has no `IF NOT EXISTS`). |
 | `sql/006_sync_runs.sql` | `sync_runs` (job, trigger, dry_run, started_at, finished_at, status in running/ok/partial/skipped/failed/reauth_required/abandoned, counts, error, size-capped summary jsonb) and `admin_audit_log`. |
-| `sql/007_auth.sql` | `auth_user`, `auth_session`, `auth_account`, `auth_verification`, hand-written from Better Auth 1.7.10's schema and confirmed with `npx auth@1.7.10 check`, plus a unique index on (`providerId`, `accountId`). |
+| `sql/007_auth.sql` | `auth_user`, `auth_session`, `auth_account`, `auth_verification`, hand-written from Better Auth 1.7.10's schema and confirmed with the Better Auth CLI (the exact-pinned `auth@1.7.10` devDependency, run as `npx --no-install auth check`), plus a unique index on (`providerId`, `accountId`). |
 
 Better Auth validates its schema at startup, so `007` must be applied before the deploy that
 uses it.

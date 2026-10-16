@@ -50,7 +50,10 @@
 - Test databases:
   - Integration tests use the `kw-test-pg` container from Task 2; run `docker start kw-test-pg` if it is stopped.
   - Never use ports 5432–5434 or 54329, and never touch the containers behind them. They belong to other projects.
-  - `tests/helpers/db.mjs` refuses to run while `DATABASE_URL` points at a remote database.
+  - `tests/helpers/db.mjs` refuses to run while `DATABASE_URL` points at a remote database. So run every test
+    command (`node --test …`, `npm test`, `npm run test:integration`) as `env -u DATABASE_URL …`, after
+    `nvm use --silent &&`, even where a task's command is written without it. This applies to test commands
+    only, never to `npm run db:apply` or `db:test -- dump-schema`.
 - Commit after every task, in the repo's message style: sentence case, imperative, no prefix. Since the audit, `next-env.d.ts` is untracked, so builds no longer dirty the tree.
 
 ## Global Constraints
@@ -142,7 +145,7 @@ The spec implies these failure modes, but its own tests don't reach them. They a
 
 - [ ] **Step 2: Rebase `claude/admin-panel` onto `main`.**
   ```sh
-  git status --short     # only untracked paths, e.g. "?? docs/"; nothing modified or staged
+  git status --short     # nothing modified or staged (docs/ is committed in 75db873, so usually nothing at all)
   git rebase main
   git merge-base --is-ancestor main HEAD && echo "based on main"   # based on main
   grep -c TOKEN_EXPIRY_MARGIN_MS lib/spotify.js                    # 2 (the constant and its use)
@@ -272,12 +275,12 @@ The spec implies these failure modes, but its own tests don't reach them. They a
 - [ ] **Step 9: Run the tests to verify they pass.**
   ```sh
   node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --test-concurrency=1 tests/smoke.test.mjs tests/db.test.mjs 2>&1 | grep -E "^(✖|ℹ (tests|pass|fail|cancelled))"
-  npm test 2>&1 | grep -E "^(✖|ℹ (fail|cancelled))|MODULE_TYPELESS_PACKAGE_JSON"
+  npm test 2>&1 | grep -E "^(✖|ℹ (fail|cancelled))|\[MODULE_TYPELESS_PACKAGE_JSON\]"
   npx eslint .
   ```
   Expected:
   - First command: `ℹ tests 5`, `ℹ pass 5`, `ℹ fail 0`, `ℹ cancelled 0`.
-  - `npm test`: only `ℹ fail 0` and `ℹ cancelled 0`. No `✖` line and no `MODULE_TYPELESS_PACKAGE_JSON` warning.
+  - `npm test`: only `ℹ fail 0` and `ℹ cancelled 0`. No `✖` line and no `[MODULE_TYPELESS_PACKAGE_JSON] Warning` line.
   - ESLint prints nothing.
 
 - [ ] **Step 10: Commit.**
@@ -899,7 +902,10 @@ The spec implies these failure modes, but its own tests don't reach them. They a
   ```sh
   lsof -nP -iTCP:55432 -sTCP:LISTEN 2>/dev/null; docker ps -a --filter name=kw-test-pg --format '{{.Names}}'
   ```
-  If `kw-test-pg` already exists, run `docker start kw-test-pg` and skip to Step 10. If `.env.test.local` exists
+  If `kw-test-pg` already exists, run `docker start kw-test-pg`. If this worktree has no `.env.test.local`, copy
+  it from the checkout that created the container (the main checkout or another worktree under
+  `.claude/worktrees/`; its password exists nowhere else). If there is no copy, stop and ask Kevin, and never
+  read the password from `docker inspect`. Then skip to Step 10. If `.env.test.local` exists
   without the container, delete that file first: it holds the password of a container that is gone. Otherwise,
   in one Bash call, so the generated password never leaves the shell:
   ```sh
@@ -1328,8 +1334,9 @@ The spec implies these failure modes, but its own tests don't reach them. They a
 - Consumes: nothing. The module has no imports.
 - Produces:
   - `export function redact(value: unknown): unknown`. It returns a copy and never mutates its input.
-    - **Strings:** every match of the four rules below is replaced, and then a string longer than 500 characters
-      is cut to its first 500 characters followed by `…`.
+    - **Strings:** every match of the four rules below is replaced, then a string longer than 500 characters
+      is cut to its first 500 characters followed by `…`, and last any lone surrogate becomes U+FFFD
+      (`toWellFormed()`), so every string it returns can be stored in a `jsonb` column.
     - **Query parameters:** every `access_token=`, `refresh_token=`, `client_secret=` and `token=` value is
       redacted. A `code=` value of 1 to 5 digits is kept, because it is a Graph API error code (`code=190`,
       `code=2`), not an OAuth code; any other `code=` value is redacted.
@@ -1341,7 +1348,7 @@ The spec implies these failure modes, but its own tests don't reach them. They a
     - It returns `value` itself when `JSON.stringify(value)` is `undefined`, or when the JSON's UTF-8 byte length
       is at most `maxBytes`.
     - Otherwise it returns `{ truncated: true, bytes, preview }`. `bytes` is that byte length, and `preview` is
-      the first `Math.floor(maxBytes / 2)` characters of the JSON.
+      the first `Math.floor(maxBytes / 2)` characters of the JSON, passed through `toWellFormed()`.
     - Errors from `JSON.stringify`, such as a `BigInt`, propagate.
   - Used by Task 9 (`finishRun`: `summary = capJson(redact(summary))`, `error = redact(error)`) and Task 11
     (`logAdminEvent` in `lib/admin/audit-log.js` stores `redact(details)`). Task 9's stored error keeps its
@@ -1479,6 +1486,20 @@ The spec implies these failure modes, but its own tests don't reach them. They a
       preview: `"${"é".repeat(9)}`,
     });
   });
+
+  test("redact returns well-formed strings, even when the cut lands inside an emoji", () => {
+    const cut = redact(`${"word ".repeat(99)}abcd😀 tail`); // the emoji straddles index 500
+    assert.equal(cut.length, 501);
+    assert.ok(cut.isWellFormed());
+    // A caption sliced by UTF-16 units upstream (runSync's caption.slice(0, 80)) can end in half an emoji.
+    assert.equal(redact("abcd\uD83D"), "abcd\uFFFD");
+  });
+
+  test("capJson's preview never ends in half an emoji", () => {
+    const out = capJson(`${"a".repeat(7_998)}😀${"b".repeat(9_000)}`); // the JSON's 8,000th unit is the emoji's high half
+    assert.equal(out.truncated, true);
+    assert.ok(out.preview.isWellFormed());
+  });
   ```
 
 - [ ] **Step 2: Run it to verify it fails.**
@@ -1516,6 +1537,7 @@ The spec implies these failure modes, but its own tests don't reach them. They a
     it after. A shared but acyclic reference is therefore copied twice, not marked `[circular]`.
   - **`redact` keeps its one-parameter public signature;** the walk is an inner function.
   - **`capJson`** measures with `Buffer.byteLength(json, "utf8")`.
+  - **Both return well-formed strings.** `redact` returns `s.toWellFormed()` for every string, after the cut, and `capJson`'s `preview` is `json.slice(0, Math.floor(maxBytes / 2)).toWellFormed()`. A cut by UTF-16 units can split an emoji, and so can `runSync`'s own `caption.slice(0, 80)` in the summary. `JSON.stringify` then writes the lone half as `\ud83d`, which Postgres rejects in `jsonb` (22P02), and `finishRun` or `logAdminEvent` would fail.
 
   Add a short header comment: this redacts what is stored (`sync_runs.error` and `summary`, and
   `admin_audit_log.details`), and it deliberately over-redacts. Any 40-character run of token characters goes,
@@ -1528,7 +1550,7 @@ The spec implies these failure modes, but its own tests don't reach them. They a
   npx eslint .
   ```
   Expected:
-  - First command: `ℹ tests 20`, `ℹ pass 20`, `ℹ fail 0`, `ℹ cancelled 0`.
+  - First command: `ℹ tests 22`, `ℹ pass 22`, `ℹ fail 0`, `ℹ cancelled 0`.
   - `npm test`: only `ℹ fail 0` and `ℹ cancelled 0`.
   - ESLint prints nothing.
 
@@ -2593,7 +2615,7 @@ Rewrite the doc comment for the three modes and the `--` rule. The top-level flo
      source ??= process.env.refresh_token ? { token: process.env.refresh_token, from: "env" } : null;
      if (!source) await fail("No Spotify row and no refresh_token env var: nothing to check.");
      ```
-   - Refresh with a local `refreshAccessToken(refreshToken, { clientId, clientSecret })`. It sends the same POST as `lib/spotify.js` with a 10 s signal.
+   - Refresh with a local `refreshAccessToken(refreshToken, { clientId, clientSecret })`. It sends the same POST as `lib/spotify.js` with a 10 s signal. The duplication is deliberate: `lib/spotify.js`'s refresh is private to `createSpotifyClient`, whose cache, dead latch and store writes a one-shot check must not share. Do not move it into `lib/spotify-oauth.js`. Keep its failure texts the same as `lib/spotify.js`'s, without the `[spotify]` prefix.
      - `invalid_grant` fails with `Spotify rejected the refresh token (invalid_grant): it has expired or been revoked. Run \`npm run spotify:reauth -- --save\`.`
      - Any other non-OK response, or a missing `access_token`, fails with ``Token refresh failed with ${status}: ${body.error ?? "unknown error"}``.
    - If the response carries a different `refresh_token`:
@@ -2633,7 +2655,7 @@ Rewrite the doc comment for the three modes and the `--` rule. The top-level flo
 
 - [ ] **Step 7: Check the script offline**
 
-Run these from the worktree root. It has no `.env`; if one exists, run them from a directory without one.
+Run these from the worktree root; npm runs scripts there, and `loadEnvFiles()` reads `.env` and `.env.local` from it. It must have neither (both are git-ignored). If either exists, stop and tell Kevin: the fourth command would load its credentials instead of printing the Missing message.
 
 ```
 npm run spotify:reauth -- --help
@@ -2695,32 +2717,12 @@ Then `npm test` ends with `ℹ fail 0` and `ℹ cancelled 0`, and `npm run lint`
 
 - [ ] **Step 10: Commit**
 
-`ls .env` must fail with `No such file or directory`: a leftover link would point later builds at production. Then run `git status --short`; it must list only the paths below, plus the untracked `?? docs/`.
+`ls .env` must fail with `No such file or directory`: a leftover link would point later builds at production. Then run `git status --short`; it must list only the paths below (`docs/` is committed since 75db873).
 
 ```
 git add lib/spotify-oauth.js lib/admin/owner.js lib/spotify.js scripts/spotify-reauth.mjs package.json tests/spotify-oauth.test.mjs tests/admin-owner.test.mjs
 git commit -m "Add Spotify OAuth helpers and let the reauth script save to the database"
 ```
-
----
-
-All three tasks run on branch `claude/admin-panel`, rebased on the merged audit (Task 1). Paths are
-repo-relative. `lib/instagram.js`, `pages/api/cron/sync-instagram.js` and `scripts/instagram-sync.mjs` were
-changed by the audit, so they are cited by function name only. `lib/instagram-sync.js` was not changed by the
-audit.
-
-How these tests reach code that calls `getDbPool()` internally: each such integration test sets
-`process.env.DATABASE_URL = process.env.TEST_DATABASE_URL` at module top level, right after `testDb()`.
-`lib/db.js` creates its pool on the first `getDbPool()` call, which happens only inside hooks and tests, so the
-pool always opens on the local test database (`sslFor` from Task 1 turns TLS off for it). The assignment runs
-after `tests/helpers/db.mjs` has passed its import-time guard against a remote `DATABASE_URL` (Task 2), and every
-test command below runs under `env -u DATABASE_URL`, so the guard never sees one. Graph and the Instagram CDN
-are stubbed with `t.mock.method(globalThis, "fetch", ...)`, which `node:test` restores after each test. Blob is
-never stubbed and never reached: `@vercel/blob` 2.8.0 imports `fetch` from `undici`
-(`node_modules/@vercel/blob/dist/index.js`, `import { fetch } from "undici"`), so a `globalThis.fetch` stub
-cannot intercept it. Every test path therefore exits before `uploadToBlob`, and the one behaviour that needs
-real uploads to observe (capping `maxUploads` to what is left under the ceiling) is covered by a unit test of a
-pure helper.
 
 ---
 
@@ -2732,6 +2734,8 @@ pure helper.
   unchanged)
 - Create: `tests/helpers/fetch-stub.mjs`
 - Test: `tests/integration/instagram-token.test.mjs`
+
+**Context for Tasks 8–10.** These run on branch `claude/admin-panel`, rebased on the merged audit (Task 1). Paths are repo-relative. `lib/instagram.js`, `pages/api/cron/sync-instagram.js` and `scripts/instagram-sync.mjs` were changed by the audit, so they are cited by function name only. An integration test that reaches code calling `getDbPool()` sets `process.env.DATABASE_URL = process.env.TEST_DATABASE_URL` at module top level, right after `testDb()`. `lib/db.js` opens its pool on the first `getDbPool()` call, inside hooks and tests, so the pool always opens on the local test database. The assignment runs after `tests/helpers/db.mjs` has passed its import-time guard, and every test command runs under `env -u DATABASE_URL`. Graph and the Instagram CDN are stubbed with `t.mock.method(globalThis, "fetch", ...)`, which `node:test` restores after each test.
 
 **Interfaces:**
 - Consumes:
@@ -2808,7 +2812,7 @@ describe("Instagram token compare-and-swap (integration)", { skip: db.skip }, ()
   after(async () => { await getDbPool().end(); await db.close(); });
 
   test("storeRefreshedToken updates the row when it still holds the previous token", async () => {
-    await seed("T1");
+    await reseed("T1"); // stores expires_at_is_assumed = true, so the final assertion proves the update resets it
     const ok = await instagram.storeRefreshedToken({ previousToken: "T1", accessToken: "T1b", expiresInSeconds: 5_184_000 });
     assert.equal(ok, true);
     const row = await tokenRow();
@@ -2928,7 +2932,7 @@ env -u DATABASE_URL node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test -
 
 Expected: `ℹ tests 10`, `ℹ pass 2`, `ℹ fail 8`, `ℹ cancelled 0`. The three `storeRefreshedToken` tests fail with
 `TypeError: instagram.storeRefreshedToken is not a function`; "races a reseed" fails on `access_token`
-(`'T1b'` vs `'T2'`); "dead flag" fails on `dead_reason` (`null`); "old token", "during a refresh" and "without
+(`'T1b'` vs `'T2'`); "dead flag" fails on `access_token` (`'T1b'` vs `'T1'`); "old token", "during a refresh" and "without
 a token" fail because `T2`/`T1` was marked dead (or `InstagramReauthRequiredError` was thrown). The two passing
 tests are the no-race refresh and the confirmed 190 on the stored token.
 
@@ -3884,7 +3888,7 @@ reconnect.
   `curl -s https://www.kevinwong.co/api/toptracks` should list tracks, not `{"is_working":false}`.
 - [ ] **Re-date this item, and date the env cleanup.** The panel shows the estimated expiry (approval + 180
   days): set this heading's date to a month before it, and set a reminder. Add a *Remove the Spotify env
-  fallback* item dated a week after the reconnect (Task 19 of the admin panel plan).
+  fallback* item dated a week after the reconnect (Task 19 of [the admin panel plan](docs/superpowers/plans/2026-10-16-admin-panel.md)).
 ```
 
 2. *Remove the Listening Timeline?*: replace "drop the scope from `scripts/spotify-reauth.mjs` (and its
@@ -3922,7 +3926,7 @@ git commit -m "Document the Spotify token in Postgres, migrations and sync run h
 git log --oneline main..HEAD    # Tasks 1–10's commits, nothing from Tasks 11+
 env -u DATABASE_URL npm test    # ℹ fail 0, ℹ cancelled 0, and no ﹣ line (the integration suites ran)
 npm run lint && npm run build   # both exit 0
-git status --short              # nothing modified or staged; only the untracked ?? docs/ may appear
+git status --short              # nothing modified or staged
 ```
 
 Tell Kevin the branch is ready for Deploy A and list Steps 5–11. Order matters: back up, add the env vars,
@@ -4806,10 +4810,10 @@ Kevin does the setup for this (the GitHub OAuth App and the four auth env vars) 
   - `pages/api/auth/[...all].js`: `config = { api: { bodyParser: false } }`; 404 `{ error: "not_found" }` unless enabled and allowlisted.
   - `next.config.js`: admin header rules for `/admin/:path*`, `/api/admin/:path*`, `/api/auth/:path*`.
 
-**Spec deviation (Better Auth's error page).** The spec's path allowlist also forwards Better Auth's error page.
-This plan doesn't: errors redirect to `/admin/sign-in` through `onAPIError.errorURL` (Task 11), so Better Auth's
-`/error` is never forwarded. It stays out of the allowlist and in `disabledPaths`, and `GET /api/auth/error` answers
-404 (the `["GET", "/api/auth/error", false]` case below). The spec is being amended to match.
+**Better Auth's error page.** As the spec's path allowlist says (changed 2026-10-16), errors redirect to
+`/admin/sign-in` through `onAPIError.errorURL` (Task 11), so Better Auth's `/error` is never forwarded. It stays out
+of the allowlist and in `disabledPaths`, and `GET /api/auth/error` answers 404 (the `["GET", "/api/auth/error", false]`
+case below).
 
 - [ ] **Step 1: Write the shared fakes** `tests/helpers/admin-fakes.mjs` (exact):
 
@@ -5710,6 +5714,9 @@ This plan doesn't: errors redirect to `/admin/sign-in` through `onAPIError.error
   // pages/api/admin/spotify/authorize.js
   import { handleSpotifyAuthorize } from "../../../../lib/admin/spotify-reconnect";
 
+  // Body parser off: nothing may answer before the 404 gate (D1), and this route never reads a body.
+  export const config = { api: { bodyParser: false } };
+
   // POST from the panel's Reconnect form: owner + same-origin check, state cookie, 303 to Spotify.
   export default function handler(req, res) {
     return handleSpotifyAuthorize(req, res);
@@ -5719,6 +5726,9 @@ This plan doesn't: errors redirect to `/admin/sign-in` through `onAPIError.error
   ```js
   // pages/api/admin/spotify/callback.js
   import { handleSpotifyCallback } from "../../../../lib/admin/spotify-reconnect";
+
+  // Body parser off: nothing may answer before the 404 gate (D1), and this route never reads a body.
+  export const config = { api: { bodyParser: false } };
 
   // GET from Spotify's redirect: clears the state cookie, checks it, stores the new token, 303 to /admin.
   export default function handler(req, res) {
@@ -5783,6 +5793,7 @@ atomically in `job_locks` before it starts the run. Only one of two concurrent c
   - `statusFromSummary(summary): "ok" | "partial" | "skipped"` and `uploadsInLastDays(days, db?): Promise<number>` from `lib/sync-runs.js` (Task 9).
   - `InstagramReauthRequiredError` from `lib/instagram.js` (exists in the audit; `new InstagramReauthRequiredError(message?)`).
   - `getDbPool()` from `lib/db.js`.
+  - `redact(value)` from `lib/redact.js` (Task 4). Pass it the message string, never an `Error`, which it returns unchanged.
   - `sync_runs` (Task 3, `sql/006_sync_runs.sql`): `id` bigint identity, `job`, `trigger` (CHECK `cron | panel | cli`), `dry_run`, `status` (text, CHECK `running | ok | partial | skipped | failed | reauth_required | abandoned`, default `running`), `started_at` default `now()`, `finished_at` nullable, the counts `fetched`, `imported`, `uploads`, `deferred`, `skipped`, `error_count` (`integer not null default 0`), `error`, `summary`.
   - `job_locks` (the audit's `sql/004_job_locks.sql`, already in production, so no migration): `name text primary key`, `locked_until timestamptz not null default 'epoch'`. The run lease in `lib/instagram-sync.js` (`acquireLease`, `releaseLease`, row `instagram-sync`) is the pattern the slot claims copy.
   - `testDb()` from `tests/helpers/db.mjs` (Task 2): `{ skip: false | string, pool: pg.Pool | null, resetSchema(): Promise<number>, close(): Promise<void> }`. `resetSchema()` rebuilds `public` from the production-schema fixture and applies every `sql/005+` file.
@@ -5793,9 +5804,9 @@ atomically in `job_locks` before it starts the run. Only one of two concurrent c
     - `export async function checkPanelRunAllowed({ dryRun }, db = getDbPool()): Promise<{ allowed: true } | { allowed: false, reason: "too_soon" | "daily_limit" | "upload_ceiling", retryAfterSeconds: number }>`. It reads `sync_runs`; the route uses it for the 1,000 ceiling, and Task 15 for the status hints.
     - `export async function claimPanelSlot({ dryRun }, db = getDbPool()): Promise<{ claimed: true } | { claimed: false, retryAfterSeconds: number }>`. It claims the `job_locks` row `instagram-panel-check` for `10 minutes` (a check) or `instagram-panel-import` for `24 hours` (an import). Task 15 reads both rows for `panel.nextCheckAt` and `panel.nextImportAt`.
     - `export async function releasePanelImportSlot(db = getDbPool()): Promise<void>`, which sets `instagram-panel-import`'s `locked_until` to `'epoch'`.
-  - `lib/admin/instagram-sync-route.js`: `export function createInstagramSyncHandler({ requireAdmin, checkPanelRunAllowed, claimPanelSlot, releasePanelImportSlot, syncInstagram, logAdminEvent }): (req, res) => Promise<void>`.
+  - `lib/admin/instagram-sync-route.js`: `export function createInstagramSyncHandler({ requireAdmin, readJsonBody, checkPanelRunAllowed, claimPanelSlot, releasePanelImportSlot, syncInstagram, logAdminEvent }): (req, res) => Promise<void>`, and `export async function readJsonBody(req, limitBytes = 1024): Promise<unknown>`, which returns the parsed body of an `application/json` request of 1 to `limitBytes` bytes and `undefined` for anything else.
   - `POST /api/admin/instagram/sync` (Task 17's `api.ts` relies on this):
-    - The request body is `{ dryRun: boolean }`. Other keys are ignored.
+    - The request body is `{ dryRun: boolean }`, sent as `application/json` (Task 16's `postJson` does) and at most 1,024 bytes. Other keys are ignored.
     - 200: `{ status, fetched, alreadyPresent, posts: [{ shortcode, postedAt, mediaCount }], uploads, deferred, errorCount, blob?, resize? }`.
     - 400: `{ error: "bad_request" }`.
     - 405: `{ error: "method_not_allowed" }`, with `Allow: POST`.
@@ -6054,7 +6065,8 @@ Run the Step 2 command again. Expected: `ℹ tests 25`, `ℹ pass 25`, `ℹ fail
 ```js
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createInstagramSyncHandler } from "../lib/admin/instagram-sync-route.js";
+import { Readable } from "node:stream";
+import { createInstagramSyncHandler, readJsonBody } from "../lib/admin/instagram-sync-route.js";
 import { OWNER_ACTOR } from "../lib/admin/audit-log.js";
 import { InstagramReauthRequiredError } from "../lib/instagram.js";
 import { fakeRes } from "./helpers/admin-fakes.mjs";
@@ -6065,19 +6077,30 @@ const PANEL_OPTIONS = { trigger: "panel", maxPosts: 50, maxUploads: 25, timeBudg
 const summary = (o = {}) => ({ dryRun: true, startDate: "2022-01-01T00:00:00.000Z", fetched: 0, alreadyPresent: 0,
   skipped: [], inserted: [], uploads: 0, deferred: 0, warnings: [], errors: [], ...o });
 const post = (body) => ({ method: "POST", headers: { origin: "https://www.kevinwong.co" }, body });
+// fakeRes that adds "respond" to calls.order when the handler sends, so a test can check the response goes last.
+const trackedRes = (calls) => {
+  const res = fakeRes();
+  for (const m of ["json", "end"]) {
+    const send = res[m];
+    res[m] = function (...args) { calls.order.push("respond"); return send.apply(this, args); };
+  }
+  return res;
+};
 
 // `allowed` answers the first checkPanelRunAllowed call; `recheck` answers the one a thrown import makes afterwards.
 function setup({ owner = async () => OWNER, allowed = { allowed: true }, recheck = { allowed: true },
   claim = { claimed: true }, sync = async () => summary(), log = async () => {} } = {}) {
-  const calls = { requireAdmin: [], check: [], claim: [], release: 0, sync: [], log: [] };
+  const calls = { requireAdmin: [], read: 0, check: [], claim: [], release: 0, sync: [], log: [] };
   const handler = createInstagramSyncHandler({
     requireAdmin: async (req, res, opts) => { calls.requireAdmin.push(opts); return owner(req, res); },
-    checkPanelRunAllowed: async (args) => { calls.check.push(args); return calls.check.length === 1 ? allowed : recheck; },
+    readJsonBody: async (req) => { calls.read += 1; return req.body; },
+    checkPanelRunAllowed: async (args) => { calls.check.push(args); calls.order.push("check"); return calls.check.length === 1 ? allowed : recheck; },
     claimPanelSlot: async (args) => { calls.claim.push(args); return claim; },
-    releasePanelImportSlot: async () => { calls.release += 1; },
+    releasePanelImportSlot: async () => { calls.release += 1; calls.order.push("release"); },
     syncInstagram: async (opts) => { calls.sync.push(opts); return sync(opts); },
-    logAdminEvent: async (event, opts) => { calls.log.push([event, opts]); return log(); },
+    logAdminEvent: async (event, opts) => { calls.log.push([event, opts]); calls.order.push("log"); return log(); },
   });
+  calls.order = []; // "check", "log", "release", and "respond" from trackedRes, as they happen
   return { handler, calls };
 }
 
@@ -6093,7 +6116,7 @@ test("passes requireAdmin's 403 through and does nothing else", async () => {
   await handler(post({ dryRun: true }), res);
   assert.equal(res.statusCode, 403);
   assert.deepEqual(res.body, { error: "bad_origin" });
-  assert.equal(calls.check.length + calls.sync.length + calls.log.length, 0);
+  assert.equal(calls.check.length + calls.sync.length + calls.log.length + calls.read, 0); // the body is never read
 });
 
 test("405 with Allow: POST for GET", async () => {
@@ -6103,7 +6126,7 @@ test("405 with Allow: POST for GET", async () => {
   assert.equal(res.statusCode, 405);
   assert.equal(res.headers.allow, "POST");
   assert.deepEqual(res.body, { error: "method_not_allowed" });
-  assert.equal(calls.sync.length, 0);
+  assert.equal(calls.sync.length + calls.read, 0);
 });
 
 for (const body of [undefined, null, {}, { dryRun: "yes" }, { dryRun: 1 }, [true], "dryRun=true"]) {
@@ -6116,6 +6139,17 @@ for (const body of [undefined, null, {}, { dryRun: "yes" }, { dryRun: 1 }, [true
     assert.equal(calls.check.length + calls.claim.length + calls.sync.length, 0);
   });
 }
+
+test("readJsonBody parses a small JSON body and gives undefined for anything else", async () => {
+  const stream = (text, type = "application/json") =>
+    Object.assign(Readable.from([Buffer.from(text)]), { headers: { "content-type": type } });
+  assert.deepEqual(await readJsonBody(stream('{"dryRun":true}')), { dryRun: true });
+  assert.deepEqual(await readJsonBody(stream('{"dryRun":false}', "application/json; charset=utf-8")), { dryRun: false });
+  assert.equal(await readJsonBody(stream("{oops")), undefined);
+  assert.equal(await readJsonBody(stream('{"dryRun":true}', "text/plain")), undefined);
+  assert.equal(await readJsonBody(stream("")), undefined);
+  assert.equal(await readJsonBody(stream(`{"pad":"${"x".repeat(1100)}"}`)), undefined);
+});
 
 test("extra keys are ignored: the server fixes every other parameter", async () => {
   const { handler, calls } = setup({ sync: async () => summary({ dryRun: false }) });
@@ -6158,7 +6192,7 @@ test("200 for a check: posts carry shortcode, postedAt and mediaCount only", asy
     fetched: 12, alreadyPresent: 11, uploads: 3, blob: "ok", resize: "ok (sharp 0.35.4, libvips 8.17.2)",
     inserted: [{ shortcode: "DAbc123", postedAt: "2026-10-15T10:00:00.000Z", mediaCount: 3, caption: "secret caption", dryRun: true }],
   }) });
-  const res = fakeRes();
+  const res = trackedRes(calls);
   await handler(post({ dryRun: true }), res);
   assert.equal(res.statusCode, 200);
   assert.deepEqual(res.body, {
@@ -6170,6 +6204,7 @@ test("200 for a check: posts carry shortcode, postedAt and mediaCount only", asy
   assert.deepEqual(calls.sync, [{ ...PANEL_OPTIONS, dryRun: true }]);
   assert.deepEqual(calls.log, [["instagram_check",
     { actor: OWNER_ACTOR, details: { status: "ok", fetched: 12, imported: 1, uploads: 3, deferred: 0, errorCount: 0 } }]]);
+  assert.deepEqual(calls.order, ["check", "log", "respond"]); // the response goes last
 });
 
 test("200 for an import: partial status, no blob or resize keys", async () => {
@@ -6196,23 +6231,27 @@ test("503 instagram_reauth_required, audited as reauth_required", async (t) => {
   assert.deepEqual(calls.log, [["instagram_check", { actor: OWNER_ACTOR, details: { status: "reauth_required" } }]]);
 });
 
-test("500 sync_failed for any other error, message not echoed", async (t) => {
-  t.mock.method(console, "error", () => {});
+test("500 sync_failed for any other error, message not echoed and logged only redacted", async (t) => {
+  const logged = t.mock.method(console, "error", () => {});
   const { handler, calls } = setup({ sync: async () => { throw new Error("connect postgres://kw:hunter2@db.example failed"); } });
   const res = fakeRes();
   await handler(post({ dryRun: false }), res);
   assert.equal(res.statusCode, 500);
   assert.deepEqual(res.body, { error: "sync_failed" });
   assert.deepEqual(calls.log, [["instagram_import", { actor: OWNER_ACTOR, details: { status: "failed" } }]]);
+  const lines = logged.mock.calls.map((c) => c.arguments.map(String).join(" "));
+  assert.ok(lines.some((l) => l.includes("postgres://[redacted]@db.example")), lines.join("\n"));
+  assert.ok(lines.every((l) => !l.includes("hunter2")), lines.join("\n"));
 });
 
 test("an import that ends skipped with 0 uploads releases the import slot; ok and partial imports keep it", async () => {
   const skipped = setup({ sync: async () => summary({ dryRun: false, leaseHeld: true,
     skipped: [{ id: "run", reason: "another sync is already running" }] }) });
-  const res = fakeRes();
+  const res = trackedRes(skipped.calls);
   await skipped.handler(post({ dryRun: false }), res);
   assert.equal(res.body.status, "skipped");
   assert.equal(skipped.calls.release, 1);
+  assert.deepEqual(skipped.calls.order, ["check", "log", "release", "respond"]);
   for (const o of [{}, { errors: [{ id: "179", error: "upload failed" }] }]) { // ok with 0 uploads, then partial
     const kept = setup({ sync: async () => summary({ dryRun: false, ...o }) });
     await kept.handler(post({ dryRun: false }), fakeRes());
@@ -6227,9 +6266,10 @@ test("a thrown import frees the import slot only when sync_runs no longer counts
     // Recorded failed or reauth_required with 0 uploads: the second read no longer reports daily_limit.
     for (const recheck of [{ allowed: true }, { allowed: false, reason: "upload_ceiling", retryAfterSeconds: 3600 }]) {
       const freed = setup({ sync: fail, recheck });
-      await freed.handler(post({ dryRun: false }), fakeRes());
+      await freed.handler(post({ dryRun: false }), trackedRes(freed.calls));
       assert.deepEqual(freed.calls.check, [{ dryRun: false }, { dryRun: false }]);
       assert.equal(freed.calls.release, 1);
+      assert.deepEqual(freed.calls.order, ["check", "log", "check", "release", "respond"]);
     }
     // Uploads before the throw, or a row still marked running, keep the import counted, so the slot stays claimed.
     const kept = setup({ sync: fail, recheck: { allowed: false, reason: "daily_limit", retryAfterSeconds: 86_000 } });
@@ -6262,33 +6302,56 @@ Expected: `ERR_MODULE_NOT_FOUND` for `lib/admin/instagram-sync-route.js`, then `
 
 - [ ] **Step 7: Implement `createInstagramSyncHandler(deps)` in `lib/admin/instagram-sync-route.js` and the route**
 
-The library file imports only `statusFromSummary` from `../sync-runs.js`, `InstagramReauthRequiredError` from `../instagram.js` and `OWNER_ACTOR` from `./audit-log.js`; `claimPanelSlot` and `releasePanelImportSlot` arrive as deps like the rest. The handler does these things in order:
-1. `const owner = await requireAdmin(req, res, { mutation: true }); if (!owner) return;`. Running it first means every method gets 404 outside production (D1). A GET typed into the address bar has no `Origin`, so it gets 403 from the guard. Only a same-origin GET reaches step 2.
+The library file imports only `statusFromSummary` from `../sync-runs.js`, `InstagramReauthRequiredError` from `../instagram.js`, `OWNER_ACTOR` from `./audit-log.js` and `redact` from `../redact.js`; `claimPanelSlot`, `releasePanelImportSlot` and `readJsonBody` arrive as deps like the rest. The file also exports `readJsonBody`, exactly:
+
+```js
+// Next's body parser is off for this route (config.api.bodyParser = false), so requireAdmin answers 404, 403 or 401
+// before any body is read (D1). Returns the parsed body of an application/json request of 1 to limitBytes bytes,
+// else undefined. It never stops reading early: ending the iterator early destroys the request and its socket.
+export async function readJsonBody(req, limitBytes = 1024) {
+  const type = String(req.headers?.["content-type"] ?? "").split(";")[0].trim().toLowerCase();
+  const chunks = [];
+  let size = 0;
+  try {
+    for await (const chunk of req) {
+      size += chunk.length;
+      if (size <= limitBytes) chunks.push(chunk);
+    }
+    if (type !== "application/json" || size === 0 || size > limitBytes) return undefined;
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    return undefined;
+  }
+}
+```
+
+The handler does these things in order:
+1. `const owner = await requireAdmin(req, res, { mutation: true }); if (!owner) return;`. Running it first, with Next's body parser off (the route's `config`), means every method and every body gets 404 outside production (D1). A GET typed into the address bar has no `Origin`, so it gets 403 from the guard. Only a same-origin GET reaches step 2.
 2. If `req.method !== "POST"`: `Allow: POST`, then 405 `{ error: "method_not_allowed" }`.
-3. The body must be a plain object (not null, not an array) with `typeof body.dryRun === "boolean"`. Otherwise 400 `{ error: "bad_request" }`. Read nothing else from the body.
+3. `const body = await readJsonBody(req)`. The body must be a plain object (not null, not an array) with `typeof body.dryRun === "boolean"`. Otherwise 400 `{ error: "bad_request" }`. Read nothing else from the body.
 4. `const verdict = await checkPanelRunAllowed({ dryRun })`. This covers the 1,000 ceiling, and the `sync_runs` view of the two D4 limits. If it is not allowed:
    - `res.setHeader("Retry-After", String(retryAfterSeconds))`
    - audit `panel_run_refused` with `details: { dryRun, reason, retryAfterSeconds }`
    - 429 `{ error: reason, retryAfterSeconds }`
 5. `const claim = await claimPanelSlot({ dryRun })`. If `!claim.claimed`, another request holds the slot, so refuse exactly as in step 4, with `reason = dryRun ? "too_soon" : "daily_limit"` and the claim's `retryAfterSeconds`.
 6. Call `syncInstagram({ trigger: "panel", dryRun, maxPosts: 50, maxUploads: 25, timeBudgetMs: 60_000 })`.
-7. On success, respond with the 200 shape in Interfaces:
+7. On success, build the 200 body in the shape given in Interfaces, but don't send it yet:
    - `status` is `statusFromSummary(summary)`.
    - `posts` is `summary.inserted.map(({ shortcode, postedAt, mediaCount }) => ({ shortcode, postedAt, mediaCount }))`.
    - `errorCount` is `summary.errors.length`.
    - `blob` and `resize` are copied only when they are present on the summary.
 
-   Then audit `dryRun ? "instagram_check" : "instagram_import"` with `details: { status, fetched, imported: inserted.length, uploads, deferred, errorCount }`.
-   For an import whose `status` is `"skipped"` and whose `summary.uploads` is 0, also call `releasePanelImportSlot()`. That happens when the cron held the run lease or the 1,800 ceiling stopped the run. It mirrors the counting rule in Step 3: a skipped import with no uploads doesn't use up the day.
+   Then, in this order: await the audit of `dryRun ? "instagram_check" : "instagram_import"` with `details: { status, fetched, imported: inserted.length, uploads, deferred, errorCount }`; await the release below when it applies; and only then `res.status(200).json(body)`.
+   For an import whose `status` is `"skipped"` and whose `summary.uploads` is 0, also await `releasePanelImportSlot()`, before the response. That happens when the cron held the run lease or the 1,800 ceiling stopped the run. It mirrors the counting rule in Step 3: a skipped import with no uploads doesn't use up the day.
 8. Error paths:
    - `InstagramReauthRequiredError`: audit `{ status: "reauth_required" }`, then 503 `{ error: "instagram_reauth_required" }`.
-   - Anything else: `console.error("[admin/instagram/sync] failed:", error)`, audit `{ status: "failed" }`, then 500 `{ error: "sync_failed" }`.
-   - For an import, either error then decides whether to release the slot. A throw carries no summary, so the handler can't see `uploads` and asks the ledger instead. `syncInstagram` has already recorded the row as `failed` or `reauth_required`, with every upload counted (Task 9). Call `checkPanelRunAllowed({ dryRun: false })` again, and call `releasePanelImportSlot()` only when its `reason` is not `"daily_limit"`. Step 3's rule counts such a row only when `uploads > 0`, or while it still says `running` because recording failed. So this frees the slot exactly when the run uploaded nothing. A check never releases its slot.
+   - Anything else: `console.error("[admin/instagram/sync] failed:", redact(error instanceof Error ? error.message : String(error)))` (the message, never the `Error`), audit `{ status: "failed" }`, then 500 `{ error: "sync_failed" }`.
+   - For an import, either error then decides whether to release the slot, after the audit and before the 503 or 500 is sent. A throw carries no summary, so the handler can't see `uploads` and asks the ledger instead. `syncInstagram` has already recorded the row as `failed` or `reauth_required`, with every upload counted (Task 9). Call `checkPanelRunAllowed({ dryRun: false })` again, and call `releasePanelImportSlot()` only when its `reason` is not `"daily_limit"`. Step 3's rule counts such a row only when `uploads > 0`, or while it still says `running` because recording failed. So this frees the slot exactly when the run uploaded nothing. A check never releases its slot. On both error paths the response goes last: the audit, then for an import the re-read and any release, then the 503 or 500.
 
-The `actor` of every audit event is `OWNER_ACTOR`. Every audit write is awaited inside `try/catch` that only `console.error`s, so it never changes the response. Awaiting matters because a Vercel function can freeze once the response is sent. The release, and the ledger re-read after a throw, are awaited the same way, inside a `try/catch` that only `console.error`s. If either fails, the slot stays claimed, so the limit fails closed.
+The `actor` of every audit event is `OWNER_ACTOR`. Every audit write is awaited inside `try/catch` that only `console.error`s a redacted message string (as in Step 8), so it never changes the response. Awaiting matters because a Vercel function can freeze once the response is sent, so on every path the response is sent last, after the audit, the ledger re-read and the release have settled (the 429 paths of Steps 4 and 5 already audit first). The release, and the ledger re-read after a throw, are awaited the same way, inside a `try/catch` that only `console.error`s. If either fails, the slot stays claimed, so the limit fails closed.
 
 `pages/api/admin/instagram/sync.js` imports without extensions:
-- `createInstagramSyncHandler` from `../../../../lib/admin/instagram-sync-route`
+- `createInstagramSyncHandler` and `readJsonBody` from `../../../../lib/admin/instagram-sync-route`
 - `requireAdmin` from `../../../../lib/admin/guard`
 - `checkPanelRunAllowed`, `claimPanelSlot` and `releasePanelImportSlot` from `../../../../lib/admin/sync-limits`
 - `syncInstagram` from `../../../../lib/instagram-sync`
@@ -6299,10 +6362,11 @@ Its body, exactly:
 ```js
 // Same ceiling as the cron route; the 60 s budget passed by the handler leaves the
 // post already in flight room to finish (spec: "Panel runs get a 60-second budget").
-export const config = { maxDuration: 300 };
+// Body parser off: requireAdmin must answer before any body is read (D1); readJsonBody reads it afterwards.
+export const config = { maxDuration: 300, api: { bodyParser: false } };
 
 const handler = createInstagramSyncHandler({
-  requireAdmin, checkPanelRunAllowed, claimPanelSlot, releasePanelImportSlot, syncInstagram, logAdminEvent,
+  requireAdmin, readJsonBody, checkPanelRunAllowed, claimPanelSlot, releasePanelImportSlot, syncInstagram, logAdminEvent,
 });
 export default handler;
 ```
@@ -6314,12 +6378,12 @@ export default handler;
 ```sh
 node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --test-concurrency=1 tests/admin-instagram-sync-route.test.mjs tests/integration/sync-limits.test.mjs
 npx eslint lib/admin/sync-limits.js lib/admin/instagram-sync-route.js pages/api/admin/instagram/sync.js tests/admin-instagram-sync-route.test.mjs tests/integration/sync-limits.test.mjs
-grep -n "maxDuration: 300" pages/api/admin/instagram/sync.js
+grep -n "maxDuration: 300, api: { bodyParser: false }" pages/api/admin/instagram/sync.js
 npm test
 ```
 
 Expected:
-- The focused run: `ℹ tests 46` (21 + 25), `ℹ pass 46`, `ℹ fail 0`, `ℹ cancelled 0`, and no `﹣` skip line.
+- The focused run: `ℹ tests 47` (22 + 25), `ℹ pass 47`, `ℹ fail 0`, `ℹ cancelled 0`, and no `﹣` skip line.
 - ESLint prints nothing and exits 0, and grep prints one line.
 - `npm test`: `ℹ fail 0` and `ℹ cancelled 0`.
 
@@ -6359,6 +6423,7 @@ git commit -m "Add the panel's Check and Import endpoint with its daily limits"
     - `refusedSignInSummary(db?): Promise<{ count24h: number, latestAt: Date | null, latestLogin: string | null }>`, covering the `sign_in_rejected` rows.
     - `logAdminEvent` and `OWNER_ACTOR` (the tests use them to seed).
   - `requireAdmin(req, res, { mutation = false, deps = {} } = {})` from `lib/admin/guard.js` (Task 12).
+  - `redact(value)` from `lib/redact.js` (Task 4), for step 4's log line. Pass it the message string, never an `Error`, which it returns unchanged.
   - `testDb()` from Task 2, and `fakeRes()` from `tests/helpers/admin-fakes.mjs` (Task 12), both as in Task 14.
 - Produces:
   - `export async function buildAdminStatus({ db = getDbPool(), env = process.env, now = new Date() } = {})`, which returns the JSON below and rejects when any query fails. Every value is JSON-safe: ISO strings for dates, numbers (never bigint strings) for ids and sums, and `null`, never `undefined`. Task 17's `types.ts` mirrors it.
@@ -6710,14 +6775,17 @@ test("200 with buildAdminStatus() called with no arguments", async () => {
   assert.deepEqual(res.body, { generatedAt: "x" });
   assert.deepEqual(args, [[]]);
 });
-test("500 status_failed without the error message", async (t) => {
-  t.mock.method(console, "error", () => {});
+test("500 status_failed without the error message, logged only redacted", async (t) => {
+  const logged = t.mock.method(console, "error", () => {});
   const handler = createStatusHandler({ requireAdmin: async () => OWNER,
-    buildAdminStatus: async () => { throw new Error("password authentication failed for user kw"); } });
+    buildAdminStatus: async () => { throw new Error("connect postgres://kw:hunter2@db.example failed"); } });
   const res = fakeRes();
   await handler({ method: "GET", headers: {} }, res);
   assert.equal(res.statusCode, 500);
   assert.deepEqual(res.body, { error: "status_failed" });
+  const lines = logged.mock.calls.map((c) => c.arguments.map(String).join(" "));
+  assert.ok(lines.some((l) => l.includes("postgres://[redacted]@db.example")), lines.join("\n"));
+  assert.ok(lines.every((l) => !l.includes("hunter2")), lines.join("\n"));
 });
 ```
 
@@ -6771,9 +6839,9 @@ Derivations the tests don't fully pin:
 1. `const owner = await requireAdmin(req, res)`, with no options because this is not a mutation. If it returns null, return.
 2. If `req.method !== "GET"`: `Allow: GET`, then 405 `{ error: "method_not_allowed" }`.
 3. 200 with `await buildAdminStatus()`.
-4. On a throw: `console.error("[admin/status] failed:", error)`, then 500 `{ error: "status_failed" }`.
+4. On a throw: `console.error("[admin/status] failed:", redact(error instanceof Error ? error.message : String(error)))` (as Task 17's `getServerSideProps` logs the same failure), then 500 `{ error: "status_failed" }`.
 
-`pages/api/admin/status.js` imports `requireAdmin` from `../../../lib/admin/guard` and `buildAdminStatus, createStatusHandler` from `../../../lib/admin/status`, then `const handler = createStatusHandler({ requireAdmin, buildAdminStatus }); export default handler;`.
+`pages/api/admin/status.js` imports `requireAdmin` from `../../../lib/admin/guard` and `buildAdminStatus, createStatusHandler` from `../../../lib/admin/status`, then `export const config = { api: { bodyParser: false } };` (nothing may answer before the 404 gate, D1, and the route never reads a body) and `const handler = createStatusHandler({ requireAdmin, buildAdminStatus }); export default handler;`.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -7207,9 +7275,11 @@ Task 18 owns the Deploy B checks. Do these alongside them:
     - 500 `{ error: "sync_failed" }`
     - 400 `{ error: "bad_request" }`, 403 `{ error: "bad_origin" }`, 401
   - Task 13, the Spotify reconnect:
-    - `POST /api/admin/spotify/authorize` is reached by a form POST.
-    - It returns with `?spotify=connected`, or with `?spotify_error=` one of `denied`, `state_mismatch`,
-      `not_configured`, `exchange_failed`, `missing_scopes`, `account_lookup_failed`, `wrong_account`, `save_failed`.
+    - `POST /api/admin/spotify/authorize` is reached by a form POST. It redirects to Spotify, or straight back to
+      `/admin?spotify_error=not_configured`.
+    - Spotify then returns to `GET /api/admin/spotify/callback`, which redirects to `/admin?spotify=connected`, or to
+      `/admin?spotify_error=` one of `denied`, `state_mismatch`, `not_configured`, `exchange_failed`, `missing_scopes`,
+      `account_lookup_failed`, `wrong_account`, `save_failed`.
     - With no owner session (it lapsed before the form posted, or during the Spotify round trip), both reconnect
       routes answer `303` to `/admin/sign-in`, not a JSON 401, because the form POST and Spotify's callback GET are
       top-level navigations. Nothing on the dashboard has to handle that case.
@@ -7687,7 +7757,7 @@ the constant.
   ```tsx
   <form method="post" action="/api/admin/spotify/authorize">
       <Button type="submit" variant={spotify.state === "connected" ? "outline" : "solid"}
-          colorPalette={spotify.state === "connected" ? "gray" : "green"}>Reconnect Spotify</Button>
+          colorPalette={spotify.state === "connected" ? "gray" : "green"}>Reconnect</Button>
   </form>
   ```
 
@@ -7951,7 +8021,7 @@ Task 18 owns the Deploy B checks (sign-in, the Spotify reconnect, Check, Sign ou
    - It shows "Account: the site's Spotify account" and "Scopes: 3 of 3".
 4. On the Instagram card:
    - The token days left and the last cron run with its badge appear.
-   - There is no 36-hour warning, unless the cron really missed.
+   - There is no 36-hour warning, unless the cron really missed or no real (non-dry) cron run has happened since Deploy A yet. In that second case the card also says "No cron run recorded yet."; look again after the next 05:00 UTC run.
    - Uploads show "N of 2,000" and storage shows "X of 1 GB".
 5. When Task 18 presses Check a second time: Check is either disabled with "Next check available …", or refused with
    "A check already ran in the last 10 minutes. Try again in N minutes."
@@ -7982,7 +8052,7 @@ This task is the single source for Deploy B's setup. Kevin's part of Task 11 (th
 **Interfaces:**
 - Consumes (everything here is exercised, not called):
   - The routes and pages from Tasks 11–17, the JSON of `GET /api/admin/status` (Task 15), and the reconnect outcomes (Task 13): `/admin?spotify=connected`, or `/admin?spotify_error=<code>` with `denied`, `state_mismatch`, `exchange_failed`, `missing_scopes`, `account_lookup_failed`, `wrong_account`, `not_configured` or `save_failed`.
-  - `npm run db:apply -- [--yes] <file.sql>...` (Task 2). It reads `DATABASE_URL` from `.env` in the current directory (the real environment wins), strips `-pooler` from the host itself, and prints `Target: <host>/<db>` and `Files:  <files>`. Without `--yes` it then refuses a non-local database with `Not a local database. Re-run with --yes (after --) to apply.`; with `--yes` (after the `--`) it prints `applied <file>` for each file.
+  - `npm run db:apply -- [--yes] <file.sql>...` (Task 2). It reads `DATABASE_URL` from `.env` in the current directory (the real environment wins), strips `-pooler` from the host itself, and prints `Target: <host>/<db>` and `Files:  <files>`. Without `--yes` it then refuses a non-local database with ``Not a local database. Re-run with --yes (after `--`) to apply.``; with `--yes` (after the `--`) it prints `applied <file>` for each file.
   - `sql/007_auth.sql` (Task 11): `auth_user`, `auth_session`, `auth_account`, `auth_verification`.
   - `scripts/auth.config.mjs` (Task 11) and the Better Auth CLI, the exact-pinned `auth@1.7.10` devDependency (Task 11) that `npm ci` installs, run as `npx --no-install auth check --config scripts/auth.config.mjs`. It loads `.env`/`.env.local` from the current directory without overriding exported variables. It prints `Schema check passed against the live database.` and exits 0, exits 1 on a mismatch, and exits 2 when it cannot load the config or connect.
   - From Task 10: the README sections `🎧 Spotify token` and `🗄️ Database migrations`, the backup `before-admin-005` (a Neon branch, or `~/Backups/kevinwong-before-admin-005.dump`), and its Step 5 backup method.
@@ -8068,7 +8138,7 @@ Expected:
 - **`tsc`** prints nothing.
 - **`audit:prod`** reports no high or critical advisories. A high advisory in `better-auth` blocks the deploy. Any other advisory goes into TODO.md.
 - **`git log`** lists only Tasks 11–17's commits, since Deploy A is already on `main`.
-- **`git status --short`** shows ` M README.md` and, if present, the untracked `?? docs/` (this plan and the spec); nothing else.
+- **`git status --short`** shows ` M README.md`; nothing else.
 
 - [ ] **Step 4: Commit, then hand over to Kevin**
 
@@ -8132,7 +8202,7 @@ Run everything in one terminal in the main checkout. Its `.env` holds production
    npm run db:apply -- sql/007_auth.sql
    ```
 
-   Expected: `Target: ep-<id>.<region>.aws.neon.tech/<db>`, the Neon host with no `-pooler`, then `Files:  sql/007_auth.sql` and `Not a local database. Re-run with --yes (after --) to apply.` Nothing was applied. If the host is anything else, stop: a `DATABASE_URL` exported in this shell wins over `.env`, so `unset DATABASE_URL` and run it again. Otherwise:
+   Expected: `Target: ep-<id>.<region>.aws.neon.tech/<db>`, the Neon host with no `-pooler`, then `Files:  sql/007_auth.sql` and ``Not a local database. Re-run with --yes (after `--`) to apply.`` Nothing was applied. If the host is anything else, stop: a `DATABASE_URL` exported in this shell wins over `.env`, so `unset DATABASE_URL` and run it again. Otherwise:
 
    ```sh
    npm run db:apply -- --yes sql/007_auth.sql
@@ -8267,13 +8337,14 @@ Task 17 Step 10 lists what each dashboard card should show; work through it duri
 - [ ] **Step 14: Kevin: run Check, see the limit hold, sign out**
 
 1. On `/admin`:
-   - The Instagram card shows the last cron run (recorded since Deploy A) and no overdue warning.
+   - The Instagram card shows the last cron run (recorded since Deploy A) and no overdue warning. If no real (non-dry) cron run has happened since Deploy A, because 05:00 UTC hasn't come round yet, it shows "No cron run recorded yet." and the "No cron run in 36 hours" warning instead. That is expected, not a failure: look again after the next 05:00 UTC run.
    - The token's days left match `npm run instagram:token`.
    - Uploads over 30 days and storage are shown.
 2. Click **Check for new posts**. Expected:
-   - A result with status `ok`.
-   - `blob: ok` and `resize: ok (sharp …)`.
-   - Any new posts listed by shortcode and date, without captions.
+   - An info alert: "Found N new posts with M files to upload." (plus how many wait for a later run, if any), or "No new posts. Nothing to import."
+   - The muted lines `Blob: ok` and `Resize: ok (sharp …, libvips …)`.
+   - Any new posts listed by date, file count and shortcode (a link to the post), without captions.
+   - Once the status refreshes, the **Recent runs** table's top row reads `panel (check)` with a green **OK** badge.
 
    Import only if it lists posts, and only after item 3's query; otherwise the 05:00 UTC cron imports them.
 3. **See the limit hold.** Once the result shows, the dashboard refreshes its status. Expected: **Check** is disabled, with "Next check available …" under it, about 10 minutes out. A disabled button sends nothing, so prove the server's limit from the browser instead:
@@ -8301,7 +8372,7 @@ Task 17 Step 10 lists what each dashboard card should show; work through it duri
 
 ### Task 19: Remove the env fallbacks a week after the reconnect
 
-**Model:** Sonnet
+**Model:** Opus for Steps 3–6 (one dispatch; Step 4.1 changes `createSpotifyClient`'s refresh path, which Task 6 ran on Opus for concurrency). Sonnet for Steps 1 and 9, which edit only `TODO.md`.
 **Files:**
 - Modify: `TODO.md` (Step 1 re-dates Task 10's `Reconnect Spotify` item and adds a dated cleanup item; Step 9 deletes the cleanup item)
 - Modify: `lib/spotify.js` (`createSpotifyClient`'s `refresh`: the `env.refresh_token` read and the env-only branches)
@@ -8354,7 +8425,7 @@ Use the four dates Kevin sends. Under `## 📅 Dated`:
 
    - [ ] **Check the week went well.** /admin shows Spotify **Connected** with no dead reason, and Now Playing
      works.
-   - [ ] **Remove the fallbacks in code and deploy** (Task 19 of the admin panel plan).
+   - [ ] **Remove the fallbacks in code and deploy** (Task 19 of [the admin panel plan](docs/superpowers/plans/2026-10-16-admin-panel.md)).
    - [ ] **Delete `refresh_token`, `client_id` and `client_secret`** from the Vercel project (every
      environment) and from `.env`, then redeploy, since a deployment keeps the env vars it was built with.
    ```
@@ -8383,7 +8454,7 @@ Expected: `authorized_at` is at least 7 days ago, `dead_reason` is `null`, and `
 First record the baseline:
 
 ```sh
-node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --test-concurrency=1 tests/spotify.test.mjs tests/spotify-oauth.test.mjs tests/integration/admin-status.test.mjs tests/admin/dashboard-messages.test.mjs
+env -u DATABASE_URL node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --test-concurrency=1 tests/spotify.test.mjs tests/spotify-oauth.test.mjs tests/integration/admin-status.test.mjs tests/admin/dashboard-messages.test.mjs
 ```
 
 Expected: `ℹ fail 0`, `ℹ cancelled 0` and no `﹣` skip line. Write down its `ℹ tests` count, N. It is above 0.
@@ -8478,19 +8549,20 @@ Run the baseline command again. Expected: `ℹ tests N` (unchanged), `ℹ fail 5
 6. **`README.md`** (Task 10's and Task 18's text):
    - `Environment variables`: delete the `refresh_token` row, and drop the lowercase-fallback sentence from the `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` row.
    - The paragraph under that table: "the Spotify refresh token once Spotify has been reconnected" becomes "the Spotify refresh token".
-   - `Spotify token`: delete the sentences about the `refresh_token` env var (used until the first reconnect; `--whoami`'s "else the `refresh_token` env var"; the no-option mode printing a token "for the `refresh_token` fallback") and about the lowercase `client_id` / `client_secret` fallback.
+   - `Spotify token`: delete the sentences about the `refresh_token` env var (used until the first reconnect; `--whoami`'s "else the `refresh_token` env var"; the no-option mode printing a token "for the `refresh_token` fallback") and about the lowercase `client_id` / `client_secret` fallback. In **Where the token lives**, replace its last two sentences (from `Until Spotify is reconnected for the first time` through `show their empty states instead.`) with: `With no row, or if the database can't be reached, the Spotify widgets show their empty states.`
 
 - [ ] **Step 5: Run tests and the full checks to verify they pass**
 
 ```sh
-node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --test-concurrency=1 tests/spotify.test.mjs tests/spotify-oauth.test.mjs tests/integration/admin-status.test.mjs tests/admin/dashboard-messages.test.mjs
-npm test
+env -u DATABASE_URL node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --test-concurrency=1 tests/spotify.test.mjs tests/spotify-oauth.test.mjs tests/integration/admin-status.test.mjs tests/admin/dashboard-messages.test.mjs
+env -u DATABASE_URL npm test
 npx eslint .
 env -u DATABASE_URL npm run build
 npx tsc --noEmit
 grep -rnE "[eE]nv\.(client_id|client_secret|refresh_token)\b" lib scripts pages components next.config.js
 grep -nw "env" lib/admin/status.js lib/admin/messages.js components/admin/types.ts components/admin/SpotifyCard.tsx
 grep -nE "client_id|client_secret" README.md
+grep -nE 'falls back|`refresh_token` (env var|fallback)' README.md
 grep -nE "env var|client_id|client_secret" scripts/spotify-reauth.mjs
 ```
 
@@ -8498,7 +8570,7 @@ Expected:
 - The focused run: `ℹ tests N` (Step 3's count), `ℹ fail 0`, `ℹ cancelled 0`, and no `﹣` skip line.
 - `npm test`: `ℹ fail 0` and `ℹ cancelled 0`.
 - ESLint and `tsc` print nothing, and the build exits 0.
-- The four `grep` commands print nothing. (`refresh_token` still appears legitimately as the database column and as Spotify's grant parameter; the first grep only matches env reads. The script's grep is case-sensitive: the script itself uses `clientId` / `clientSecret`, and `SPOTIFY_CLIENT_ID` does not match `client_id`.)
+- The five `grep` commands print nothing. (`refresh_token` still appears legitimately as the database column and as Spotify's grant parameter; the first grep only matches env reads. The script's grep is case-sensitive: the script itself uses `clientId` / `clientSecret`, and `SPOTIFY_CLIENT_ID` does not match `client_id`.)
 
 - [ ] **Step 6: Commit; Kevin deploys**
 
