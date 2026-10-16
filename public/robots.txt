@@ -4,4 +4,4 @@ Allow: /
 # crawlers need to fetch those to see the content.
 Disallow: /api/cron/
 
-Sitemap: https://kevinwong.co/sitemap.xml
+Sitemap: https://www.kevinwong.co/sitemap.xml

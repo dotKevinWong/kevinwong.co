@@ -2,7 +2,7 @@ import type { GetServerSideProps } from "next";
 import { PROJECTS } from "../components/projects/data";
 import { getPosts } from "../lib/mdx";
 
-const SITE_URL = "https://kevinwong.co";
+const SITE_URL = "https://www.kevinwong.co";
 
 // The sidebar's pages, in its order.
 const PAGES = ["/", "/stats", "/bookshelf", "/snapshots", "/projects", "/blog", "/contact"];

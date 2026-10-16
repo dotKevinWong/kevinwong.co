@@ -1,7 +1,7 @@
 import Head from "next/head"
 import { useRouter } from "next/router"
 
-const SITE_URL = "https://kevinwong.co"
+const SITE_URL = "https://www.kevinwong.co"
 const DEFAULT_DESC = "Developer, Creator, and Entrepreneur"
 // public/og.jpg, the only share image whose size is known (1920x1080).
 const DEFAULT_OG_IMAGE = `${SITE_URL}/og.jpg`
