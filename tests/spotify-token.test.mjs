@@ -2,9 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as tokens from "../lib/spotify-token.js";
 
+// Accepts both of pg's call forms: query(text, values) and query({ text, values, query_timeout }).
 function fakeDb(result = { rows: [], rowCount: 0 }) {
   const calls = [];
-  return { calls, query: async (text, params) => { calls.push({ text, params }); return result; } };
+  const query = async (textOrConfig, values) => {
+    const config = typeof textOrConfig === "string" ? { text: textOrConfig, values } : textOrConfig;
+    calls.push({ text: config.text, params: config.values, queryTimeout: config.query_timeout });
+    return result;
+  };
+  return { calls, query };
 }
 
 test("constants", () => {
@@ -26,6 +32,15 @@ test("every statement is scoped to provider spotify", async () => {
     assert.match(text, /provider/);
     assert.equal(params[0], "spotify");
   }
+});
+
+test("the three statements a Spotify refresh runs pass query_timeout: 4500", async () => {
+  assert.equal(tokens.STORE_QUERY_TIMEOUT_MS, 4_500);
+  const db = fakeDb({ rows: [], rowCount: 1 });
+  await tokens.readSpotifyRow(db);
+  await tokens.markSpotifyDead("invalid_grant", "rt", db);
+  await tokens.storeRotatedRefreshToken("rt", "rt-2", db);
+  assert.deepEqual(db.calls.map((call) => call.queryTimeout), [4500, 4500, 4500]);
 });
 
 test("readSpotifyStatusRow never selects a token column", async () => {
