@@ -1,5 +1,3 @@
-import { MDXProvider } from '@mdx-js/react';
-import { Sidebar } from '../../components/Sidebar';
 import {
     Avatar,
     Box,
@@ -11,23 +9,27 @@ import {
     Image,
     VStack,
     Stack,
+    Link as ChakraLink,
+    LinkProps,
     List,
     ListItem,
     Table,
     Separator,
-    useBreakpointValue,
     AvatarGroup
 } from '@chakra-ui/react';
+import type { GetStaticPropsContext, InferGetStaticPropsType } from 'next';
 import Link from 'next/link';
-import React from "react";
 import { serialize } from 'next-mdx-remote/serialize';
-import { MDXRemote } from 'next-mdx-remote';
+import { MDXRemote, type MDXRemoteProps } from 'next-mdx-remote';
 import { getPost, getPosts } from '../../lib/mdx';
-import formatter from '../../lib/formatter';
-import { Navbar } from '../../components/Navbar';
+import { shortUTCDate } from '../../lib/formatter';
 import { Meta } from '../../components/Meta';
+import { PageShell } from '../../components/PageShell';
 import Emoji from '../../components/Emoji';
 
+// Cast because the MDX component-map type rejects Chakra's compound components
+// (Avatar, List and Table are plain objects of parts), even though MDX resolves
+// <Table.Root> and the like through them at runtime.
 const components = {
     Avatar,
     Box,
@@ -39,20 +41,25 @@ const components = {
     Image,
     VStack,
     Stack,
-    Link,
+    // Posts use <Link> for external links. A bare next/link <a> inherits the
+    // body text color from Chakra's reset, so it wouldn't look like a link.
+    Link: (props: LinkProps) => <ChakraLink color="blue.500" rel="noopener noreferrer" {...props} />,
     List,
     ListItem,
     Table,
     Separator
-};
+} as unknown as MDXRemoteProps['components'];
 
-function Post({ source, meta }: any) {
+type PostProps = InferGetStaticPropsType<typeof getStaticProps>;
+
+function Post({ source, meta }: PostProps) {
     return (
         <Box
             as="section"
             flex="1"
             overflow="auto"
             maxW="4xl"
+            marginLeft={{ lg: 4 }}
         >
             <Box as="section" flex="1" p="6" marginTop="2" overflow="auto" maxW="5xl">
                 <Button asChild colorPalette="blue" marginBottom="4">
@@ -63,16 +70,16 @@ function Post({ source, meta }: any) {
                 </Button>
                 <VStack align="left" gap={8}>
 
-                    <Heading>{meta.title}</Heading>
+                    <Heading as="h1">{meta.title}</Heading>
                     <HStack>
                         <AvatarGroup>
                             <Avatar.Root size="sm">
                                 <Avatar.Image src={meta.author_avatar} alt={meta.author} />
-                                <Avatar.Fallback>DB</Avatar.Fallback>
+                                <Avatar.Fallback name={meta.author} />
                             </Avatar.Root>
                         </AvatarGroup>
                         <Text>{meta.author} / </Text>
-                        <Text>{formatter.shortUTCDate(meta.date)}</Text>
+                        <Text>{shortUTCDate(meta.date)}</Text>
                     </HStack>
                     <MDXRemote {...source} components={components} />
                 </VStack>
@@ -81,46 +88,20 @@ function Post({ source, meta }: any) {
     )
 }
 
-export default function Slug({ source, meta }: any) {
-    const isDesktop = useBreakpointValue({ base: false, lg: true })
-
+export default function Slug({ source, meta }: PostProps) {
     return (
         <>
             <Meta title={`${meta.title} • Kevin Wong`} ogImage={meta.og_image} ogDesc={meta.excerpt} />
-            {isDesktop ? (
-                <Box height="100vh" overflow="hidden" position="relative">
-                    <Flex h="full" id="app-container">
-                        <Sidebar />
-                        <Box
-                            as="section"
-                            flex="1"
-                            overflow="auto"
-                            marginLeft={4}
-                        >
-                            <Post source={source} meta={meta} />
-                        </Box>
-                    </Flex>
-                </Box>
-            ) : (
-                <Flex
-                    as="section"
-                    direction={{ base: "column", lg: "row" }}
-                    height="100vh"
-                    bg="bg-canvas"
-                    overflowY="auto"
-                >
-                    <Navbar />
-                    <Post source={source} meta={meta} />
-                </Flex>
-            )}
+            <PageShell>
+                <Post source={source} meta={meta} />
+            </PageShell>
         </>
     );
 };
 
-export async function getStaticProps({ params: { id } }: any) {
-    // MDX text - can be from a local file, database, anywhere
-    // const source = 'Some **mdx** text, with a component <Heading>Bruh</Heading> <Image src="/me.jpg" width="200px" height="200px"/>';
-    const { content, meta } = await getPost(id);
+// getStaticPaths lists every post with fallback: false, so params is always set.
+export async function getStaticProps({ params }: GetStaticPropsContext<{ id: string }>) {
+    const { content, meta } = await getPost(params!.id);
 
     const mdxSource = await serialize(content);
     return { props: { source: mdxSource, meta: meta } };

@@ -1,5 +1,4 @@
 import { Box, Button, CloseButton, Drawer, Flex, Heading, Portal } from '@chakra-ui/react'
-import * as React from 'react'
 import {
   FiMenu,
 } from 'react-icons/fi'
@@ -15,7 +14,7 @@ export const Navbar = () => {
       py="4"
       px={{ base: '4', md: '8' }}
       bg={{ base: 'gray.100', _dark: '#111111'}}
-      boxShadow={{ base: 'sm', _dark: 'sm-dark' }}
+      boxShadow="sm"
     >
       <Flex justify="space-between" align="center">
         <Heading size="2xl" fontWeight="bold"><Link href="/">KEVIN WONG</Link></Heading>
@@ -29,7 +28,7 @@ export const Navbar = () => {
             <Drawer.Backdrop />
             <Drawer.Positioner>
               <Drawer.Content>
-                <Drawer.CloseTrigger asChild pos="bottom">
+                <Drawer.CloseTrigger asChild>
                   <CloseButton />
                 </Drawer.CloseTrigger>
                 <Sidebar inDrawer />

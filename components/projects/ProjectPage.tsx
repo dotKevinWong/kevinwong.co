@@ -1,6 +1,5 @@
 import { Box, Button } from "@chakra-ui/react";
 import Link from "next/link";
-import React from "react";
 import { LuChevronLeft } from "react-icons/lu";
 import { Meta } from "../Meta";
 import { PageShell } from "../PageShell";

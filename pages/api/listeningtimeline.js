@@ -5,7 +5,7 @@ export default async function handler(_, res) {
 
   try {
     response = await getListeningTimeline();
-  } catch (error) {
+  } catch {
     return res.status(200).json({ is_working: false });
   }
 

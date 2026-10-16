@@ -102,6 +102,11 @@
   background: var(--mac-wallpaper);
 }
 
+/* Only ever focused by script, briefly, when the last window closes; nothing to ring. */
+.desktop:focus-visible {
+  outline: none;
+}
+
 /* Zero-specificity resets so component classes always win. */
 :where(.theme) button {
   font: inherit;
@@ -279,6 +284,12 @@
   box-shadow: 0 0 0 0.5px var(--mac-window-outline), var(--mac-shadow-active);
 }
 
+/* Handed focus when the window in front closes (the only time a window root is
+   focusable): ring it without losing its shadow. */
+.theme .window[data-focus-handoff]:focus-visible {
+  box-shadow: 0 0 0 3px var(--mac-focus), var(--mac-shadow-active);
+}
+
 .windowVibrant {
   background: transparent;
 }
@@ -308,6 +319,8 @@
   background: var(--mac-titlebar-bg);
   border-bottom: 1px solid var(--mac-separator);
   user-select: none;
+  /* A drag region: without this a touch drag pans the page and cancels the pointer. */
+  touch-action: none;
 }
 
 .windowInactive .titlebar {
@@ -540,6 +553,8 @@
   padding: 0 10px 0 8px;
   border-bottom: 1px solid var(--mac-separator);
   user-select: none;
+  /* A drag region, like .titlebar. (.finderSidebar is one too, but it has to scroll.) */
+  touch-action: none;
 }
 
 .finderTitle {
@@ -1347,6 +1362,11 @@
   overflow: auto;
 }
 
+/* Focusable only so a tap on the content lets the keyboard scroll it; nothing to ring. */
+.theme .appScreenBody:focus-visible {
+  box-shadow: none;
+}
+
 .appScreen.toneTerminal .appScreenBack {
   color: #6fa3d8;
 }
@@ -1412,6 +1432,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* .theme itself too: the full-screen app's root carries it and the zoom-in animation. */
+  .theme,
   .theme *,
   .theme *::before,
   .theme *::after {

@@ -1,4 +1,3 @@
-import React from "react";
 import { LuSearch, LuWifi } from "react-icons/lu";
 import styles from "./Desktop.module.css";
 import { useMinuteClock } from "./hooks";

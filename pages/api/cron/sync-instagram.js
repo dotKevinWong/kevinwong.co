@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { syncInstagram } from "../../../lib/instagram-sync";
 import { InstagramReauthRequiredError } from "../../../lib/instagram";
 
@@ -14,6 +15,15 @@ export const config = {
 // headroom inside maxDuration for the one already in flight to finish and for
 // the summary to be returned. Anything not reached is picked up tomorrow.
 const TIME_BUDGET_MS = 150_000;
+
+// Constant-time, so response timing reveals nothing about how much of a guess
+// matched. Hashing first gives both sides the same length, which
+// timingSafeEqual requires (it throws otherwise).
+function isAuthorized(authorization, secret) {
+  const digest = (value) => createHash("sha256").update(value).digest();
+  const presented = typeof authorization === "string" ? authorization : "";
+  return timingSafeEqual(digest(presented), digest(`Bearer ${secret}`));
+}
 
 export default async function handler(req, res) {
   // A cached response is invisible in Vercel's logs and can stop a cron from
@@ -37,7 +47,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "CRON_SECRET is not configured" });
   }
 
-  if (req.headers.authorization !== `Bearer ${secret}`) {
+  if (!isAuthorized(req.headers.authorization, secret)) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 

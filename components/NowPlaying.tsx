@@ -59,6 +59,7 @@ const MarqueeText = ({ children, href }: { children: React.ReactNode; href?: str
         as="a"
         href={href}
         target="_blank"
+        rel="noopener noreferrer"
         style={{
           display: "inline-block",
           ["--marquee-offset" as string]: `${offset}px`,
@@ -73,7 +74,7 @@ const MarqueeText = ({ children, href }: { children: React.ReactNode; href?: str
 
 type NowPlayingResponse = {
   album?: string;
-  albumImageUrl?: string;
+  albumImageUrl?: string | null;
   artist?: string;
   artistUrl?: string;
   isPlaying?: boolean;
@@ -93,12 +94,15 @@ const formatDuration = (ms: number) => {
 };
 
 export const NowPlaying = ({ collapsed = false }: { collapsed?: boolean }) => {
-  const { data } = useSWR<NowPlayingResponse>("/api/nowplaying", fetcher, {
+  const { data: response, error } = useSWR<NowPlayingResponse>("/api/nowplaying", fetcher, {
     refreshInterval: 15000,
     revalidateOnFocus: true,
     revalidateOnReconnect: true,
     dedupingInterval: 1000,
   });
+  // SWR keeps the last good response when a poll fails. Showing it would leave
+  // an old song "playing", progress bar ticking, so a failed poll reads as Not Playing.
+  const data = error ? undefined : response;
   const [displayProgressMs, setDisplayProgressMs] = React.useState(0);
 
   React.useEffect(() => {
@@ -141,13 +145,14 @@ export const NowPlaying = ({ collapsed = false }: { collapsed?: boolean }) => {
     return (
       <Flex justify="center">
         <Tooltip content={tooltipLabel} positioning={{ placement: 'right' }}>
-          <Link as="a" href={data?.songUrl || undefined} target="_blank">
+          <Link as="a" href={data?.songUrl || undefined} target="_blank" rel="noopener noreferrer">
             {data?.songUrl ? (
               <Image
                 width="40px"
                 height="40px"
                 borderRadius="md"
-                src={data.albumImageUrl}
+                loading="lazy"
+                src={data.albumImageUrl || "/album.png"}
                 alt={data.album}
               />
             ) : (
@@ -177,9 +182,9 @@ export const NowPlaying = ({ collapsed = false }: { collapsed?: boolean }) => {
         fontSize="sm"
       >
         <VStack align="left" width="100%">
-        <Text color="black.800" fontWeight="extrabold">{data?.songUrl ? "Spotify – Now Playing" : "Spotify"}</Text>
+        <Text fontWeight="extrabold">{data?.songUrl ? "Spotify – Now Playing" : "Spotify"}</Text>
         <HStack gap={2} color={{ base: 'gray.500', _dark: 'gray.400' }}>
-          <Link as="a" href={data?.albumUrl} target="_blank"><Image width="64px" mr="2" src={data?.songUrl ? data?.albumImageUrl : "/album.png"} alt={data?.songUrl ? data?.album : "Not Playing"}/></Link>
+          <Link as="a" href={data?.albumUrl} target="_blank" rel="noopener noreferrer"><Image width="64px" mr="2" loading="lazy" src={(data?.songUrl && data.albumImageUrl) || "/album.png"} alt={data?.songUrl ? data?.album : "Not Playing"}/></Link>
           <VStack align="left" gap={1} overflow="hidden" maxW="calc(100% - 80px)">
             {data?.songUrl ? (
               <>

@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+# /snapshots, /bookshelf and /stats render from the other /api/* routes, and
+# crawlers need to fetch those to see the content.
+Disallow: /api/cron/
+
+Sitemap: https://www.kevinwong.co/sitemap.xml

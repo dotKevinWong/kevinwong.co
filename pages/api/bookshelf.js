@@ -142,11 +142,11 @@ export default async function handler(req, res) {
       sourceTitle: feed.title ?? "Goodreads",
     });
   } catch (error) {
-    return res.status(500).json({
-      configured: true,
-      books: [],
-      message: "Unable to load Goodreads feed.",
-      error: String(error?.message || error),
-    });
+    // rss-parser passes network, TLS and XML errors through verbatim, naming
+    // hosts and addresses, so they go to the logs rather than the response. A
+    // 502 (not a success-shaped empty list) lets the page show an error instead
+    // of "No books found yet".
+    console.error("[api/bookshelf]", error);
+    return res.status(502).json({ error: "Failed to load bookshelf" });
   }
 }

@@ -1,12 +1,10 @@
-import { Sidebar } from "../components/Sidebar";
-import { Box, Flex, Heading, Text, useBreakpointValue, VStack } from "@chakra-ui/react";
-import React from "react";
-import { Navbar } from "../components/Navbar";
+import { Box, Heading, Text, VStack } from "@chakra-ui/react";
 import { Meta } from "../components/Meta";
+import { PageShell } from "../components/PageShell";
 
 const Page = () => {
     return (
-        <Box as="section" position="relative" w="100%" h="100%" p="6" marginTop="2">
+        <Box as="section" position="relative" w="100%" p="6" marginTop="2">
         <VStack align="left">
             <Heading>404 | Page not found</Heading>
             <Text>The page you were looking for could not be found.</Text>
@@ -20,42 +18,12 @@ const Page = () => {
 };
 
 export default function Error() {
-    const isDesktop = useBreakpointValue({ base: false, lg: true })
-
     return (
-        <div>
+        <>
             <Meta title="404: ERROR NOT FOUND • Kevin Wong" />
-            {isDesktop ? (
-                <Box height="100vh" overflow="hidden" position="relative">
-                    <Flex h="full" id="app-container">
-                        <Sidebar />
-                        <Box
-                            as="section"
-                            flex="1"
-                            overflow="auto"
-                        >
-                            <Box
-                                as="section"
-                                flex="1"
-                                overflow="auto"
-                            >
-                                <Page />
-                            </Box>
-                        </Box>
-                    </Flex>
-                </Box>
-            ) : (
-                <Flex
-                    as="section"
-                    direction={{ base: "column", lg: "row" }}
-                    height="100vh"
-                    bg="bg-canvas"
-                    overflowY="auto"
-                >
-                    <Navbar />
-                    <Page />
-                </Flex>
-            )}
-        </div>
+            <PageShell>
+                <Page />
+            </PageShell>
+        </>
     );
 }

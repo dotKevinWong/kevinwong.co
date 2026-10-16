@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AspectRatio, Badge, Box, Flex, IconButton, Image, Link, Spinner, Text, chakra } from "@chakra-ui/react"
 import { FiChevronLeft, FiChevronRight, FiExternalLink, FiInstagram } from "react-icons/fi"
 
-const INSTAGRAM_MIN_RATIO = 4 / 5
+// Instagram's feed range, from 3:4 portrait to 1.91:1 landscape. lib/image-resize.js
+// keeps 3:4 photos whole, so the frame shouldn't crop them to 4:5.
+const INSTAGRAM_MIN_RATIO = 3 / 4
 const INSTAGRAM_MAX_RATIO = 1.91
 
 interface SnapshotMedia {
@@ -136,7 +138,7 @@ export const PhotoPost = (props: PhotoPostProps) => {
 
     return (
         <Box p="5" maxW="320px" w={{ base: "100%", sm: "320px" }} borderWidth="1px" minH="320px" rounded={{ sm: "lg" }}
-            shadow={{ md: "base" }} bg={{ base: "gray.100", _dark: "#111111" }}>
+            shadow={{ md: "sm" }} bg={{ base: "gray.100", _dark: "#111111" }}>
             <Box position="relative">
                 <AspectRatio ratio={activeRatio} maxH="400px">
                     {activeMedia ? (

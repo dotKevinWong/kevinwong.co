@@ -3,14 +3,17 @@
  * Run the Instagram sync locally — for the initial backfill and for testing
  * before the cron is enabled.
  *
- *   npm run instagram:sync -- --dry-run           # fetch and report, write nothing
+ *   npm run instagram:sync -- --dry-run           # fetch and report, upload/insert nothing
  *   npm run instagram:sync                        # normal run (same bounds as cron)
  *   npm run instagram:sync -- --max-uploads=200   # drain a backlog in one go
  *   npm run instagram:sync -- --probe-caption     # re-test whether caption is readable
  *
  * A dry run still calls the Instagram API (and so needs a valid stored token)
- * and reads the database, but downloads and writes nothing. It makes one Blob
- * head() request to confirm the store is reachable.
+ * and reads the database, but downloads no media and writes nothing to Blob or
+ * the posts tables. It makes one Blob head() request to confirm the store is
+ * reachable. Like every run, though, it refreshes the stored Instagram token
+ * when one is due, or marks it dead on a confirmed error 190 — that refresh is
+ * what keeps the token alive, so no run skips it (see syncInstagram).
  */
 
 import { loadEnvFiles } from "./load-env.mjs";
@@ -38,18 +41,57 @@ const value = (name, fallback) => {
   return Math.floor(parsed);
 };
 
-const dryRun = flag("dry-run");
-
-if (flag("help") || flag("h")) {
-  console.log(`
+const USAGE = `
 Usage: npm run instagram:sync -- [options]
 
-  --dry-run            Fetch and report without writing to Blob or Postgres
+  --dry-run            Fetch and report without uploading to Blob or inserting
+                       posts (the stored token is still refreshed if one is due)
   --max-posts=N        How many recent posts to read from the API (default 50)
   --max-uploads=N      Cap media uploads this run (default 25; backlogs resume later)
   --probe-caption      Test whether this token can read the caption field
   --help               Show this message
-`);
+`;
+
+// A mistyped option after the `--` (--dryrun, say) must not quietly fall
+// through to a real run against production, so anything unrecognised stops here.
+const unknown = args.filter(
+  (a) => !/^--(dry-run|probe-caption|help|h|max-posts=.*|max-uploads=.*)$/.test(a)
+);
+if (unknown.length > 0) {
+  console.error(`Unknown argument: ${unknown.join(" ")}\n${USAGE}`);
+  process.exit(1);
+}
+
+// Forget the `--` and npm keeps every option for itself: argv stays empty, npm
+// only warns "Unknown cli config", and each option lands in the env instead as
+// npm_config_<name> (dashes become underscores). The check above never sees
+// those, so --probe-caption or --dryrun would otherwise become a real,
+// uploading sync. Refuse this script's options (and their undashed spellings)
+// when they arrive that way. The correctly spelled --dry-run is the exception,
+// honoured below; --help and -h never get this far, as npm answers them itself.
+const swallowed = Object.keys(process.env).filter((key) =>
+  /^npm_config_(dryrun|probe_?caption|max_?posts|max_?uploads)$/.test(key)
+);
+if (swallowed.length > 0) {
+  const options = swallowed.map((key) => {
+    const name = `--${key.slice("npm_config_".length).replaceAll("_", "-")}`;
+    const setting = process.env[key];
+    return setting === "true" || setting === "" ? name : `${name}=${setting}`;
+  });
+  console.error(
+    `Put \`--\` before script options; npm kept these for itself: ${options.join(" ")}\n${USAGE}`
+  );
+  process.exit(1);
+}
+
+// `npm run instagram:sync --dry-run`, without the `--`, never reaches argv: npm
+// takes --dry-run as its own config and only sets npm_config_dry_run. Honour
+// that too, since the alternative is a real run the caller did not ask for.
+const npmDryRun = process.env.npm_config_dry_run === "true" && !flag("dry-run");
+const dryRun = flag("dry-run") || npmDryRun;
+
+if (flag("help") || flag("h")) {
+  console.log(USAGE);
   process.exit(0);
 }
 
@@ -75,6 +117,10 @@ if (flag("probe-caption")) {
   process.exit(0);
 }
 
+if (npmDryRun) {
+  console.log("npm took --dry-run as its own flag (no `--` before it); treating this as a dry run.");
+}
+
 const { syncInstagram } = await import("../lib/instagram-sync.js");
 
 const summary = await syncInstagram({
@@ -83,7 +129,7 @@ const summary = await syncInstagram({
   maxUploads: value("max-uploads", dryRun ? 1000 : 25),
 });
 
-console.log(`\n${dryRun ? "DRY RUN — nothing was written" : "Sync complete"}`);
+console.log(`\n${dryRun ? "DRY RUN — nothing was uploaded or inserted" : "Sync complete"}`);
 console.log(`  start date:        ${summary.startDate.slice(0, 10)} (older posts are ignored)`);
 console.log(`  fetched from API:  ${summary.fetched}`);
 console.log(`  already in db:     ${summary.alreadyPresent}`);

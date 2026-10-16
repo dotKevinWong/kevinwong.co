@@ -67,7 +67,7 @@ const formatDate = (dateValue: string | null) => {
 const ratingLabel = (rating: number) => (rating ? `${rating}/5` : "Not rated");
 
 export const BookshelfPage = () => {
-  const { data } = useSWR<BookshelfResponse>("/api/bookshelf?limit=all", fetcher, {
+  const { data, error } = useSWR<BookshelfResponse>("/api/bookshelf?limit=all", fetcher, {
     refreshInterval: 900000,
     revalidateOnFocus: true,
     revalidateOnReconnect: true,
@@ -80,7 +80,7 @@ export const BookshelfPage = () => {
     <Box as="section" flex="1" p="6" overflow="auto">
       <VStack align="stretch" gap={6}>
         <VStack align="left" gap={1}>
-          <Heading size="2xl">Bookshelf</Heading>
+          <Heading as="h1" size="2xl">Bookshelf</Heading>
           {data?.configured && data.books.length > 0 ? (
             <Text fontSize="sm" color={{ base: "gray.600", _dark: "gray.300" }}>
               Showing {data.books.length} books
@@ -88,7 +88,10 @@ export const BookshelfPage = () => {
           ) : null}
         </VStack>
 
-        {!data ? <Text>Loading bookshelf...</Text> : null}
+        {!data && !error ? <Text>Loading bookshelf...</Text> : null}
+
+        {/* After a failed refresh SWR keeps the last good shelf, so this only shows when there is none. */}
+        {!data && error ? <Text>The bookshelf is unavailable right now.</Text> : null}
 
         {data && !data.configured ? (
           <Text>
@@ -102,7 +105,9 @@ export const BookshelfPage = () => {
           ? shelves.map((shelf, shelfIndex) => (
               <Box
                 key={`shelf-${shelfIndex}`}
-                bgGradient="linear(to-b, #c38a4d, #8a5427)"
+                bgGradient="to-b"
+                gradientFrom="#c38a4d"
+                gradientTo="#8a5427"
                 borderRadius="lg"
                 border="1px solid"
                 borderColor="blackAlpha.300"

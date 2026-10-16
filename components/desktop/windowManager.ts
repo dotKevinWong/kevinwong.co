@@ -85,6 +85,14 @@ export const clampFrame = (f: Frame, b: Bounds): Frame => {
   };
 };
 
+/** The frame a zoomed window fills: everything between the menu bar and the Dock. */
+export const zoomFrame = (bounds: Bounds): Frame => ({
+  x: 0,
+  y: MENUBAR_H,
+  w: bounds.w,
+  h: Math.max(240, bounds.h - MENUBAR_H - DOCK_RESERVE),
+});
+
 export const isVisible = (w: Win) => !w.minimized && w.phase !== "minimizing" && w.phase !== "closing";
 
 const topVisible = (state: WMState, exclude?: string) => {
@@ -182,9 +190,16 @@ export const wmReducer = (state: WMState, action: WMAction): WMState => {
         index: clamp(w.index + action.delta, 0, w.history.length - 1),
       }));
     case "clamp":
+      // Zoomed windows (the ones with a restoreFrame) keep filling the desktop,
+      // and the frame they un-zoom to stays on it too.
       return {
         ...state,
-        wins: state.wins.map((w) => ({ ...w, frame: clampFrame(w.frame, action.bounds), animateFrame: false })),
+        wins: state.wins.map((w) => ({
+          ...w,
+          frame: w.restoreFrame ? zoomFrame(action.bounds) : clampFrame(w.frame, action.bounds),
+          restoreFrame: w.restoreFrame && clampFrame(w.restoreFrame, action.bounds),
+          animateFrame: false,
+        })),
       };
   }
 };
@@ -212,11 +227,3 @@ export const defaultFrame = (app: AppId, bounds: Bounds, openCount: number): Fra
     bounds,
   );
 };
-
-/** The frame a zoomed window fills: everything between the menu bar and the Dock. */
-export const zoomFrame = (bounds: Bounds): Frame => ({
-  x: 0,
-  y: MENUBAR_H,
-  w: bounds.w,
-  h: Math.max(240, bounds.h - MENUBAR_H - DOCK_RESERVE),
-});

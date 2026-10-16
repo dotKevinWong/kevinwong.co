@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Chart, BarController, LinearScale, CategoryScale, registerables } from 'chart.js'
 import useSWR from "swr";
 import fetcher from "../lib/fetcher";
