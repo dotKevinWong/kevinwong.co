@@ -142,3 +142,22 @@ test("capJson's preview never ends in half an emoji", () => {
   assert.equal(out.truncated, true);
   assert.ok(out.preview.isWellFormed());
 });
+
+test("redact scrubs short secrets under a sensitive key, in objects and in JSON text", () => {
+  const clientSecret = "0123456789abcdef0123456789abcdef";
+  const sessionToken = "abcdefghijklmnopqrstuvwxyz012345";
+  assert.equal(redact(`{"client_secret":"${clientSecret}"}`), '{"client_secret":"[redacted]"}');
+  assert.deepEqual(redact({ client_secret: clientSecret }), { client_secret: "[redacted]" });
+  assert.deepEqual(redact({ session: { token: sessionToken } }), { session: { token: "[redacted]" } });
+  assert.equal(
+    redact(JSON.stringify({ session: { token: sessionToken } })),
+    '{"session":{"token":"[redacted]"}}'
+  );
+  assert.equal(redact('{"authorization":"Basic YWRtaW46cGFzc3dvcmQ="}'), '{"authorization":"[redacted]"}');
+});
+
+test("redact leaves an outcome code under a code key alone", () => {
+  const outcome = { code: "denied", reason: "access_denied" };
+  assert.deepEqual(redact(outcome), outcome);
+  assert.equal(redact('{"code":"wrong_account"}'), '{"code":"wrong_account"}');
+});
