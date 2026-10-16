@@ -9,6 +9,8 @@
     "lint": "eslint .",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --test-concurrency=1 \"tests/**/*.test.mjs\"",
     "test:integration": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --test-concurrency=1 \"tests/integration/**/*.test.mjs\"",
+    "db:apply": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/db-apply.mjs",
+    "db:test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-db.mjs",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "spotify:reauth": "node scripts/spotify-reauth.mjs",
     "instagram:token": "node scripts/instagram-token.mjs",
