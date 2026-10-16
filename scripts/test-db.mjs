@@ -77,7 +77,8 @@ export function assertResettable(connectionString) {
     throw new Error(`Refusing to reset ${describeTarget(connectionString)}: not a local database`);
   }
   const url = new URL(connectionString);
-  const port = Number(url.port || 5432);
+  // pg lets a port query parameter replace the URL's port, so it is read first.
+  const port = Number(url.searchParams.get("port") || url.port || 5432);
   if (OTHER_PROJECT_PORTS.has(port)) {
     throw new Error(`Refusing to reset ${describeTarget(connectionString)}: port ${port} belongs to another project`);
   }

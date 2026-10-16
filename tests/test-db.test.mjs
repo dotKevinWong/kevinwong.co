@@ -139,6 +139,10 @@ test("assertResettable refuses the ports that belong to other projects", () => {
       new RegExp(`port ${port} belongs to another project`)
     );
   }
+  assert.throws(
+    () => assertResettable("postgres://postgres:pw@127.0.0.1:55432/kw_test?port=5432"),
+    /port 5432 belongs to another project/
+  );
   assert.equal(assertResettable("postgres://postgres:pw@127.0.0.1:55432/kw_test"), "kw_test");
 });
 
