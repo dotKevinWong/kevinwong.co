@@ -75,6 +75,42 @@ describe("Instagram token compare-and-swap (integration)", { skip: db.skip }, ()
     assert.ok(Date.now() - row.refreshed_at.getTime() < 60_000);
   });
 
+  test("a refresh moves expires_at to the expiry Meta returned", async (t) => {
+    await seedDue("T1"); // 10 days left, refreshed 26 hours ago
+    const seeded = await tokenRow();
+    const expiresIn = 50 * DAY; // neither the seed's 10 days nor the 60 that `refreshed` returns
+    stubFetch(t, { [REFRESH]: () => Response.json({ access_token: "T1b", token_type: "bearer", expires_in: expiresIn }) });
+    t.mock.method(console, "log", () => {});
+    assert.equal(await instagram.ensureFreshToken(), "T1b");
+    const row = await tokenRow();
+    assert.equal(row.access_token, "T1b");
+    assert.ok(row.expires_at > seeded.expires_at);
+    assert.ok(Math.abs(row.expires_at.getTime() - (Date.now() + expiresIn * 1000)) < 60_000);
+    assert.ok(row.refreshed_at > seeded.refreshed_at);
+    assert.ok(Date.now() - row.refreshed_at.getTime() < 60_000);
+  });
+
+  test("a refresh that returns the same token string still moves the expiry", async (t) => {
+    await seedDue("T1");
+    // As after a dashboard seed, so the assertion below proves the refresh clears the flag.
+    await db.pool.query(`update integration_tokens set expires_at_is_assumed = true where provider = 'instagram'`);
+    const seeded = await tokenRow();
+    stubFetch(t, { [REFRESH]: () => refreshed("T1") });
+    const log = t.mock.method(console, "log", () => {});
+    const warn = t.mock.method(console, "warn", () => {});
+    assert.equal(await instagram.ensureFreshToken(), "T1");
+    const row = await tokenRow();
+    assert.equal(row.access_token, "T1");
+    assert.equal(row.dead_reason, null);
+    assert.equal(row.expires_at_is_assumed, false);
+    assert.ok(row.expires_at > seeded.expires_at);
+    assert.ok(Math.abs(row.expires_at.getTime() - (Date.now() + 5_184_000_000)) < 60_000);
+    assert.ok(row.refreshed_at > seeded.refreshed_at);
+    assert.ok(Date.now() - row.refreshed_at.getTime() < 60_000);
+    assert.equal(log.mock.callCount(), 1); // "Token refreshed"
+    assert.equal(warn.mock.callCount(), 0); // not the lost-swap warning
+  });
+
   test("a refresh that races a reseed does not overwrite the reseeded token", async (t) => {
     await seedDue("T1");
     stubFetch(t, { [REFRESH]: async () => { await reseed("T2"); return refreshed("T1b"); } });
