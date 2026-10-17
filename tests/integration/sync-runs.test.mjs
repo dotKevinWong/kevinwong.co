@@ -108,6 +108,26 @@ describe("sync-runs (integration)", { skip: db.skip }, () => {
     assert.equal((await row(young)).status, "running");
   });
 
+  test("startRun marks a running row just over 15 minutes old abandoned", async () => {
+    const stale = await insertRun({ status: "running", ago: "16 minutes" });
+    await start();
+    assert.equal((await row(stale)).status, "abandoned");
+  });
+
+  test("startRun leaves finished rows older than 15 minutes alone", async () => {
+    const before = [];
+    for (const status of ["ok", "partial", "failed", "reauth_required", "skipped"]) {
+      const id = await insertRun({ status, ago: "20 minutes" });
+      before.push({ id, status, finishedAt: (await row(id)).finished_at.getTime() });
+    }
+    await start();
+    for (const { id, status, finishedAt } of before) {
+      const r = await row(id);
+      assert.equal(r.status, status);
+      assert.equal(r.finished_at.getTime(), finishedAt);
+    }
+  });
+
   test("a run swept as abandoned still records its real outcome when it finishes", async () => {
     const id = await insertRun({ status: "running", ago: "20 minutes" });
     await start();
@@ -122,6 +142,20 @@ describe("sync-runs (integration)", { skip: db.skip }, () => {
     await insertRun({ uploads: 500, dryRun: true, ago: "1 day" });
     await insertRun({ uploads: 40, ago: "31 days" });
     assert.equal(await uploadsInLastDays(30, pool), 107);
+  });
+
+  test("uploadsInLastDays counts a run 29 days old", async () => {
+    await insertRun({ uploads: 5, ago: "29 days" });
+    await insertRun({ uploads: 7, ago: "31 days" });
+    assert.equal(await uploadsInLastDays(30, pool), 5);
+  });
+
+  test("uploadsInLastDays counts a real run whatever its status, so a crashed run still counts", async () => {
+    await insertRun({ status: "running", uploads: 10 }); // killed mid-run, never finished
+    await insertRun({ status: "abandoned", uploads: 20 }); // swept by startRun
+    await insertRun({ status: "failed", uploads: 30 }); // e.g. UploadNotRecordedError
+    await insertRun({ status: "ok", uploads: 40 });
+    assert.equal(await uploadsInLastDays(30, pool), 100);
   });
 
   test("recentRuns returns newest first, camelCase, without the summary", async () => {

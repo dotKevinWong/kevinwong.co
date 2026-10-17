@@ -15,6 +15,7 @@ process.env.VERCEL_BLOB_RETRIES = "0";
 delete process.env.BLOB_STORE_ID;
 
 const MEDIA = "https://graph.instagram.com/v25.0/me/media";
+const REFRESH = "https://graph.instagram.com/refresh_access_token";
 // A 2x2 baseline JPEG header: probeMedia reads its size, and it is small enough to be stored without a resize.
 const JPEG = Buffer.from("ffd8ffc00011080002000203011100021101031101ffd9", "hex");
 const db = testDb();
@@ -22,17 +23,23 @@ const db = testDb();
 // test database. tests/helpers/db.mjs has already refused a remote DATABASE_URL at import.
 if (!db.skip) process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 
-// Fetch routes for one new carousel post whose `slides` image slides download from cdn.test.
-function carouselRoutes(shortcode, slides) {
+// One carousel post (the API's `item`) whose `slides` image slides download from cdn.test.
+function carouselPost(shortcode, slides, timestamp = "2026-10-01T00:00:00Z") {
   const children = Array.from({ length: slides }, (_, i) =>
     ({ id: `${shortcode}-${i}`, media_type: "IMAGE", media_url: `https://cdn.test/${shortcode}-${i}.jpg` }));
-  const post = { id: shortcode, media_type: "CAROUSEL_ALBUM", permalink: `https://www.instagram.com/p/${shortcode}/`,
-    timestamp: "2026-10-01T00:00:00Z", caption: "test", children: { data: children } };
+  const item = { id: shortcode, media_type: "CAROUSEL_ALBUM", permalink: `https://www.instagram.com/p/${shortcode}/`,
+    timestamp, caption: "test", children: { data: children } };
+  return { item, children };
+}
+// Fetch routes that list the posts, in the order given, and serve every slide as the JPEG.
+function mediaRoutes(...posts) {
   return {
-    [MEDIA]: () => Response.json({ data: [post] }),
-    ...Object.fromEntries(children.map((c) => [c.media_url, () => new Response(JPEG)])),
+    [MEDIA]: () => Response.json({ data: posts.map((p) => p.item) }),
+    ...Object.fromEntries(posts.flatMap((p) => p.children).map((c) => [c.media_url, () => new Response(JPEG)])),
   };
 }
+// Fetch routes for one new carousel post whose `slides` image slides download from cdn.test.
+const carouselRoutes = (shortcode, slides) => mediaRoutes(carouselPost(shortcode, slides));
 // Stands in for uploadToBlob(pathname, buffer, contentType).
 const fakeUpload = async (pathname, _buffer, contentType) => ({ url: `https://blob.test/${pathname}`, pathname, contentType });
 
@@ -41,9 +48,10 @@ describe("syncInstagram records its runs (integration)", { skip: db.skip }, () =
   const count = async (sql) => (await db.pool.query(sql)).rows[0].n;
   const leaseHeld = async () =>
     (await count("select count(*)::int as n from job_locks where name = 'instagram-sync' and locked_until > now()")) === 1;
-  const seedCeiling = () => db.pool.query(
+  // One finished real run that spent n uploads, `ago` before now.
+  const seedUploads = (n = 1800, ago = "2 days") => db.pool.query(
     `insert into sync_runs (job, trigger, dry_run, status, started_at, finished_at, uploads)
-     values ('instagram', 'cron', false, 'ok', now() - interval '2 days', now() - interval '2 days', 1800)`);
+     values ('instagram', 'cron', false, 'ok', now() - $2::interval, now() - $2::interval, $1)`, [n, ago]);
   async function hideSyncRuns(t) {
     await db.pool.query("alter table sync_runs rename to sync_runs_hidden");
     t.after(() => db.pool.query("alter table sync_runs_hidden rename to sync_runs"));
@@ -56,7 +64,11 @@ describe("syncInstagram records its runs (integration)", { skip: db.skip }, () =
 
   before(() => db.resetSchema());
   beforeEach(async () => {
-    for (const table of ["sync_runs", "job_locks", "integration_tokens"]) await db.pool.query(`delete from ${table}`);
+    // instagram_media before instagram_posts. Clearing them keeps a test that imports a post from changing
+    // what a later dry run's Blob check finds.
+    for (const table of ["instagram_media", "instagram_posts", "sync_runs", "job_locks", "integration_tokens"]) {
+      await db.pool.query(`delete from ${table}`);
+    }
     await storeToken({ accessToken: "T-sync", expiresInSeconds: 60 * 86_400 }); // fresh: no refresh request
   });
   after(async () => { await getDbPool().end(); await db.close(); });
@@ -99,7 +111,7 @@ describe("syncInstagram records its runs (integration)", { skip: db.skip }, () =
   });
 
   test("a real run stops before the lease once 30-day uploads reach 1,800", async (t) => {
-    await seedCeiling();
+    await seedUploads();
     const fetchStub = stubFetch(t, {});
     t.mock.method(console, "warn", () => {});
     const summary = await syncInstagram({ trigger: "cron" });
@@ -112,8 +124,29 @@ describe("syncInstagram records its runs (integration)", { skip: db.skip }, () =
     assert.equal(await count("select count(*)::int as n from job_locks"), 0);
   });
 
+  test("a ceiling spent 29 days ago still stops a real run", async (t) => {
+    await seedUploads(1800, "29 days");
+    const fetchStub = stubFetch(t, {});
+    t.mock.method(console, "warn", () => {});
+    const summary = await syncInstagram({ trigger: "cron" });
+    assert.equal(summary.ceilingReached, true);
+    assert.equal(fetchStub.mock.callCount(), 0);
+  });
+
+  test("a real run near the ceiling uploads only what is left under 1,800", async (t) => {
+    await seedUploads(1798);
+    const a = carouselPost("TESTPOST5", 1, "2026-10-01T00:00:00Z"); // older, so it goes first
+    const b = carouselPost("TESTPOST6", 2, "2026-10-02T00:00:00Z");
+    stubFetch(t, mediaRoutes(b, a));
+    const upload = t.mock.fn(fakeUpload);
+    const summary = await syncInstagram({ trigger: "cron", upload });
+    assert.equal(upload.mock.callCount(), 1);
+    assert.deepEqual([summary.uploads, summary.deferred], [1, 1]);
+    assert.equal((await lastRow()).uploads, 1);
+  });
+
   test("a dry run ignores the ceiling", async (t) => {
-    await seedCeiling();
+    await seedUploads();
     stubFetch(t, { [MEDIA]: () => Response.json({ data: [] }) });
     const summary = await syncInstagram({ trigger: "panel", dryRun: true });
     assert.equal(summary.ceilingReached, undefined);
@@ -145,9 +178,14 @@ describe("syncInstagram records its runs (integration)", { skip: db.skip }, () =
   test("a recording failure does not change a dry run's result", async (t) => {
     await hideSyncRuns(t);
     const errors = t.mock.method(console, "error", () => {});
-    stubFetch(t, { [MEDIA]: () => Response.json({ data: [] }) });
+    const fetchStub = stubFetch(t, { [MEDIA]: () => Response.json({ data: [] }) });
     const summary = await syncInstagram({ trigger: "cron", dryRun: true });
     assert.equal(summary.fetched, 0);
+    // It carried on past the point where an unrecorded real run stands down.
+    assert.equal(summary.notRecorded, undefined);
+    assert.equal(summary.blob, "configured, nothing stored yet to check against");
+    assert.equal(typeof summary.resize, "string");
+    assert.equal(fetchStub.mock.callCount(), 1);
     assert.ok(errors.mock.calls.some((c) => String(c.arguments[0]).startsWith("[instagram-sync] Could not record this run")));
   });
 
@@ -160,15 +198,22 @@ describe("syncInstagram records its runs (integration)", { skip: db.skip }, () =
     assert.equal(await count("select count(*)::int as n from job_locks"), 0);
   });
 
-  test("a real run whose row cannot be written stands down and uploads nothing", async (t) => {
+  test("a real run whose row cannot be written refreshes the token, then stands down and uploads nothing", async (t) => {
+    // Due for a refresh: past the 25-hour floor and inside the 30-day window. Upserts over the beforeEach token.
+    await storeToken({ accessToken: "T-old", expiresInSeconds: 10 * 86_400 });
+    await db.pool.query("update integration_tokens set refreshed_at = now() - interval '2 days' where provider = 'instagram'");
     await hideSyncRuns(t);
     const errors = t.mock.method(console, "error", () => {});
-    const fetchStub = stubFetch(t, carouselRoutes("TESTPOST2", 1));
+    t.mock.method(console, "log", () => {}); // "[instagram] Token refreshed; now expires …"
+    const refresh = t.mock.fn(() => Response.json({ access_token: "T-new", expires_in: 5_184_000 }));
+    const fetchStub = stubFetch(t, { ...carouselRoutes("TESTPOST2", 1), [REFRESH]: refresh });
     const upload = t.mock.fn(fakeUpload);
     const summary = await syncInstagram({ trigger: "cron", upload });
     assert.equal(summary.notRecorded, true);
     assert.deepEqual(summary.skipped, [{ id: "run", reason: "run could not be recorded" }]);
-    assert.equal(fetchStub.mock.callCount(), 0);
+    assert.equal(refresh.mock.callCount(), 1); // the refresh still happened
+    assert.equal(fetchStub.mock.callCount(), 1); // and nothing else (no media fetch)
+    assert.equal((await db.pool.query("select access_token from integration_tokens")).rows[0].access_token, "T-new");
     assert.equal(upload.mock.callCount(), 0);
     assert.equal(await count("select count(*)::int as n from job_locks"), 0);
     assert.ok(errors.mock.calls.some((c) => String(c.arguments[0]).startsWith("[instagram-sync] Could not record this run")));
@@ -206,6 +251,29 @@ describe("syncInstagram records its runs (integration)", { skip: db.skip }, () =
     };
     await assert.rejects(syncInstagram({ trigger: "cli", upload }), /relation "sync_runs" does not exist/);
     assert.equal(calls, 1); // the second slide was never uploaded
+    assert.equal(await leaseHeld(), false);
+  });
+
+  test("a run's row is final before its lease is released", async (t) => {
+    // Records, as the row leaves 'running', whether this run's lease is still held.
+    await db.pool.query("create table lease_probe (held boolean)");
+    await db.pool.query(`create function lease_probe_fn() returns trigger language plpgsql as $$
+      begin
+        if old.status = 'running' and new.status <> 'running' then
+          insert into lease_probe values (exists (select 1 from job_locks
+            where name = 'instagram-sync' and locked_until >= clock_timestamp()));
+        end if;
+        return new;
+      end $$`);
+    await db.pool.query("create trigger lease_probe_trg before update on sync_runs for each row execute function lease_probe_fn()");
+    t.after(async () => {
+      await db.pool.query("drop trigger if exists lease_probe_trg on sync_runs");
+      await db.pool.query("drop function if exists lease_probe_fn()");
+      await db.pool.query("drop table if exists lease_probe");
+    });
+    stubFetch(t, { [MEDIA]: () => Response.json({ data: [] }) });
+    await syncInstagram({ trigger: "cron" });
+    assert.deepEqual((await db.pool.query("select held from lease_probe")).rows, [{ held: true }]);
     assert.equal(await leaseHeld(), false);
   });
 });
