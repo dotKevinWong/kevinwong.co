@@ -1,0 +1,12 @@
+-- Deletes the spotify row of integration_tokens, which has to go before 005
+-- is undone: access_token can't be NOT NULL again while that row holds none
+-- (see undo-005-006.sql).
+--
+-- This throws away the Spotify refresh token stored in Postgres, so once the
+-- refresh_token env var is gone, Spotify has to be re-authorized (README,
+-- *Spotify token*). Until the first reconnect there is no spotify row, and
+-- this deletes nothing.
+--
+-- Not a migration: setup and the test database apply only sql/'s numbered
+-- files. Run it with npm run db:apply (README, *Undoing 005 and 006*).
+delete from integration_tokens where provider = 'spotify';

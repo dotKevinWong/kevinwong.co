@@ -57,10 +57,10 @@ where the app can refresh, rotate or replace them without a redeploy.
 
 ### 🗄️ Database migrations
 
-Schema changes live in [`sql/`](sql/), numbered and applied in filename order. Each file only adds things and
-is safe to run twice. Nothing records which files have been applied, so each new one is applied by hand, once,
-**before** the code that uses it deploys: after merging into `main`, before `git push` (the push deploys). The
-currently deployed code ignores what it adds.
+Schema changes live in [`sql/`](sql/), numbered and applied in filename order. Each file is safe to run twice.
+Nothing records which files have been applied, so each new one is applied by hand, once, **before** the code
+that uses it deploys: after merging into `main`, before `git push` (the push deploys). The currently deployed
+code ignores what it adds.
 
 | File | Adds | Needed by |
 | --- | --- | --- |
@@ -75,11 +75,12 @@ To apply one:
    `before-<file number>`, parent: the production branch, data up to now → **Create**), or take a dump from the
    project root. Docker's `postgres:18` image can dump any server up to 18. The direct (non-pooler) URL is
    worked out from `.env` and handed to Docker by name, so it is never typed, and it stays out of your shell
-   history and your Mac's process list:
+   history and your Mac's process list. The dump holds the live Instagram token, so `umask 077` makes it
+   readable by you alone; the parentheses keep that umask from outlasting the command:
    ````sh
-   mkdir -p ~/Backups
-   PGURL="$(node --env-file=.env -p 'const u = new URL(process.env.DATABASE_URL); u.hostname = u.hostname.replace(/^([^.]+)-pooler\./, "$1."); u.href')" \
-     docker run --rm -e PGURL postgres:18 sh -c 'pg_dump --format=custom --no-owner "$PGURL"' > ~/Backups/kevinwong-before-005.dump
+   ( umask 077 && mkdir -p ~/Backups &&
+     PGURL="$(node --env-file=.env -p 'const u = new URL(process.env.DATABASE_URL); u.hostname = u.hostname.replace(/^([^.]+)-pooler\./, "$1."); u.href')" \
+       docker run --rm -e PGURL postgres:18 sh -c 'pg_dump --format=custom --no-owner "$PGURL"' > ~/Backups/kevinwong-before-005.dump )
    ````
 2. Rehearse on the local test database (see *Local test database* below), which loads production's schema
    and then every migration:
@@ -99,28 +100,41 @@ To apply one:
 
 **Undoing 005 and 006.** Rolling the code back (Vercel → Deployments → the previous deployment → ⋯ →
 **Instant Rollback**) is the planned way back, and the schema normally stays: the code from before these
-migrations ignores both files. To remove them as well, back up first, then do these in order:
+migrations ignores both files. To remove them as well, back up first (step 1 above).
+
+The SQL is in two files in [`sql/undo/`](sql/undo/): [`delete-spotify-row.sql`](sql/undo/delete-spotify-row.sql)
+and [`undo-005-006.sql`](sql/undo/undo-005-006.sql). They are not migrations: setup and
+`npm run db:test -- reset` apply only the numbered files in `sql/`. Run them with `db:apply` from the project
+root, like the migrations, and not by pasting the SQL into a client: psql, with its default settings, carries
+on after a failed statement and would drop the tables anyway. In order:
 
 1. Roll the code back first. Without `sync_runs`, a real sync in the new code stands down and imports
    nothing.
-2. Then delete the `spotify` row, because `access_token` can't go back to `not null` while that row holds
+2. Look at the target. Without `--yes`, `db:apply` prints it and stops, and it must name the Neon host
+   without `-pooler`:
+   ````sh
+   npm run db:apply -- sql/undo/undo-005-006.sql
+   ````
+3. Then delete the `spotify` row, because `access_token` can't go back to `not null` while that row holds
    none. This throws away the refresh token stored in Postgres, so once the `refresh_token` env var is gone,
-   Spotify needs reconnecting once more:
-   ````sql
-   delete from integration_tokens where provider = 'spotify';
+   Spotify needs reconnecting once more. There is a `spotify` row only once Spotify has been reconnected, so
+   skip this step if it never has been:
+   ````sh
+   npm run db:apply -- --yes sql/undo/delete-spotify-row.sql
    ````
-3. Run this over the unpooled connection string (the non-pooler Neon host), not the pooled `DATABASE_URL`:
-   ````sql
-   begin;
-   set local lock_timeout = '5s';
-   alter table integration_tokens drop constraint if exists integration_tokens_has_token;
-   alter table integration_tokens alter column access_token set not null;
-   alter table integration_tokens drop column if exists refresh_token, drop column if exists authorized_at,
-     drop column if exists account_id, drop column if exists scopes;
-   commit;
-   drop table if exists sync_runs, admin_audit_log;
+4. Then undo the schema. This also drops the run history, including the uploads that the 1,800 ceiling
+   counts: if `006` goes back on within 30 days, the ceiling starts again from zero (see *Run history and the
+   upload ceiling*):
+   ````sh
+   npm run db:apply -- --yes sql/undo/undo-005-006.sql
    ````
-   Both files are safe to apply again afterwards.
+   It prints `applied sql/undo/undo-005-006.sql`. If it prints
+   `sql/undo/undo-005-006.sql: column "access_token" of relation "integration_tokens" contains null values`
+   instead (Postgres error `23502`) and exits 1, the `spotify` row is still there, and nothing was changed:
+   `db:apply` sends each file as one simple query, so Postgres stops at the failing statement and the
+   `drop table` after `commit;` never runs. Do step 3, then this step again.
+
+Both migrations are safe to apply again afterwards.
 
 **Local test database.** The tests run against a throwaway Postgres in Docker, the `kw-test-pg` container on
 `127.0.0.1:55432`. Its generated password lives only in `.env.test.local` in the project root (git-ignored), as
@@ -157,10 +171,11 @@ database can't be reached, the Spotify widgets show their empty states instead.
 
 **How the app uses it.** Each server instance caches the short-lived access token until a minute before it
 expires, and concurrent requests share one refresh. When the refresh token dies, Spotify answers
-`400 invalid_grant`, and the app marks the row dead and stops calling Spotify. Instances look at the row again
-at most once a minute, so a reconnect takes effect everywhere within a minute, with no redeploy. If Spotify
-hands back a new refresh token, it replaces the stored one only if the row still holds the token that instance
-used, so a slow instance can't overwrite a newer one.
+`400 invalid_grant`, and the app stops calling Spotify and, once a `spotify` row exists, marks it dead
+(until the first reconnect, a failed env token has no row to mark). Instances look at the row again at most
+once a minute, so a reconnect takes effect everywhere within a minute, with no redeploy. If Spotify hands back
+a new refresh token, it replaces the stored one only if the row still holds the token that instance used, so a
+slow instance can't overwrite a newer one.
 
 **Reconnecting.** The /admin panel's Reconnect button will do this from the browser once it ships. Until then,
 and as the fallback afterwards, use the script:
@@ -247,9 +262,16 @@ npm run instagram:sync -- --probe-caption
 8. After deploying, check the deployed function from outside. A dry run uploads nothing to
    Blob and writes nothing to the posts tables. Like every run, though, it refreshes the
    stored Instagram token when one is due, or marks it dead on a confirmed error `190`.
-   Look for `"blob":"ok"` and `"resize":"ok (sharp …, libvips …)"`:
+   Look for `"blob":"ok"` and `"resize":"ok (sharp …, libvips …)"`. `printf` is a shell builtin and curl
+   reads the header on stdin, so the secret never appears in a process's arguments. `read -rs` waits for you
+   to paste it and press Return, and doesn't echo it. Run that line on its own, then the `printf` line:
    ````sh
+   read -rs CRON_SECRET && export CRON_SECRET
    printf 'Authorization: Bearer %s\n' "$CRON_SECRET" | curl -sS -H @- "https://www.kevinwong.co/api/cron/sync-instagram?dryRun=1"
+   ````
+   Or, from a checkout whose `.env` holds `CRON_SECRET`, skip the `read` and let node write the header:
+   ````sh
+   node --env-file=.env -e 'process.stdout.write(`Authorization: Bearer ${process.env.CRON_SECRET}\n`)' | curl -sS -H @- "https://www.kevinwong.co/api/cron/sync-instagram?dryRun=1"
    ````
    Each run, this one included, adds a row to `sync_runs` (see *Run history and the upload
    ceiling*).
@@ -329,6 +351,9 @@ older, do it in one go locally with a higher `--max-posts`:
 ````sh
 npm run instagram:sync -- --max-posts=200 --max-uploads=500
 ````
+
+A backfill spends the same 1,800-in-30-days ceiling as the daily sync: `--max-uploads` is cut to what is left
+(see [*Run history and the upload ceiling*](#run-history-and-the-upload-ceiling)).
 
 #### Token lifetime
 
