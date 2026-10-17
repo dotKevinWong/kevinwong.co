@@ -101,7 +101,8 @@ To apply one:
 **Instant Rollback**) is the planned way back, and the schema normally stays: the code from before these
 migrations ignores both files. To remove them as well, back up first, then do these in order:
 
-1. Roll the code back first. The sync in the new code refuses to run without `sync_runs`.
+1. Roll the code back first. Without `sync_runs`, a real sync in the new code stands down and imports
+   nothing.
 2. Then delete the `spotify` row, because `access_token` can't go back to `not null` while that row holds
    none. This throws away the refresh token stored in Postgres, so once the `refresh_token` env var is gone,
    Spotify needs reconnecting once more:
