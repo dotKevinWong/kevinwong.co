@@ -61,6 +61,12 @@ describe("sync-runs (integration)", { skip: db.skip }, () => {
     assert.deepEqual([r.status, r.uploads], ["failed", 3]);
   });
 
+  test("incrementRunUploads rejects when no row has that id, so the upload cannot go uncounted", async () => {
+    const id = await start("cli", false);
+    await assert.rejects(incrementRunUploads(id + 1_000_000, 1, pool), /no sync_runs row with id/);
+    assert.equal((await row(id)).uploads, 0);
+  });
+
   test("finishRun redacts the error and the stored summary, and leaves the caller's summary alone", async () => {
     const id = await start("cli", false);
     const summary = { ...emptySummary(), errors: [{ id: "run", error: "GET /me?access_token=IGQVJsecretvalue123 failed" }] };

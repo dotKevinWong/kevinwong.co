@@ -47,7 +47,7 @@ Usage: npm run instagram:sync -- [options]
   --dry-run            Fetch and report without uploading to Blob or inserting
                        posts (the stored token is still refreshed if one is due)
   --max-posts=N        How many recent posts to read from the API (default 50)
-  --max-uploads=N      Cap media uploads this run (default 25; backlogs resume later; never past 1,800 in 30 days)
+  --max-uploads=N      Cap media uploads this run (default 25; backlogs resume later; stops new uploads at 1,800 in 30 days)
   --probe-caption      Test whether this token can read the caption field
   --help               Show this message
 `;
@@ -122,6 +122,7 @@ if (npmDryRun) {
 }
 
 const { syncInstagram } = await import("../lib/instagram-sync.js");
+const { UPLOAD_CEILING_30D } = await import("../lib/sync-runs.js");
 
 const summary = await syncInstagram({
   dryRun,
@@ -130,7 +131,18 @@ const summary = await syncInstagram({
   trigger: "cli",
 });
 
-console.log(`\n${dryRun ? "DRY RUN — nothing was uploaded or inserted" : "Sync complete"}`);
+// A run that stood down must not read as a finished sync. The reason is also in
+// the Skipped list below.
+let headline = dryRun ? "DRY RUN — nothing was uploaded or inserted" : "Sync complete";
+if (summary.notRecorded) {
+  headline = "Not run — the run could not be recorded (database error)";
+  process.exitCode = 1;
+} else if (summary.ceilingReached) {
+  headline = `Stopped — ${UPLOAD_CEILING_30D.toLocaleString("en-US")} uploads in the last 30 days reached`;
+} else if (summary.leaseHeld) {
+  headline = "Not run — another sync holds the lease";
+}
+console.log(`\n${headline}`);
 console.log(`  start date:        ${summary.startDate.slice(0, 10)} (older posts are ignored)`);
 console.log(`  fetched from API:  ${summary.fetched}`);
 console.log(`  already in db:     ${summary.alreadyPresent}`);

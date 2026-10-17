@@ -22,3 +22,9 @@ test("uploadAllowance caps maxUploads to what is left under the ceiling", () => 
   assert.equal(uploadAllowance(25, 1800), 0);
   assert.equal(uploadAllowance(25, 2400), 0);
 });
+test("uploadAllowance fails closed when the cap or the count is not a usable number", () => {
+  assert.equal(uploadAllowance(NaN, 0), 0);
+  assert.equal(uploadAllowance(Infinity, 0), 0);
+  assert.equal(uploadAllowance(-1, 0), 0);
+  assert.equal(uploadAllowance(25, NaN), 0);
+});

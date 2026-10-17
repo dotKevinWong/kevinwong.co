@@ -1,5 +1,10 @@
 import { after, before, beforeEach, describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { syncInstagram } from "../../lib/instagram-sync.js";
 import { InstagramReauthRequiredError, storeToken } from "../../lib/instagram.js";
 import { getDbPool } from "../../lib/db.js";
@@ -42,6 +47,20 @@ function mediaRoutes(...posts) {
 const carouselRoutes = (shortcode, slides) => mediaRoutes(carouselPost(shortcode, slides));
 // Stands in for uploadToBlob(pathname, buffer, contentType).
 const fakeUpload = async (pathname, _buffer, contentType) => ({ url: `https://blob.test/${pathname}`, pathname, contentType });
+
+const CLI = fileURLToPath(new URL("../../scripts/instagram-sync.mjs", import.meta.url));
+const CLI_FETCH_STUB = new URL("../helpers/cli-fetch-stub.mjs", import.meta.url).href;
+// Runs `npm run instagram:sync -- <args>` against the test database (DATABASE_URL is inherited). It runs in an
+// empty directory, so the script's .env loading finds nothing, with cli-fetch-stub.mjs preloaded, so it reaches
+// no real API, and without npm's npm_config_* variables, which the script reads as options.
+function runCli(t, args = []) {
+  const cwd = mkdtempSync(join(tmpdir(), "kw-instagram-sync-cli-"));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("npm_config_")));
+  return spawnSync(process.execPath,
+    ["--disable-warning=MODULE_TYPELESS_PACKAGE_JSON", `--import=${CLI_FETCH_STUB}`, CLI, ...args],
+    { cwd, env, encoding: "utf8", timeout: 60_000 });
+}
 
 describe("syncInstagram records its runs (integration)", { skip: db.skip }, () => {
   const lastRow = async () => (await db.pool.query("select * from sync_runs order by id desc limit 1")).rows[0];
@@ -153,6 +172,16 @@ describe("syncInstagram records its runs (integration)", { skip: db.skip }, () =
     assert.equal(summary.blob, "configured, nothing stored yet to check against");
     const r = await lastRow();
     assert.deepEqual([r.status, r.trigger, r.dry_run], ["ok", "panel", true]);
+  });
+
+  test("a truthy dryRun that is not a boolean runs as a dry run and is recorded as one", async (t) => {
+    const fetchStub = stubFetch(t, { [MEDIA]: () => Response.json({ data: [] }) });
+    const summary = await syncInstagram({ trigger: "cli", dryRun: "false" });
+    assert.equal(summary.dryRun, true);
+    assert.equal(summary.blob, "configured, nothing stored yet to check against");
+    assert.equal(fetchStub.mock.callCount(), 1);
+    assert.equal((await lastRow()).dry_run, true);
+    assert.equal(await count("select count(*)::int as n from job_locks"), 0);
   });
 
   test("a missing token records reauth_required, defaults the trigger to cli, and rethrows", async (t) => {
@@ -275,5 +304,45 @@ describe("syncInstagram records its runs (integration)", { skip: db.skip }, () =
     await syncInstagram({ trigger: "cron" });
     assert.deepEqual((await db.pool.query("select held from lease_probe")).rows, [{ held: true }]);
     assert.equal(await leaseHeld(), false);
+  });
+
+  test("the CLI says a run that could not be recorded did not run, and exits 1", async (t) => {
+    await hideSyncRuns(t);
+    const cli = runCli(t);
+    assert.equal(cli.status, 1, cli.stderr);
+    assert.match(cli.stdout, /^Not run — the run could not be recorded \(database error\)$/m);
+    assert.doesNotMatch(cli.stdout, /Sync complete/);
+  });
+
+  test("the CLI says a run stopped at the 30-day ceiling", async (t) => {
+    await seedUploads();
+    const cli = runCli(t);
+    assert.equal(cli.status, 0, cli.stderr);
+    assert.match(cli.stdout, /^Stopped — 1,800 uploads in the last 30 days reached$/m);
+    assert.doesNotMatch(cli.stdout, /Sync complete/);
+  });
+
+  test("the CLI says a run that found the lease held did not run", async (t) => {
+    await db.pool.query(`insert into job_locks (name, locked_until) values ('instagram-sync', now() + interval '5 minutes')`);
+    const cli = runCli(t);
+    assert.equal(cli.status, 0, cli.stderr);
+    assert.match(cli.stdout, /^Not run — another sync holds the lease$/m);
+    assert.doesNotMatch(cli.stdout, /Sync complete/);
+  });
+
+  test("the CLI help says the ceiling stops new uploads at 1,800, not that a run never passes it", (t) => {
+    const cli = runCli(t, ["--help"]);
+    assert.equal(cli.status, 0, cli.stderr);
+    assert.ok(cli.stdout.includes(
+      "  --max-uploads=N      Cap media uploads this run (default 25; backlogs resume later; stops new uploads at 1,800 in 30 days)\n"));
+  });
+
+  test("the CLI keeps its headlines for a run that went ahead, real or dry", async (t) => {
+    const real = runCli(t);
+    assert.equal(real.status, 0, real.stderr);
+    assert.match(real.stdout, /^Sync complete$/m);
+    const dry = runCli(t, ["--dry-run"]);
+    assert.equal(dry.status, 0, dry.stderr);
+    assert.match(dry.stdout, /^DRY RUN — nothing was uploaded or inserted$/m);
   });
 });
