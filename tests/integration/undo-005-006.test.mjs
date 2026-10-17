@@ -14,6 +14,13 @@ const M006 = sqlFile("006_sync_runs.sql");
 // The way db:apply sends a file: all of it as one parameterless query, so pg uses the simple-query
 // protocol and Postgres stops at the first failing statement.
 const apply = async (file) => db.pool.query(await fs.readFile(file, "utf8"));
+// The schema just after Deploy A: the fixture plus 005 and 006 only. resetSchema() also applies 007 and later,
+// which the undo leaves alone.
+const migrateThrough006 = async () => {
+  await db.resetSchema({ applyMigrations: false });
+  await apply(M005);
+  await apply(M006);
+};
 
 const SPOTIFY_COLUMNS = ["account_id", "authorized_at", "refresh_token", "scopes"];
 // The columns integration_tokens had before 005, as in tests/fixtures/prod-schema.sql.
@@ -70,7 +77,7 @@ describe("undoing 005 and 006 (sql/undo)", { skip: db.skip }, () => {
   after(() => db.close());
 
   test("with a spotify row present, the undo fails with 23502 and changes nothing", async () => {
-    await db.resetSchema();
+    await migrateThrough006();
     await seed({ spotify: true });
     const migrated = await schema();
 
@@ -90,7 +97,7 @@ describe("undoing 005 and 006 (sql/undo)", { skip: db.skip }, () => {
   });
 
   test("after the spotify row is deleted, the undo returns the schema to before 005 and 006", async () => {
-    await db.resetSchema();
+    await migrateThrough006();
     await seed({ spotify: true });
     const instagram = (await db.pool.query(INSTAGRAM_ROW)).rows;
 
@@ -115,7 +122,7 @@ describe("undoing 005 and 006 (sql/undo)", { skip: db.skip }, () => {
   });
 
   test("005 and 006 apply again after the undo, and the schema comes back", async () => {
-    await db.resetSchema();
+    await migrateThrough006();
     const migrated = await schema();
     await seed({ spotify: false });
 
