@@ -73,9 +73,19 @@ git status --short
 
 `git status --short` prints nothing. If it prints anything, stop and tell the session.
 
+Deploy A is the branch `claude/admin-panel-deploy-a`. It stays fixed at the reviewed Deploy A work, while
+`claude/admin-panel` keeps moving with Deploy B (Tasks 11–19), so merge the fixed one. Check it first:
+
+```sh
+git log --oneline -1 claude/admin-panel-deploy-a
+```
+
+It prints one line ending `Point the Deploy A runbook at its own fixed branch`. If it prints anything else, or
+`unknown revision`, stop and tell the session.
+
 ```sh
 git pull --ff-only origin main
-git merge --ff-only claude/admin-panel || git merge --no-ff claude/admin-panel -m "Merge branch 'claude/admin-panel' (Deploy A)"
+git merge --ff-only claude/admin-panel-deploy-a || git merge --no-ff claude/admin-panel-deploy-a -m "Merge branch 'claude/admin-panel-deploy-a' (Deploy A)"
 nvm use
 ```
 
@@ -262,7 +272,7 @@ Optionally, `npm run instagram:token` (read-only status) still shows the token a
 ## Step 11: tell the session Deploy A is done
 
 Reply with the date of Step 8 and whether Steps 9–10 passed. Deploy B (Tasks 11–19) continues on
-`claude/admin-panel`.
+`claude/admin-panel`; `claude/admin-panel-deploy-a` can be deleted once Deploy A is merged and pushed.
 
 ## If something goes wrong
 
