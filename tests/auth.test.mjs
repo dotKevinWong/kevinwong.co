@@ -102,7 +102,7 @@ test("buildAuthOptions pins the reviewed options", () => {
   assert.deepEqual(o.account, { modelName: "auth_account", accountLinking: { enabled: false }, storeStateStrategy: "cookie", encryptOAuthTokens: true });
   assert.deepEqual(o.verification, { modelName: "auth_verification" });
   assert.equal(typeof o.databaseHooks.session.create.after, "function");
-  assert.deepEqual(o.onAPIError, { errorURL: "/admin/sign-in" });
+  assert.deepEqual(o.onAPIError, { errorURL: "/admin/sign-in", throw: true });
   assert.deepEqual(o.rateLimit, { enabled: true, storage: "memory" });
   assert.deepEqual(o.telemetry, { enabled: false });
   assert.equal(o.advanced.useSecureCookies, true);
@@ -128,6 +128,10 @@ test("buildAuthOptions pins the reviewed options", () => {
   assert.equal(typeof o.hooks.before, "function");
   assert.deepEqual(Object.keys(o.logger), ["log"], "Better Auth's default level");
   assert.equal(typeof o.logger.log, "function");
+  assert.deepEqual(Object.keys(o.databaseHooks), ["session"]);
+  assert.deepEqual(Object.keys(o.databaseHooks.session), ["create"]);
+  assert.deepEqual(Object.keys(o.databaseHooks.session.create), ["after"]);
+  assert.deepEqual(Object.keys(o.advanced.backgroundTasks), ["handler"]);
 });
 
 test("the background-task handler catches a rejection and logs fixed text", async (t) => {
@@ -158,15 +162,18 @@ test("the Better Auth logger writes one redacted line per call and never an Erro
   log("warn", "Token exchange failed: https://github.com/login/oauth/access_token?code=abc123def&client_secret=s3cr3t",
     "Bearer gho_abcdef1234567890");
   log("info", "plain message");
-  assert.deepEqual(consoleError.mock.calls.map((call) => call.arguments), [[
-    '[better-auth] error: Better auth was unable to query your database. Error: Error [23505]: duplicate key value violates unique constraint "auth_session_token_key"',
-  ]]);
+  log("error", "Unable to create OAuth user",
+    Object.assign(new Error("connect failed for postgres://kw:hunter2@db.example/kw"), { code: "ECONNREFUSED" }));
+  assert.deepEqual(consoleError.mock.calls.map((call) => call.arguments), [
+    ['[better-auth] error: Better auth was unable to query your database. Error: Error [23505]: duplicate key value violates unique constraint "auth_session_token_key"'],
+    ["[better-auth] error: Unable to create OAuth user Error [ECONNREFUSED]: connect failed for postgres://[redacted]@db.example/kw"],
+  ]);
   assert.deepEqual(consoleWarn.mock.calls.map((call) => call.arguments), [[
     "[better-auth] warn: Token exchange failed: https://github.com/login/oauth/access_token?code=[redacted]&client_secret=[redacted] Bearer [redacted]",
   ]]);
   assert.deepEqual(consoleLog.mock.calls.map((call) => call.arguments), [["[better-auth] info: plain message"]]);
   const written = [...consoleError.mock.calls, ...consoleWarn.mock.calls].map((call) => call.arguments[0]).join("\n");
-  for (const leak of ["Key (token)", "abcdefghijklmnopqrstuvwxyz", "    at ", "abc123def", "s3cr3t", "gho_"]) {
+  for (const leak of ["Key (token)", "abcdefghijklmnopqrstuvwxyz", "    at ", "abc123def", "s3cr3t", "gho_", "hunter2"]) {
     assert.ok(!written.includes(leak), leak);
   }
 });
