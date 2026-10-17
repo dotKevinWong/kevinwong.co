@@ -53,6 +53,25 @@ test("500 status_failed without the error message, logged only redacted", async 
   assert.ok(lines.every((l) => !l.includes("hunter2")), lines.join("\n"));
 });
 
+// Fix round 1 (R6): requireAdmin's other answers pass through too. It has sent the one response, nothing is logged
+// here, and the status is never built.
+test("404 and 500 server_error from requireAdmin pass through and status is not built", async (t) => {
+  const consoleError = t.mock.method(console, "error", () => {});
+  for (const [code, body] of [[404, { error: "not_found" }], [500, { error: "server_error" }]]) {
+    let built = 0;
+    let sends = 0;
+    const handler = createStatusHandler({
+      requireAdmin: async (req, res) => { res.status(code).json(body); return null; },
+      buildAdminStatus: async () => { built += 1; return { generatedAt: "x" }; } });
+    const res = fakeRes();
+    const json = res.json;
+    res.json = function (b) { sends += 1; return json.call(this, b); };
+    await handler({ method: "GET", headers: {} }, res);
+    assert.deepEqual([res.statusCode, res.body, sends, built], [code, body, 1, 0], String(code));
+  }
+  assert.equal(consoleError.mock.callCount(), 0);
+});
+
 // Controller notes (Task 15), 3: a failure is logged as one describeError line, never the Error object, its stack
 // or pg's err.detail, and a rejection outside the status read is answered the same way while nothing has been sent.
 const LEAKY_MESSAGE = "password authentication failed for postgresql://kw_owner:npg_hunter2@db.example.test/neondb";

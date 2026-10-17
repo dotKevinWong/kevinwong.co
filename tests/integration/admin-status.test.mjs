@@ -13,6 +13,7 @@ const SECRETS = { spotifyRefresh: "spotify-refresh-SECRET-1", spotifyAccess: "sp
   instagramAccess: "ig-access-SECRET-3", envRefresh: "env-refresh-SECRET-4" };
 const status = (o = {}) => buildAdminStatus({ db: db.pool, env: {}, now: NOW, ...o });
 const between = (v, lo, hi) => assert.ok(v >= lo && v <= hi, `${v} not in [${lo}, ${hi}]`);
+const textOf = (q) => (typeof q === "string" ? q : q.text);
 
 async function seedSpotify({ authorizedAt = new Date("2026-08-03T00:00:00Z"), expiresAt = new Date("2027-01-30T00:00:00Z"),
   accountId = OWNER_SPOTIFY_ACCOUNT_ID, scopes = SPOTIFY_SCOPES.join(" "), deadReason = null } = {}) {
@@ -271,5 +272,144 @@ describe("buildAdminStatus", { skip: db.skip }, () => {
     }
     assert.ok(texts.length > 0);
     for (const q of texts) assert.doesNotMatch(q, /access_token|refresh_token/);
+  });
+
+  // Fix round 1 (X1, R2): every mapped field of a Run, in runs and in lastCron. A finished run older than 15 minutes
+  // with no lease keeps its status; only the stale running row is shown abandoned.
+  test("runs and lastCron come back field for field, and only a stale running row is shown abandoned", async () => {
+    await db.pool.query(`insert into sync_runs (job, trigger, dry_run, status, started_at, finished_at, fetched, imported,
+        uploads, deferred, skipped, error_count, error) values
+      ('instagram', 'cron', false, 'failed', '2026-10-16T10:00:00Z', '2026-10-16T10:03:20Z', 9, 4, 6, 2, 1, 3,
+       'Graph API 500 for post 7'),
+      ('instagram', 'panel', true, 'partial', '2026-10-16T09:00:00Z', '2026-10-16T09:00:45Z', 12, 11, 5, 7, 8, 10,
+       'resize failed for post 3'),
+      ('instagram', 'cli', false, 'running', '2026-10-16T07:00:00Z', null, 0, 0, 0, 0, 0, 0, null)`);
+    const cron = { id: 1, trigger: "cron", dryRun: false, status: "failed", startedAt: "2026-10-16T10:00:00.000Z",
+      finishedAt: "2026-10-16T10:03:20.000Z", fetched: 9, imported: 4, uploads: 6, deferred: 2, skipped: 1, errorCount: 3,
+      error: "Graph API 500 for post 7" };
+    const panel = { id: 2, trigger: "panel", dryRun: true, status: "partial", startedAt: "2026-10-16T09:00:00.000Z",
+      finishedAt: "2026-10-16T09:00:45.000Z", fetched: 12, imported: 11, uploads: 5, deferred: 7, skipped: 8,
+      errorCount: 10, error: "resize failed for post 3" };
+    const cli = { id: 3, trigger: "cli", dryRun: false, status: "abandoned", startedAt: "2026-10-16T07:00:00.000Z",
+      finishedAt: null, fetched: 0, imported: 0, uploads: 0, deferred: 0, skipped: 0, errorCount: 0, error: null };
+    const s = await status();
+    assert.deepEqual(s.runs, [cron, panel, cli]);
+    assert.deepEqual(s.instagram.lastCron, cron);
+  });
+
+  // Fix round 1 (X1): every mapped field of an activity row.
+  test("activity rows come back field for field, newest first", async () => {
+    await db.pool.query(`insert into admin_audit_log (event, actor, details, at) values
+      ('instagram_check', $1, '{"status":"ok","fetched":12,"uploads":0}', '2026-10-16T09:30:00Z'),
+      ('spotify_connect_failed', null, '{"code":"denied"}', '2026-10-16T11:15:00Z')`, [OWNER_ACTOR]);
+    assert.deepEqual((await status()).activity, [
+      { id: 2, at: "2026-10-16T11:15:00.000Z", event: "spotify_connect_failed", actor: null, details: { code: "denied" } },
+      { id: 1, at: "2026-10-16T09:30:00.000Z", event: "instagram_check", actor: OWNER_ACTOR,
+        details: { status: "ok", fetched: 12, uploads: 0 } },
+    ]);
+  });
+
+  // Fix round 1: the whole connected Spotify object, so no extra field (the account id, updated_at) joins the JSON.
+  test("spotify: a connected row comes back as exactly the status fields", async () => {
+    await seedSpotify();
+    assert.deepEqual((await status()).spotify, { state: "connected", authorizedAt: "2026-08-03T00:00:00.000Z",
+      expiresAt: "2027-01-30T00:00:00.000Z", daysLeft: 105, accountMatches: true, scopes: [...SPOTIFY_SCOPES],
+      missingScopes: [], deadReason: null });
+  });
+
+  // Fix round 1 (X3): an assumed Instagram expiry, and daysLeft floored at fractional instants either side of it.
+  test("instagram.token: expiresAtIsAssumed true, and daysLeft floored at fractional instants", async () => {
+    await db.pool.query(`insert into integration_tokens (provider, access_token, expires_at, refreshed_at, expires_at_is_assumed)
+      values ('instagram', $1, '2026-10-27T06:00:00Z', '2026-08-28T06:00:00Z', true)`, [SECRETS.instagramAccess]);
+    assert.deepEqual((await status()).instagram.token, { expiresAt: "2026-10-27T06:00:00.000Z", daysLeft: 10, // 10.75 days
+      refreshedAt: "2026-08-28T06:00:00.000Z", expiresAtIsAssumed: true, deadReason: null });
+    assert.equal((await status({ now: new Date("2026-10-29T18:00:00Z") })).instagram.token.daysLeft, -3); // -2.5 days
+  });
+
+  // Fix round 1 (X2, R1): each read failing alone rejects the whole status; none is swallowed into a guessed value.
+  test("any one failed read rejects the whole status", async () => {
+    // A connected row and the panel's 1,000-upload ceiling, so the ceiling's own read runs too.
+    await seedSpotify();
+    await seedRunAgo({ trigger: "cron", dryRun: false, ago: "2 days", uploads: 1000 });
+    const texts = new Set();
+    const spy = { query: (q, p) => { texts.add(textOf(q)); return db.pool.query(q, p); } };
+    await buildAdminStatus({ db: spy, env: { refresh_token: "x" }, now: new Date() });
+    assert.ok(texts.size >= 10, `only ${texts.size} distinct reads`);
+    for (const target of texts) {
+      const failing = { query: (q, p) =>
+        (textOf(q) === target ? Promise.reject(new Error("one read failed")) : db.pool.query(q, p)) };
+      await assert.rejects(buildAdminStatus({ db: failing, env: { refresh_token: "x" }, now: new Date() }),
+        { message: "one read failed" }, target.replace(/\s+/g, " ").slice(0, 90));
+    }
+  });
+  // The same, call by call: the 30-day uploads read runs twice with one text (directly, and inside the import verdict),
+  // so failing a text fails both and can't show that the direct read isn't swallowed.
+  test("any one failed query call rejects the whole status", async () => {
+    await seedSpotify();
+    await seedRunAgo({ trigger: "cron", dryRun: false, ago: "2 days", uploads: 1000 });
+    let calls = 0;
+    const counting = { query: (q, p) => { calls += 1; return db.pool.query(q, p); } };
+    await buildAdminStatus({ db: counting, env: { refresh_token: "x" }, now: new Date() });
+    assert.ok(calls >= 12, `only ${calls} query calls`);
+    for (let i = 0; i < calls; i++) {
+      let n = 0;
+      let failedText = "";
+      const failing = { query: (q, p) => {
+        if (n++ !== i) return db.pool.query(q, p);
+        failedText = textOf(q).replace(/\s+/g, " ").slice(0, 90);
+        return Promise.reject(new Error("one read failed"));
+      } };
+      const outcome = await buildAdminStatus({ db: failing, env: { refresh_token: "x" }, now: new Date() })
+        .then(() => "resolved", (error) => error.message);
+      assert.equal(outcome, "one read failed", `call ${i}: ${failedText}`);
+    }
+  });
+  test("a failed Spotify read alone rejects, and is never shown as the env token", async () => {
+    await seedSpotify();
+    let matched = 0;
+    // The Spotify statement is the only one with `provider = $1`; the Instagram token read names its provider.
+    const failing = { query: (q, p) => {
+      if (!/where provider = \$1/.test(textOf(q))) return db.pool.query(q, p);
+      matched += 1;
+      return Promise.reject(new Error("statement timeout"));
+    } };
+    await assert.rejects(buildAdminStatus({ db: failing, env: { refresh_token: "x" }, now: new Date() }),
+      { message: "statement timeout" });
+    assert.equal(matched, 1);
+  });
+
+  // Fix round 1 (R3, X4): with both a verdict and a held slot, each time is the later of the two.
+  test("panel: with both a verdict and a held slot, each time is the later one", async () => {
+    // Check: a check 1 minute ago (verdict: about 9 minutes) outlasts a check slot held for 2 more minutes.
+    await seedRunAgo({ trigger: "panel", dryRun: true, ago: "1 minute" });
+    // Import: an import slot held for 3 more hours outlasts an import 23 hours ago (verdict: about 1 hour).
+    await seedRunAgo({ trigger: "panel", dryRun: false, ago: "23 hours", uploads: 2 });
+    await db.pool.query(`insert into job_locks (name, locked_until) values
+      ('instagram-panel-check', now() + interval '2 minutes'), ('instagram-panel-import', now() + interval '3 hours')`);
+    const now = new Date();
+    const p = (await status({ now })).instagram.panel;
+    between(Date.parse(p.nextCheckAt) - now.getTime(), 535_000, 541_000);
+    between(Date.parse(p.nextImportAt) - now.getTime(), 10_795_000, 10_801_000);
+    assert.equal(p.importBlockedReason, "daily_limit");
+  });
+
+  // Fix round 1 (R4, X5): the newest 20 runs and activity rows, and a 30-day window that ends at 30 days.
+  test("runs and activity are the newest 20", async () => {
+    await db.pool.query(`insert into sync_runs (job, trigger, dry_run, status, started_at, finished_at)
+      select 'instagram', 'cli', true, 'ok', $1::timestamptz - make_interval(hours => i),
+             $1::timestamptz - make_interval(hours => i)
+        from generate_series(0, 21) as i`, [NOW]);
+    await db.pool.query(`insert into admin_audit_log (event, actor, details, at)
+      select 'instagram_check', $2, '{}'::jsonb, $1::timestamptz - make_interval(hours => i)
+        from generate_series(0, 21) as i`, [NOW, OWNER_ACTOR]);
+    const newest20 = Array.from({ length: 20 }, (_, i) => hoursBefore(NOW, i).toISOString());
+    const s = await status();
+    assert.deepEqual(s.runs.map((r) => r.startedAt), newest20);
+    assert.deepEqual(s.activity.map((e) => e.at), newest20);
+  });
+  test("uploads30d ends at 30 days, not 31", async () => {
+    await seedRunAgo({ trigger: "cron", dryRun: false, ago: "29 days 18 hours", uploads: 4 });
+    await seedRunAgo({ trigger: "cli", dryRun: false, ago: "30 days 6 hours", uploads: 5 });
+    assert.equal((await status({ now: new Date() })).instagram.uploads30d, 4);
   });
 });
