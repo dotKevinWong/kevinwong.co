@@ -16,6 +16,27 @@ test("logAdminEvent rejects an unknown event before touching the database", asyn
   assert.equal(queries, 0);
 });
 
+test("logAdminEvent rejects an unknown event before it reads DATABASE_URL", async () => {
+  const saved = process.env.DATABASE_URL;
+  delete process.env.DATABASE_URL;
+  try {
+    await assert.rejects(logAdminEvent("deleted_everything"), TypeError);
+  } finally {
+    if (saved !== undefined) process.env.DATABASE_URL = saved;
+  }
+});
+
+test("recentAdminEvents accepts only an integer limit from 1 to 100, before any query", async () => {
+  const calls = [];
+  const fake = { async query(sql, params) { calls.push(params); return { rows: [] }; } };
+  for (const limit of [0, 101, -1, 2.5, null, "20", Number.NaN, Number.POSITIVE_INFINITY]) {
+    await assert.rejects(recentAdminEvents(limit, fake), TypeError, String(limit));
+  }
+  assert.equal(calls.length, 0);
+  for (const limit of [1, 100, undefined]) assert.deepEqual(await recentAdminEvents(limit, fake), []);
+  assert.deepEqual(calls, [[1], [100], [20]], "the default limit is 20");
+});
+
 describe("admin audit log", { skip: db.skip }, () => {
   before(() => db.resetSchema());
   beforeEach(() => db.pool.query("truncate admin_audit_log restart identity"));
@@ -70,6 +91,29 @@ describe("admin audit log", { skip: db.skip }, () => {
     assert.equal(await logRejectedSignIn({ githubId: "6", login: "user6" }, db.pool), true);
   });
 
+  test("the five-an-hour cap counts refusals from the whole last hour and no older", async () => {
+    // Four refusals 59 minutes old count towards the cap; one 61 minutes old does not.
+    await db.pool.query(
+      `insert into admin_audit_log (at, event, actor, details)
+       select now() - interval '59 minutes', 'sign_in_rejected', 'github:' || n, '{}'::jsonb from generate_series(1, 4) n`
+    );
+    await db.pool.query(
+      `insert into admin_audit_log (at, event, actor, details)
+       values (now() - interval '61 minutes', 'sign_in_rejected', 'github:5', '{}'::jsonb)`
+    );
+    assert.equal(await logRejectedSignIn({ githubId: "6", login: "user6" }, db.pool), true, "the fifth in the hour");
+    assert.equal(await logRejectedSignIn({ githubId: "7", login: "user7" }, db.pool), false, "the sixth in the hour");
+  });
+
+  test("the five-an-hour cap counts only refused sign-ins", async () => {
+    for (const event of ["sign_in", "sign_in", "instagram_check", "instagram_import", "panel_run_refused"]) {
+      await logAdminEvent(event, { actor: OWNER_ACTOR }, db.pool);
+    }
+    for (let id = 1; id <= 5; id += 1) {
+      assert.equal(await logRejectedSignIn({ githubId: String(id), login: `user${id}` }, db.pool), true, `id ${id}`);
+    }
+  });
+
   test("recentAdminEvents returns newest first, limited, with exactly five fields", async () => {
     await logAdminEvent("sign_in", { actor: OWNER_ACTOR }, db.pool);
     await logAdminEvent("instagram_check", { actor: OWNER_ACTOR, details: { fetched: 3 } }, db.pool);
@@ -104,5 +148,16 @@ describe("admin audit log", { skip: db.skip }, () => {
     assert.equal(summary.latestLogin, "newest");
     assert.ok(summary.latestAt instanceof Date);
     assert.ok(Math.abs(summary.latestAt.getTime() - Date.now()) < 60_000);
+  });
+
+  test("refusedSignInSummary's window is exactly 24 hours", async () => {
+    await db.pool.query(
+      `insert into admin_audit_log (at, event, actor, details) values
+         (now() - interval '24 hours 1 minute', 'sign_in_rejected', 'github:1', '{"githubId":"1","login":"outside"}'),
+         (now() - interval '23 hours 59 minutes', 'sign_in_rejected', 'github:2', '{"githubId":"2","login":"inside"}')`
+    );
+    const summary = await refusedSignInSummary(db.pool);
+    assert.equal(summary.count24h, 1);
+    assert.equal(summary.latestLogin, "inside");
   });
 });
