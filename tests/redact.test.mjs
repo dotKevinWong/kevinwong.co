@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { capJson, redact } from "../lib/redact.js";
+import { capJson, describeError, redact } from "../lib/redact.js";
 
 const FORTY = "A1b2C3d4E5".repeat(4);
 
@@ -160,4 +160,27 @@ test("redact leaves an outcome code under a code key alone", () => {
   const outcome = { code: "denied", reason: "access_denied" };
   assert.deepEqual(redact(outcome), outcome);
   assert.equal(redact('{"code":"wrong_account"}'), '{"code":"wrong_account"}');
+});
+
+test("describeError gives the name, the code and the message, never pg's detail", () => {
+  const error = Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:55432"), {
+    code: "ECONNREFUSED",
+    detail: "Key (provider)=(spotify) already exists.",
+  });
+  assert.equal(describeError(error), "Error [ECONNREFUSED]: connect ECONNREFUSED 127.0.0.1:55432");
+});
+
+test("describeError falls back to String(error) when the message is empty", () => {
+  assert.equal(describeError(new AggregateError([new Error("a"), new Error("b")])), "AggregateError: AggregateError");
+});
+
+test("describeError redacts a credential in the message", () => {
+  const error = new TypeError("connect failed: postgresql://kw_owner:npg_pw123@db.example.test/neondb");
+  assert.equal(describeError(error), "TypeError: connect failed: postgresql://[redacted]@db.example.test/neondb");
+});
+
+test("describeError describes a thrown value that is not an Error", () => {
+  assert.equal(describeError("plain text"), "Error: plain text");
+  assert.equal(describeError(undefined), "Error: undefined");
+  assert.equal(describeError(null), "Error: null");
 });
