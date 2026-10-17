@@ -47,7 +47,7 @@ Usage: npm run instagram:sync -- [options]
   --dry-run            Fetch and report without uploading to Blob or inserting
                        posts (the stored token is still refreshed if one is due)
   --max-posts=N        How many recent posts to read from the API (default 50)
-  --max-uploads=N      Cap media uploads this run (default 25; backlogs resume later)
+  --max-uploads=N      Cap media uploads this run (default 25; backlogs resume later; never past 1,800 in 30 days)
   --probe-caption      Test whether this token can read the caption field
   --help               Show this message
 `;
@@ -127,6 +127,7 @@ const summary = await syncInstagram({
   dryRun,
   maxPosts: value("max-posts", 50),
   maxUploads: value("max-uploads", dryRun ? 1000 : 25),
+  trigger: "cli",
 });
 
 console.log(`\n${dryRun ? "DRY RUN — nothing was uploaded or inserted" : "Sync complete"}`);

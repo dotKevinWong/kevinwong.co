@@ -54,7 +54,7 @@ export default async function handler(req, res) {
   const dryRun = req.query.dryRun === "1" || req.query.dryRun === "true";
 
   try {
-    const summary = await syncInstagram({ dryRun, timeBudgetMs: TIME_BUDGET_MS });
+    const summary = await syncInstagram({ dryRun, timeBudgetMs: TIME_BUDGET_MS, trigger: "cron" });
 
     console.log(
       `[cron/sync-instagram] fetched=${summary.fetched} new=${summary.inserted.length} ` +
