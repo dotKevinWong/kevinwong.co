@@ -69,22 +69,22 @@ string (the non-pooler Neon host), not the pooled `DATABASE_URL`.
   - Delete the *Moving from Cloudinary* and *Retiring Cloudinary* notes from the README, and
     the pointers to them in `sql/003_asset_columns.sql` and `lib/instagram-sync.js`.
 
-### 🎧 Rotate the Spotify refresh token (by ~2026-12-30)
+### 🎧 Reconnect Spotify (by ~2026-12-30)
 
-Spotify refresh tokens die six months after they're minted, and refreshing doesn't extend
-that (the README's *Spotify token rotation* section has the details). The current token is
-assumed to have been minted on **2026-07-30**, alongside commit `8940403` ("Handle Spotify's
-six-month refresh token expiry"), so it dies around **2027-01-29**. If it was minted on a
-different day, go by the "Expires around" date the script printed, or by when
-`refresh_token` last changed in the Vercel project's env vars.
+Spotify refresh tokens die six months after they're approved, and refreshing doesn't extend that (the
+README's *Spotify token* section has the details). The current token is assumed to have been minted on
+**2026-07-30**, alongside commit `8940403` ("Handle Spotify's six-month refresh token expiry"), so it dies
+around **2027-01-29**. It is still the `refresh_token` env var: Postgres has no `spotify` row until the first
+reconnect.
 
-- [ ] **Mint a new token and redeploy.** Due by ~2026-12-30; the hard deadline is ~2027-01-29.
-  Follow *Spotify token rotation* in the README (`npm run spotify:reauth`, then update
-  `refresh_token` in `.env`, `.env.local` if you have one, and Vercel, then redeploy).
-  Check that it worked: `curl -s https://kevinwong.co/api/toptracks` should list tracks, not
-  `{"is_working":false}`.
-- [ ] **Set a reminder** for ~5 months after the new token was minted, and update the dates in
-  this section.
+- [ ] **Reconnect from the admin panel** as soon as it ships: sign in at https://www.kevinwong.co/admin, then
+  Spotify card → **Reconnect** → approve on Spotify. That also moves the token into Postgres, and it takes
+  effect within a minute, with no redeploy. If the panel isn't live by ~2026-12-30, run
+  `npm run spotify:reauth -- --save` instead (README, *Spotify token*). Check that it worked:
+  `curl -s https://www.kevinwong.co/api/toptracks` should list tracks, not `{"is_working":false}`.
+- [ ] **Re-date this item, and date the env cleanup.** The panel shows the estimated expiry (approval + 180
+  days): set this heading's date to a month before it, and set a reminder. Add a *Remove the Spotify env
+  fallback* item dated a week after the reconnect (Task 19 of [the admin panel plan](docs/superpowers/plans/2026-10-16-admin-panel.md)).
 
 ## 👀 Only if something happens
 
@@ -103,7 +103,9 @@ different day, go by the "Expires around" date the script printed, or by when
 - [ ] **Blob usage climbs.** *If /snapshots ever gets heavy traffic or hotlinking*, check the
   store's **Usage** tab. On Hobby, going over 1 GB of storage, or over 2,000 uploads, 10,000
   simple operations or 10 GB of transfer in a month, locks Blob for up to 30 days and every
-  image on /snapshots goes blank.
+  image on /snapshots goes blank. The sync stops itself at 1,800 uploads in 30 days (README, *Run
+  history and the upload ceiling*), but `npm run blog:image` and `npm run snapshots:blob` uploads
+  aren't counted.
 
 ## ✍️ Content
 
@@ -131,9 +133,11 @@ Found in the 2026-09-27 codebase audit. Each needs something only I know.
   `/api/listeningtimeline` is still live and public, and `components/ListeningTimeline.tsx`,
   `chart.js` and the `user-read-recently-played` Spotify scope only exist for it. To remove
   it: delete the route and component, remove `getListeningTimeline` / `RECENTLY_PLAYED_ENDPOINT`
-  from `lib/spotify.js`, `npm uninstall chart.js`, drop the scope from
-  `scripts/spotify-reauth.mjs` (and its comment), and mention it in the README's env var table.
-  The narrower scope takes effect at the next Spotify re-auth.
+  from `lib/spotify.js`, `npm uninstall chart.js`, drop `user-read-recently-played` from every
+  list that `grep -rn user-read-recently-played lib scripts` finds (`SPOTIFY_SCOPES` in
+  [`lib/spotify-token.js`](lib/spotify-token.js), which the reconnect checks granted scopes
+  against), and mention it in the README's env var table. The narrower scope takes effect at the
+  next Spotify re-auth.
 - [ ] **Is `public/kw.jpg` linked from anywhere?** It's a byte-identical copy of `me.jpg` and
   nothing in the repo uses it. Delete it once I've checked nothing outside the site hotlinks it.
 
@@ -190,7 +194,8 @@ All unused or oversized, found in the audit. Everything is in git history if nee
   minutes could lose its lease to the cron, then take it back and later clear the cron's lease,
   so two runs overlap and double-count Blob uploads. Fix: return `locked_until::text` from
   `acquireLease`, add `and locked_until = $3::timestamptz` to renew/release, and abort the run
-  when a renew updates 0 rows. Test against a Neon branch, not production.
+  when a renew updates 0 rows. The abandoned-run sweep in `lib/sync-runs.js` trusts the lease
+  too. Test with `npm run test:integration` on the local test database, never production.
 - [ ] **Headings.** Blog posts and the main pages have an `<h1>` now; the 404 page and Home
   still don't, and the Sidebar/Navbar name renders as an `<h2>` above every page's `<h1>`.
 - [ ] **Trim Chakra's theme (maybe).** `components/ui/provider.tsx` ships the full

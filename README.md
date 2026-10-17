@@ -2,8 +2,8 @@
 
 💫 A little portfolio built with Next.js and Chakra UI
 
-📋 Open tasks live in [TODO.md](TODO.md): content ideas, retiring Cloudinary, the Spotify token
-rotation that comes round twice a year, and follow-ups from the last codebase audit.
+📋 Open tasks live in [TODO.md](TODO.md): content ideas, retiring Cloudinary, reconnecting Spotify
+twice a year, and follow-ups from the last codebase audit.
 
 ## 😎 Getting Started
 
@@ -12,8 +12,9 @@ rotation that comes round twice a year, and follow-ups from the last codebase au
 ### 🦾 Prerequisites
 
 - [Node.js](https://nodejs.org/en/) 24 and npm 11. The exact version is pinned in [`.nvmrc`](.nvmrc), so `nvm use` picks it up.
-- For /snapshots only: a Postgres database (production uses Neon) and a
-  [Vercel Blob](https://vercel.com/docs/vercel-blob) store. See *Instagram sync* below.
+- A Postgres database (production uses Neon) for /snapshots, the Instagram sync and the Spotify
+  token, and a [Vercel Blob](https://vercel.com/docs/vercel-blob) store for /snapshots. See
+  *Database migrations*, *Spotify token* and *Instagram sync* below.
 
 ### 👨‍💻 Installation
 
@@ -41,44 +42,145 @@ both, `.env.local` wins. Both files are git-ignored.
 
 | Variable | What it's for |
 | --- | --- |
-| `client_id`, `client_secret`, `refresh_token` | Spotify: now playing and top tracks (see *Spotify token rotation*). Read on the server only |
+| `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | Spotify app credentials (now playing, top tracks), read on the server at runtime. Until the cleanup a week after the first reconnect (see [TODO.md](TODO.md)), the old lowercase `client_id` / `client_secret` still work as a fallback |
+| `refresh_token` | Spotify's refresh token, **only until Spotify is reconnected**: after that the token lives in Postgres and this is ignored (see *Spotify token*). Removed in the same cleanup |
 | `GOODREADS_RSS_URL` | The Goodreads shelf feed behind /bookshelf. Optional: without it the page says the feed isn't configured. `GOODREADS_MAX_BOOKS` sets how many it returns by default (8) |
-| `DATABASE_URL` | Postgres, for /snapshots and the Instagram sync |
+| `DATABASE_URL` | Postgres (the pooled Neon URL): /snapshots, the Instagram sync and its run history, and the Spotify token. Without it the Spotify widgets show their empty states |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob when running locally. In production the connected store supplies credentials |
 | `CRON_SECRET` | Authenticates the daily Instagram cron |
 | `INSTAGRAM_CLIENT_SECRET` | Only needed for `npm run instagram:token -- --exchange` |
 
-The Instagram access token is deliberately not an env var. It lives in Postgres, where the cron
-can refresh it ([`sql/001`](sql/001_integration_tokens.sql)).
+The Instagram access token, and the Spotify refresh token once Spotify has been reconnected,
+are deliberately not env vars. They live in Postgres in `integration_tokens`
+([`sql/001`](sql/001_integration_tokens.sql), [`sql/005`](sql/005_integration_tokens_spotify.sql)),
+where the app can refresh, rotate or replace them without a redeploy.
 
-### 🎧 Spotify token rotation
+### 🗄️ Database migrations
 
-Spotify expires user refresh tokens **six months after the original authorization**, and
-refreshing an access token does **not** extend that window. So the `refresh_token` env var
-has to be replaced roughly twice a year. ([Spotify's announcement][spotify-blog]) When the
-next one is due is tracked in [TODO.md](TODO.md).
+Schema changes live in [`sql/`](sql/), numbered and applied in filename order. Each file only adds things and
+is safe to run twice. Nothing records which files have been applied, so each new one is applied by hand, once,
+**before** the code that uses it deploys: after merging into `main`, before `git push` (the push deploys). The
+currently deployed code ignores what it adds.
 
-Each server instance caches the short-lived access token for about an hour, so the token
-endpoint isn't hit on every Now Playing poll. When the refresh token expires, the token
-endpoint answers `400 invalid_grant`. The app treats that as terminal: each server instance
-stops calling Spotify after its first rejected refresh and logs what to do. The Spotify
-widgets fall back to their empty states rather than erroring.
+| File | Adds | Needed by |
+| --- | --- | --- |
+| `001`–`004` | The Instagram token table, its assumed-expiry flag, the Blob asset columns, the sync's run lease | The Instagram sync |
+| [`005`](sql/005_integration_tokens_spotify.sql) | Spotify columns on `integration_tokens` | `lib/spotify.js` reading the token from Postgres |
+| [`006`](sql/006_sync_runs.sql) | `sync_runs` (one row per sync run) and `admin_audit_log` | The sync recording its runs and its upload ceiling |
 
-To mint a new token:
+To apply one:
+
+1. **Back up production first.** Local development uses the production database too, so there is no other
+   copy. Either make a Neon branch (Neon Console → the project → **Branches** → **New branch**, name it
+   `before-<file number>`, parent: the production branch, data up to now → **Create**), or take a dump from the
+   project root. Docker's `postgres:18` image can dump any server up to 18. The direct (non-pooler) URL is
+   worked out from `.env` and handed to Docker by name, so it is never typed, and it stays out of your shell
+   history and your Mac's process list:
+   ````sh
+   mkdir -p ~/Backups
+   PGURL="$(node --env-file=.env -p 'const u = new URL(process.env.DATABASE_URL); u.hostname = u.hostname.replace(/^([^.]+)-pooler\./, "$1."); u.href')" \
+     docker run --rm -e PGURL postgres:18 sh -c 'pg_dump --format=custom --no-owner "$PGURL"' > ~/Backups/kevinwong-before-005.dump
+   ````
+2. Rehearse on the local test database (see *Local test database* below), which loads production's schema
+   and then every migration:
+   ````sh
+   npm run db:test -- reset
+   npm run test:integration
+   ````
+3. Apply it to production from the project root, where `.env` holds `DATABASE_URL`. `db:apply` reads it from
+   there and switches to the direct host, because the pooled one goes through PgBouncer in transaction mode,
+   which DDL must avoid. Without `--yes` it prints the target and stops, so look first:
+   ````sh
+   npm run db:apply -- sql/005_integration_tokens_spotify.sql sql/006_sync_runs.sql         # prints Target: and stops
+   npm run db:apply -- --yes sql/005_integration_tokens_spotify.sql sql/006_sync_runs.sql   # applies them, in order
+   ````
+   `Target:` must name the Neon host without `-pooler`. `--yes` goes after the `--`; npm keeps one that comes
+   before it.
+
+**Undoing 005 and 006.** Rolling the code back (Vercel → Deployments → the previous deployment → ⋯ →
+**Instant Rollback**) is the planned way back, and the schema normally stays: the code from before these
+migrations ignores both files. To remove them as well, back up first, then do these in order:
+
+1. Roll the code back first. The sync in the new code refuses to run without `sync_runs`.
+2. Then delete the `spotify` row, because `access_token` can't go back to `not null` while that row holds
+   none. This throws away the refresh token stored in Postgres, so once the `refresh_token` env var is gone,
+   Spotify needs reconnecting once more:
+   ````sql
+   delete from integration_tokens where provider = 'spotify';
+   ````
+3. Run this over the unpooled connection string (the non-pooler Neon host), not the pooled `DATABASE_URL`:
+   ````sql
+   begin;
+   set local lock_timeout = '5s';
+   alter table integration_tokens drop constraint if exists integration_tokens_has_token;
+   alter table integration_tokens alter column access_token set not null;
+   alter table integration_tokens drop column if exists refresh_token, drop column if exists authorized_at,
+     drop column if exists account_id, drop column if exists scopes;
+   commit;
+   drop table if exists sync_runs, admin_audit_log;
+   ````
+   Both files are safe to apply again afterwards.
+
+**Local test database.** The tests run against a throwaway Postgres in Docker, the `kw-test-pg` container on
+`127.0.0.1:55432`. Its generated password lives only in `.env.test.local` in the project root (git-ignored), as
+`TEST_DATABASE_URL`. To create both, from the project root:
+````sh
+MAJOR=$(sed -n 's/^-- Dumped from database version \([0-9]*\).*/\1/p' tests/fixtures/prod-schema.sql) && \
+test -n "$MAJOR" && \
+export POSTGRES_PASSWORD="$(openssl rand -hex 16)" && \
+printf 'TEST_DATABASE_URL=postgres://postgres:%s@127.0.0.1:55432/kw_test\n' "$POSTGRES_PASSWORD" > .env.test.local && \
+docker run -d --name kw-test-pg -e POSTGRES_PASSWORD -e POSTGRES_DB=kw_test -p 127.0.0.1:55432:5432 "postgres:$MAJOR" -c timezone=UTC && \
+unset POSTGRES_PASSWORD && \
+docker exec kw-test-pg sh -c 'until pg_isready -h 127.0.0.1 -U postgres -q; do sleep 1; done' && \
+git check-ignore .env.test.local
+````
+The server's major version matches production's, and its sessions run in UTC like Neon's, which the tests
+assume. If the container already exists, run `docker start kw-test-pg` instead, and copy `.env.test.local`
+from the checkout that created it. `tests/fixtures/prod-schema.sql` is production's schema, without data; after
+production's schema changes, refresh it with `npm run db:test -- dump-schema`, run where `.env` holds
+production's `DATABASE_URL` (it only reads production). Without `TEST_DATABASE_URL` the integration suites
+skip themselves: a `﹣` line in the test output means they did not run.
+
+### 🎧 Spotify token
+
+Spotify expires user refresh tokens **six months after the original authorization**, and refreshing an
+access token does **not** extend that window. So Spotify has to be reconnected roughly twice a year.
+([Spotify's announcement][spotify-blog]) When the next one is due is tracked in [TODO.md](TODO.md).
+
+**Where the token lives.** In Postgres, in the `spotify` row of `integration_tokens`
+([`sql/005`](sql/005_integration_tokens_spotify.sql)), with the account it belongs to, the granted scopes and
+when it was approved. `expires_at` is the approval date plus 180 days, an estimate, because Spotify doesn't
+say. Until Spotify is reconnected for the first time there is no row, and [`lib/spotify.js`](lib/spotify.js)
+uses the `refresh_token` env var exactly as before. It falls back only when the row is missing: if the
+database can't be reached, the Spotify widgets show their empty states instead.
+
+**How the app uses it.** Each server instance caches the short-lived access token until a minute before it
+expires, and concurrent requests share one refresh. When the refresh token dies, Spotify answers
+`400 invalid_grant`, and the app marks the row dead and stops calling Spotify. Instances look at the row again
+at most once a minute, so a reconnect takes effect everywhere within a minute, with no redeploy. If Spotify
+hands back a new refresh token, it replaces the stored one only if the row still holds the token that instance
+used, so a slow instance can't overwrite a newer one.
+
+**Reconnecting.** The /admin panel's Reconnect button will do this from the browser once it ships. Until then,
+and as the fallback afterwards, use the script:
 
 1. Add `http://127.0.0.1:8888/callback` to the Redirect URIs of the app in the
-   [Spotify dashboard](https://developer.spotify.com/dashboard). Spotify rejects
-   `localhost`, so the loopback IP is required.
+   [Spotify dashboard](https://developer.spotify.com/dashboard). Spotify rejects `localhost`, so the loopback
+   IP is required.
 2. Run it and approve access in the browser window that opens:
    ````sh
-   npm run spotify:reauth
+   npm run spotify:reauth -- --save
    ````
-3. Put the printed token in `refresh_token` in `.env` (and in `.env.local` too if you have
-   one, since that file wins) and in the Vercel project's environment variables. Then
-   **redeploy**, because Vercel only picks up env var changes on a new deployment.
+   It checks that all three scopes were granted and that the account is the site owner's, then writes the
+   token to the database in `DATABASE_URL`. There is no env var to change and nothing to redeploy.
 
-The script also prints roughly when the new token will expire. Put the next rotation in
-[TODO.md](TODO.md).
+`npm run spotify:reauth -- --whoami` prints which Spotify account the current token belongs to (the database
+row first, else the `refresh_token` env var), with no browser. It saves nothing, except a rotated refresh
+token, which it stores by compare-and-swap. With no option, the script prints the new refresh token instead of
+saving it, for the `refresh_token` fallback. Options go after `--`; npm keeps any that come before it. The
+script reads `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` from the environment, `.env` or `.env.local`,
+and falls back to `client_id` / `client_secret` until the cleanup a week after the first reconnect (see
+[TODO.md](TODO.md)).
 
 [spotify-blog]: https://developer.spotify.com/blog/2026-06-18-refresh-token-expiration
 
@@ -108,11 +210,10 @@ npm run instagram:sync -- --probe-caption
 
 #### One-time setup
 
-1. Apply the migrations in [`sql/`](sql/), in filename order, over the unpooled connection
-   string (the non-pooler Neon host) rather than the pooled `DATABASE_URL`. They only cover
-   changes made since the sync was added. The base `instagram_posts` and `instagram_media`
-   tables and the `media_kind` enum are older and aren't in the repo yet (see
-   [TODO.md](TODO.md)), so on an empty database create those first.
+1. Apply the migrations in [`sql/`](sql/) as described in *Database migrations* above. They
+   only cover changes made since the sync was added. The base `instagram_posts` and
+   `instagram_media` tables and the `media_kind` enum are older and aren't in the repo yet
+   (see [TODO.md](TODO.md)), so on an empty database create those first.
 2. Create a **Public** Blob store (Vercel dashboard → Storage → Create → Blob) and
    connect it to the project, which gives production its credentials. Locally, put the
    store's `BLOB_READ_WRITE_TOKEN` in `.env`. The store must be Public, because /snapshots
@@ -147,8 +248,10 @@ npm run instagram:sync -- --probe-caption
    stored Instagram token when one is due, or marks it dead on a confirmed error `190`.
    Look for `"blob":"ok"` and `"resize":"ok (sharp …, libvips …)"`:
    ````sh
-   curl -s -H "Authorization: Bearer $CRON_SECRET" "https://kevinwong.co/api/cron/sync-instagram?dryRun=1"
+   printf 'Authorization: Bearer %s\n' "$CRON_SECRET" | curl -sS -H @- "https://www.kevinwong.co/api/cron/sync-instagram?dryRun=1"
    ````
+   Each run, this one included, adds a row to `sync_runs` (see *Run history and the upload
+   ceiling*).
 
 `vercel.json` sets `"fluid": true`. This project predates Fluid compute being the default
 (April 2025). Without it, Hobby functions stop at 60 seconds, and the sync is written to use
@@ -238,10 +341,34 @@ the still-valid token, and tries again the next day.
 A token left unrefreshed for 60 days is dead permanently. When that happens, the API
 returns error code `190`. The sync records it in `integration_tokens.dead_reason`, stops
 calling the API, and logs what to do. Before setting that flag, the code re-checks the token
-with a second request, so a transient error cannot brick the integration. Recover by
-generating a new token and re-seeding it.
+with a second request, so a transient error cannot brick the integration. It also only marks
+the row dead if the row still holds the token that failed, and a refresh only saves its new
+token if the row still holds the old one, so a run that started before a re-seed can't undo
+it. Recover by generating a new token and re-seeding it.
 
 Check status any time with `npm run instagram:token` (no arguments). It only reads.
+
+#### Run history and the upload ceiling
+
+Every run, from the cron or `npm run instagram:sync`, adds a row to `sync_runs`
+([`sql/006`](sql/006_sync_runs.sql)): what started it, whether it was a dry run, how it ended (`ok`,
+`partial` when some posts failed, `skipped`, `failed` or `reauth_required`) and its counts. Errors and the
+stored summary are redacted first. A row still `running` after 15 minutes, once the sync's lease has expired,
+belongs to a run that was killed; the next run marks it `abandoned`, keeping the uploads it recorded.
+
+Real runs stop importing once the last 30 days of runs have uploaded 1,800 files, which leaves room under
+Blob's 2,000-a-month hard stop, and each run caps its uploads to what is left. The ceiling is slightly soft:
+the oldest missing post is always processed whole, so one carousel can take a run up to 19 past it. Each
+upload is added to its run's row as soon as it lands, so a run killed partway still counts what it uploaded,
+and a real run that can't write its row stands down without importing. Dry runs don't count, and neither do
+uploads by `npm run blog:image` or `npm run snapshots:blob`. The count is of uploads that completed. Blob also
+meters the SDK's retries and puts cut off by a timeout, which is what the 200-file margin absorbs.
+
+When the ceiling stops `npm run instagram:sync`, its headline reads
+`Stopped — 1,800 uploads in the last 30 days reached`, and `30-day upload ceiling reached` is listed under
+*Skipped*. When a real run can't write its row, the headline reads
+`Not run — the run could not be recorded (database error)` and the command exits 1. The log line
+`[instagram-sync] Could not record this run:` names the error.
 
 [ig-login]: https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login
 [cron-limits]: https://vercel.com/docs/cron-jobs/usage-and-pricing
