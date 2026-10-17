@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { inspect } from "node:util";
 import {
   CLEAR_STATE_COOKIE, completeSpotifyReconnect, handleSpotifyAuthorize, handleSpotifyCallback,
   newState, readStateCookie, stateCookie, statesMatch,
@@ -32,15 +33,45 @@ function fakeReconnect(overrides = {}) {
   return { deps, calls };
 }
 
-function assertFailed(result, calls, code, { logged = true } = {}) {
+// logs is muteConsole(t): a failure prints exactly its one fixed warn line. details is the whole object, so no
+// extra key (the code, a state, a token, an Error) can ride along in the audit row.
+function assertFailed(result, calls, code, { logged = true, details = { code }, logs } = {}) {
   assert.deepEqual(result, { outcome: code, location: `/admin?spotify_error=${code}` });
   assert.equal(calls.save.length, 0, "nothing saved");
   assert.equal(calls.reset, 0, "cache not reset");
+  if (logs) {
+    assert.deepEqual(logs.consoleWarn.mock.calls.map((c) => c.arguments), [[`[admin/spotify] reconnect failed: ${code}`]]);
+    assert.equal(logs.consoleError.mock.callCount(), 0, "no error line");
+  }
   if (!logged) return assert.equal(calls.log.length, 0, "no audit row");
-  assert.equal(calls.log.length, 1);
-  assert.equal(calls.log[0].event, "spotify_connect_failed");
-  assert.equal(calls.log[0].actor, OWNER_ACTOR);
-  assert.equal(calls.log[0].details.code, code);
+  assert.deepEqual(calls.log, [{ event: "spotify_connect_failed", actor: OWNER_ACTOR, details }]);
+}
+
+const LEAKY_MESSAGE = "password authentication failed for postgresql://kw_owner:npg_hunter2@db.example.test/neondb";
+const REDACTED_LINE = "Error [28P01]: password authentication failed for postgresql://[redacted]@db.example.test/neondb";
+
+function leakyError() {
+  return Object.assign(new Error(LEAKY_MESSAGE), { code: "28P01", detail: "Key (refresh_token)=(detail-secret)" });
+}
+
+function rejectingDb() {
+  const calls = [];
+  return { calls, async query(sql, params) { calls.push({ sql, params }); throw leakyError(); } };
+}
+
+function assertOneRedactedLine({ consoleError, consoleWarn }, prefix) {
+  assert.equal(consoleError.mock.callCount(), 1, "one error line");
+  const args = consoleError.mock.calls[0].arguments;
+  assert.ok(args.every((arg) => typeof arg === "string"), "only strings are logged");
+  assert.deepEqual(args, [prefix, REDACTED_LINE]);
+  assert.ok(!args.join(" ").includes("npg_hunter2"), "no credential");
+  assert.ok(!args.join(" ").includes("detail-secret"), "no pg detail");
+  assert.equal(consoleWarn.mock.callCount(), 0, "nothing else was logged");
+}
+
+// Mutes the warn and error lines the failure paths print, and returns the mocks so a test can assert them.
+function muteConsole(t) {
+  return { consoleError: t.mock.method(console, "error", () => {}), consoleWarn: t.mock.method(console, "warn", () => {}) };
 }
 
 // A todo, like tests/admin-owner.test.mjs's: the id is still the placeholder until Kevin fills it in.
@@ -59,6 +90,13 @@ test("stateCookie and CLEAR_STATE_COOKIE are exact", () => {
   assert.equal(CLEAR_STATE_COOKIE, CLEAR);
 });
 
+test("readStateCookie ignores an encoded or differently-cased cookie name", () => {
+  // A sibling host can set __%48ost-… without the browser's __Host- rules: the name is never decoded or folded.
+  for (const name of ["__%48ost-kw_spotify_state", "__host-kw_spotify_state", "__HOST-KW_SPOTIFY_STATE", "__Host-kw%5Fspotify_state"]) {
+    assert.equal(readStateCookie(`${name}=${STATE}`), null, name);
+  }
+});
+
 test("readStateCookie reads only __Host-kw_spotify_state", () => {
   assert.equal(readStateCookie(`theme=dark; __Host-kw_spotify_state=${STATE}; b=2`), STATE);
   assert.equal(readStateCookie(`__Host-kw_spotify_state=${STATE}`), STATE);
@@ -74,23 +112,26 @@ test("statesMatch is true only for two equal non-empty strings", () => {
   }
 });
 
-test("denied: Spotify's error param with a matching state fails without an exchange", async () => {
+test("denied: Spotify's error param with a matching state fails without an exchange", async (t) => {
+  const logs = muteConsole(t);
   const { deps, calls } = fakeReconnect();
-  assertFailed(await completeSpotifyReconnect({ query: { error: "access_denied", state: STATE }, cookieState: STATE, deps }), calls, "denied");
-  assert.deepEqual(calls.log[0].details, { code: "denied", reason: "access_denied" });
+  assertFailed(await completeSpotifyReconnect({ query: { error: "access_denied", state: STATE }, cookieState: STATE, deps }), calls, "denied",
+    { details: { code: "denied", reason: "access_denied" }, logs });
   assert.equal(calls.exchange.length, 0);
 });
 
-test("denied records only access_denied or other, never Spotify's text", async () => {
+test("denied records only access_denied or other, never Spotify's text", async (t) => {
+  const logs = muteConsole(t);
   const { deps, calls } = fakeReconnect();
-  assertFailed(await completeSpotifyReconnect({ query: { error: "<b>planted text</b>", state: STATE }, cookieState: STATE, deps }), calls, "denied");
-  assert.deepEqual(calls.log[0].details, { code: "denied", reason: "other" });
+  assertFailed(await completeSpotifyReconnect({ query: { error: "<b>planted text</b>", state: STATE }, cookieState: STATE, deps }), calls, "denied",
+    { details: { code: "denied", reason: "other" }, logs });
   assert.ok(!JSON.stringify(calls.log).includes("planted"));
 });
 
-test("the state is checked first: an error param without a state cookie is state_mismatch and writes no audit row", async () => {
+test("the state is checked first: an error param without a state cookie is state_mismatch and writes no audit row", async (t) => {
+  const logs = muteConsole(t);
   const { deps, calls } = fakeReconnect();
-  assertFailed(await completeSpotifyReconnect({ query: { error: "attacker text" }, cookieState: null, deps }), calls, "state_mismatch", { logged: false });
+  assertFailed(await completeSpotifyReconnect({ query: { error: "attacker text" }, cookieState: null, deps }), calls, "state_mismatch", { logged: false, logs });
   assert.equal(calls.exchange.length, 0);
 });
 
@@ -102,53 +143,110 @@ for (const [name, query, cookieState, logged] of [
   ["repeated state param", { code: "the-code", state: [STATE, STATE] }, STATE, true],
   ["empty cookie and empty param", { code: "the-code", state: "" }, "", false],
 ]) {
-  test(`state_mismatch: ${name}`, async () => {
+  test(`state_mismatch: ${name}`, async (t) => {
+    const logs = muteConsole(t);
     const { deps, calls } = fakeReconnect();
-    assertFailed(await completeSpotifyReconnect({ query, cookieState, deps }), calls, "state_mismatch", { logged });
+    assertFailed(await completeSpotifyReconnect({ query, cookieState, deps }), calls, "state_mismatch", { logged, logs });
     assert.equal(calls.exchange.length, 0);
   });
 }
 
-test("not_configured: no Spotify client credentials", async () => {
+test("not_configured: no Spotify client credentials", async (t) => {
+  const logs = muteConsole(t);
   const { deps, calls } = fakeReconnect({ env: { VERCEL_ENV: "production" } });
-  assertFailed(await completeSpotifyReconnect({ query: GOOD, cookieState: STATE, deps }), calls, "not_configured");
+  assertFailed(await completeSpotifyReconnect({ query: GOOD, cookieState: STATE, deps }), calls, "not_configured", { logs });
   assert.equal(calls.exchange.length, 0);
 });
 
-test("exchange_failed: no code", async () => {
+test("exchange_failed: no code", async (t) => {
+  const logs = muteConsole(t);
   const { deps, calls } = fakeReconnect();
-  assertFailed(await completeSpotifyReconnect({ query: { state: STATE }, cookieState: STATE, deps }), calls, "exchange_failed");
+  assertFailed(await completeSpotifyReconnect({ query: { state: STATE }, cookieState: STATE, deps }), calls, "exchange_failed",
+    { details: { code: "exchange_failed", reason: "missing code" }, logs });
   assert.equal(calls.exchange.length, 0);
 });
 
-test("exchange_failed: the code exchange throws", async () => {
+test("exchange_failed: the code exchange throws", async (t) => {
+  const logs = muteConsole(t);
   const { deps, calls } = fakeReconnect({ exchangeCode: async () => { throw new Error("Spotify token exchange failed with 400"); } });
-  assertFailed(await completeSpotifyReconnect({ query: GOOD, cookieState: STATE, deps }), calls, "exchange_failed");
+  assertFailed(await completeSpotifyReconnect({ query: GOOD, cookieState: STATE, deps }), calls, "exchange_failed",
+    { details: { code: "exchange_failed", reason: "Spotify token exchange failed with 400" }, logs });
   assert.equal(calls.account.length, 0);
 });
 
-test("missing_scopes: a scope was not granted", async () => {
+test("missing_scopes: a scope was not granted", async (t) => {
+  const logs = muteConsole(t);
   const granted = SPOTIFY_SCOPES.filter((s) => s !== "user-read-recently-played");
   const { deps, calls } = fakeReconnect({ exchangeCode: async () => ({ refreshToken: "new-refresh", accessToken: "new-access", scopes: granted, expiresIn: 3600 }) });
-  assertFailed(await completeSpotifyReconnect({ query: GOOD, cookieState: STATE, deps }), calls, "missing_scopes");
-  assert.deepEqual(calls.log[0].details.missing, ["user-read-recently-played"]);
+  assertFailed(await completeSpotifyReconnect({ query: GOOD, cookieState: STATE, deps }), calls, "missing_scopes",
+    { details: { code: "missing_scopes", missing: ["user-read-recently-played"] }, logs });
   assert.equal(calls.account.length, 0);
 });
 
-test("account_lookup_failed: /v1/me fails", async () => {
+test("missing_scopes: three scopes granted, but one is the wrong one", async (t) => {
+  const logs = muteConsole(t);
+  const granted = ["user-read-currently-playing", "user-top-read", "user-library-read"];
+  const { deps, calls } = fakeReconnect({ exchangeCode: async () => ({ refreshToken: "new-refresh", accessToken: "new-access", scopes: granted, expiresIn: 3600 }) });
+  assertFailed(await completeSpotifyReconnect({ query: GOOD, cookieState: STATE, deps }), calls, "missing_scopes",
+    { details: { code: "missing_scopes", missing: ["user-read-recently-played"] }, logs });
+  assert.equal(calls.account.length, 0);
+});
+
+test("account_lookup_failed: /v1/me fails", async (t) => {
+  const logs = muteConsole(t);
   const { deps, calls } = fakeReconnect({ fetchSpotifyAccountId: async () => { throw new Error("Spotify /v1/me failed with 503"); } });
-  assertFailed(await completeSpotifyReconnect({ query: GOOD, cookieState: STATE, deps }), calls, "account_lookup_failed");
+  assertFailed(await completeSpotifyReconnect({ query: GOOD, cookieState: STATE, deps }), calls, "account_lookup_failed",
+    { details: { code: "account_lookup_failed", reason: "Spotify /v1/me failed with 503" }, logs });
 });
 
-test("wrong_account: another Spotify account approved", async () => {
+test("wrong_account: another Spotify account approved", async (t) => {
+  const logs = muteConsole(t);
   const { deps, calls } = fakeReconnect({ fetchSpotifyAccountId: async () => "someone-else" });
-  assertFailed(await completeSpotifyReconnect({ query: GOOD, cookieState: STATE, deps }), calls, "wrong_account");
-  assert.equal(calls.log[0].details.accountId, "someone-else");
+  assertFailed(await completeSpotifyReconnect({ query: GOOD, cookieState: STATE, deps }), calls, "wrong_account",
+    { details: { code: "wrong_account", accountId: "someone-else" }, logs });
 });
 
-test("save_failed: the database write throws and the cache is not reset", async () => {
+test("save_failed: the database write throws and the cache is not reset", async (t) => {
+  const logs = muteConsole(t);
   const { deps, calls } = fakeReconnect({ saveSpotifyAuthorization: async () => { throw new Error("connection terminated"); } });
-  assertFailed(await completeSpotifyReconnect({ query: GOOD, cookieState: STATE, deps }), calls, "save_failed");
+  assertFailed(await completeSpotifyReconnect({ query: GOOD, cookieState: STATE, deps }), calls, "save_failed",
+    { details: { code: "save_failed", reason: "connection terminated" }, logs });
+});
+
+test("save_failed keeps only the message of a pg-shaped error, never its detail", async (t) => {
+  // pg's DatabaseError carries the failing row, token included, as an own enumerable `detail`.
+  const logs = muteConsole(t);
+  const pgError = Object.assign(new Error('new row for relation "integration_tokens" violates check constraint "integration_tokens_has_token"'), {
+    code: "23514",
+    detail: "Failing row contains (spotify, null, new-refresh, …).",
+  });
+  const { deps, calls } = fakeReconnect({ saveSpotifyAuthorization: async () => { throw pgError; } });
+  assertFailed(await completeSpotifyReconnect({ query: GOOD, cookieState: STATE, deps }), calls, "save_failed",
+    { details: { code: "save_failed", reason: pgError.message }, logs });
+  assert.ok(!JSON.stringify(calls.log).includes("new-refresh"));
+});
+
+test("no failure outcome puts the code, a state, a token or the client secret in a log line or an audit row", async (t) => {
+  const channels = ["log", "info", "warn", "error", "debug"].map((name) => t.mock.method(console, name, () => {}));
+  const OTHER_STATE = `${"A".repeat(42)}B`;
+  const SECRETS = ["the-code", STATE, OTHER_STATE, "new-refresh", "new-access", "csecret"];
+  for (const [code, overrides, query] of [
+    ["state_mismatch", {}, { code: "the-code", state: OTHER_STATE }],
+    ["exchange_failed", { exchangeCode: async () => { throw new Error("Token exchange failed with 400: invalid_grant"); } }, GOOD],
+    ["missing_scopes", { exchangeCode: async () => ({ refreshToken: "new-refresh", accessToken: "new-access", scopes: ["user-top-read"], expiresIn: 3600 }) }, GOOD],
+    ["account_lookup_failed", { fetchSpotifyAccountId: async () => { throw new Error("Account lookup failed with 503"); } }, GOOD],
+    ["wrong_account", { fetchSpotifyAccountId: async () => "someone-else" }, GOOD],
+    ["save_failed", { saveSpotifyAuthorization: async () => { throw new Error("connection terminated"); } }, GOOD],
+  ]) {
+    for (const channel of channels) channel.mock.resetCalls();
+    const { deps, calls } = fakeReconnect(overrides);
+    assert.equal((await completeSpotifyReconnect({ query, cookieState: STATE, deps })).outcome, code);
+    // inspect, not String: an object logged whole would show its own properties here.
+    const lines = channels.flatMap((channel) => channel.mock.calls.map((c) => c.arguments.map((arg) => (typeof arg === "string" ? arg : inspect(arg))).join(" ")));
+    assert.ok(lines.length > 0, `${code}: the failure was logged`);
+    const text = `${JSON.stringify(calls.log)}\n${lines.join("\n")}`;
+    for (const secret of SECRETS) assert.ok(!text.includes(secret), `${code}: ${secret} leaked`);
+  }
 });
 
 test("connected: saves the authorization, resets the cache and logs spotify_connected", async () => {
@@ -165,10 +263,20 @@ test("connected: saves the authorization, resets the cache and logs spotify_conn
   assert.ok(!JSON.stringify(calls.log).includes("the-code"));
 });
 
-test("connected even when the audit log write fails", async () => {
+test("connected even when the audit log write fails", async (t) => {
+  const logs = muteConsole(t);
   const { deps, calls } = fakeReconnect({ logAdminEvent: async () => { throw new Error("database down"); } });
   assert.equal((await completeSpotifyReconnect({ query: GOOD, cookieState: STATE, deps })).outcome, "connected");
   assert.equal(calls.save.length, 1);
+  assert.deepEqual(logs.consoleError.mock.calls.map((c) => c.arguments), [["[admin/spotify] audit log write failed:", "Error: database down"]]);
+});
+
+test("a failed audit write logs one redacted string line, never the Error object", async (t) => {
+  const logs = muteConsole(t);
+  const { deps, calls } = fakeReconnect({ logAdminEvent: async () => { throw leakyError(); } });
+  assert.equal((await completeSpotifyReconnect({ query: GOOD, cookieState: STATE, deps })).outcome, "connected");
+  assert.equal(calls.save.length, 1);
+  assertOneRedactedLine(logs, "[admin/spotify] audit log write failed:");
 });
 
 const adminDeps = (overrides = {}) => ({ env: SPOTIFY_ENV, auth: fakeAuth(), db: fakeDb(1), ...overrides });
@@ -229,12 +337,18 @@ test("authorize sets the state cookie and 303s to Spotify's approve page", async
   assert.equal(res.ended, true);
 });
 
-test("authorize without Spotify credentials 303s to not_configured and sets no state", async () => {
+test("authorize without Spotify credentials 303s to not_configured and sets no state", async (t) => {
+  const logs = muteConsole(t);
+  const log = [];
   const res = fakeRes();
-  await handleSpotifyAuthorize(fakeReq({ method: "POST", origin: "https://www.kevinwong.co" }), res, adminDeps({ env: { VERCEL_ENV: "production" }, logAdminEvent: async () => {} }));
+  await handleSpotifyAuthorize(fakeReq({ method: "POST", origin: "https://www.kevinwong.co" }), res,
+    adminDeps({ env: { VERCEL_ENV: "production" }, logAdminEvent: async (event, options) => { log.push({ event, ...options }); } }));
   assert.equal(res.statusCode, 303);
   assert.equal(res.getHeader("Location"), "/admin?spotify_error=not_configured");
   assert.equal(res.getHeader("Set-Cookie"), undefined);
+  assert.equal(res.getHeader("Cache-Control"), NO_STORE);
+  assert.deepEqual(log, [{ event: "spotify_connect_failed", actor: OWNER_ACTOR, details: { code: "not_configured" } }]);
+  assert.deepEqual(logs.consoleWarn.mock.calls.map((c) => c.arguments), [["[admin/spotify] reconnect failed: not_configured"]]);
 });
 
 test("callback clears the state cookie even when admin is disabled", async () => {
@@ -279,34 +393,67 @@ test("callback connects with a matching state cookie and 303s to /admin?spotify=
   assert.equal(calls.reset, 1);
 });
 
+function assertCallbackFailed(res, calls, code) {
+  assert.equal(res.statusCode, 303);
+  assert.equal(res.getHeader("Location"), `/admin?spotify_error=${code}`);
+  assert.equal(res.getHeader("Set-Cookie"), CLEAR);
+  assert.equal(res.getHeader("Cache-Control"), NO_STORE);
+  assert.equal(res.ended, true);
+  assert.equal(calls.exchange.length, 0, "nothing exchanged");
+  assert.equal(calls.save.length, 0, "nothing saved");
+}
+
+test("callback without a state cookie 303s to state_mismatch, clears the cookie and exchanges nothing", async (t) => {
+  const logs = muteConsole(t);
+  const { deps, calls } = fakeReconnect();
+  const res = fakeRes();
+  await handleSpotifyCallback(fakeReq({ query: GOOD }), res, { ...deps, auth: fakeAuth(), db: fakeDb(1) });
+  assertCallbackFailed(res, calls, "state_mismatch");
+  assert.equal(calls.log.length, 0, "no reconnect was in flight, so no audit row");
+  assert.equal(logs.consoleWarn.mock.callCount(), 1);
+});
+
+test("callback with a state param that doesn't match the cookie 303s to state_mismatch and clears the cookie", async (t) => {
+  muteConsole(t);
+  const { deps, calls } = fakeReconnect();
+  const res = fakeRes();
+  await handleSpotifyCallback(
+    fakeReq({ cookie: `__Host-kw_spotify_state=${STATE}`, query: { code: "the-code", state: `${"A".repeat(42)}B` } }),
+    res, { ...deps, auth: fakeAuth(), db: fakeDb(1) },
+  );
+  assertCallbackFailed(res, calls, "state_mismatch");
+  assert.deepEqual(calls.log, [{ event: "spotify_connect_failed", actor: OWNER_ACTOR, details: { code: "state_mismatch" } }]);
+});
+
+test("callback with Spotify's access_denied and a matching state 303s to denied and clears the cookie", async (t) => {
+  muteConsole(t);
+  const { deps, calls } = fakeReconnect();
+  const res = fakeRes();
+  await handleSpotifyCallback(
+    fakeReq({ cookie: `__Host-kw_spotify_state=${STATE}`, query: { error: "access_denied", state: STATE } }),
+    res, { ...deps, auth: fakeAuth(), db: fakeDb(1) },
+  );
+  assertCallbackFailed(res, calls, "denied");
+  assert.deepEqual(calls.log, [{ event: "spotify_connect_failed", actor: OWNER_ACTOR, details: { code: "denied", reason: "access_denied" } }]);
+});
+
+test("callback ignores redirect-looking query parameters", async (t) => {
+  muteConsole(t);
+  const REDIRECTS = { next: "https://evil.example/", redirect: "//evil.example", redirect_uri: "https://evil.example/cb", return_to: "//evil.example" };
+  const cookie = `__Host-kw_spotify_state=${STATE}`;
+  for (const [query, location] of [
+    [{ ...GOOD, ...REDIRECTS }, "/admin?spotify=connected"],
+    [{ code: "the-code", state: `${"A".repeat(42)}B`, ...REDIRECTS }, "/admin?spotify_error=state_mismatch"],
+  ]) {
+    const { deps } = fakeReconnect();
+    const res = fakeRes();
+    await handleSpotifyCallback(fakeReq({ cookie, query }), res, { ...deps, auth: fakeAuth(), db: fakeDb(1) });
+    assert.equal(res.getHeader("Location"), location);
+  }
+});
+
 // A failed owner check (database down, Better Auth's schema check) or any other rejection the handlers don't
 // turn into a redirect: one redacted string line and a 500, never the Error object, its stack or pg's detail.
-const LEAKY_MESSAGE = "password authentication failed for postgresql://kw_owner:npg_hunter2@db.example.test/neondb";
-const REDACTED_LINE = "Error [28P01]: password authentication failed for postgresql://[redacted]@db.example.test/neondb";
-
-function leakyError() {
-  return Object.assign(new Error(LEAKY_MESSAGE), { code: "28P01", detail: "Key (refresh_token)=(detail-secret)" });
-}
-
-function rejectingDb() {
-  const calls = [];
-  return { calls, async query(sql, params) { calls.push({ sql, params }); throw leakyError(); } };
-}
-
-function assertOneRedactedLine({ consoleError, consoleWarn }, prefix) {
-  assert.equal(consoleError.mock.callCount(), 1, "one error line");
-  const args = consoleError.mock.calls[0].arguments;
-  assert.ok(args.every((arg) => typeof arg === "string"), "only strings are logged");
-  assert.deepEqual(args, [prefix, REDACTED_LINE]);
-  assert.ok(!args.join(" ").includes("npg_hunter2"), "no credential");
-  assert.ok(!args.join(" ").includes("detail-secret"), "no pg detail");
-  assert.equal(consoleWarn.mock.callCount(), 0, "nothing else was logged");
-}
-
-function muteConsole(t) {
-  return { consoleError: t.mock.method(console, "error", () => {}), consoleWarn: t.mock.method(console, "warn", () => {}) };
-}
-
 test("authorize answers a failed owner check with one redacted line and a 500", async (t) => {
   const logs = muteConsole(t);
   const db = rejectingDb();
