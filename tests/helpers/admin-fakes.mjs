@@ -29,6 +29,26 @@ export function fakeAuth(session = OWNER_SESSION) {
   return { calls, api: { async getSession(args) { calls.push(args); return session; } } };
 }
 
+/**
+ * Runs fn with process.env changed by vars (undefined deletes a key), then puts every key named in vars
+ * back as it was, including any fn changed itself.
+ */
+export async function withEnv(vars, fn) {
+  const saved = Object.keys(vars).map((key) => [key, key in process.env, process.env[key]]);
+  try {
+    for (const [key, value] of Object.entries(vars)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    return await fn();
+  } finally {
+    for (const [key, had, value] of saved) {
+      if (had) process.env[key] = value;
+      else delete process.env[key];
+    }
+  }
+}
+
 export function fakeDb(rowCount = 1) {
   const calls = [];
   return {

@@ -1,10 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { forwardAuthRequest, getOwnerSession, isAdminEnabled, isAllowedAuthRequest, isSameOrigin, requireAdmin, setNoStore } from "../lib/admin/guard.js";
-import { OWNER_SESSION, PROD_ENV, fakeAuth, fakeDb, fakeReq, fakeRes } from "./helpers/admin-fakes.mjs";
+import { AUTH_ALLOWLIST, forwardAuthRequest, getOwnerSession, isAdminEnabled, isAllowedAuthRequest, isSameOrigin, requireAdmin, setNoStore } from "../lib/admin/guard.js";
+import { buildAuthOptions } from "../lib/auth.js";
+import { OWNER_SESSION, PROD_ENV, fakeAuth, fakeDb, fakeReq, fakeRes, withEnv } from "./helpers/admin-fakes.mjs";
 
 const NO_STORE = "private, no-store, max-age=0, must-revalidate";
 const OWNER = { userId: "user-1", name: "Kevin Wong", image: "https://avatars.githubusercontent.com/u/1741711?v=4", expiresAt: new Date("2026-10-17T12:00:00.000Z") };
+
+// A database outage as pg reports it: a credential in the message and a `detail`, neither of which may be logged.
+const dbDownError = () => Object.assign(new Error("connect ECONNREFUSED for postgres://kevin:hunter2@db.example/neondb"), {
+  code: "ECONNREFUSED",
+  detail: "Key (token)=(detail-secret) already exists.",
+});
+const downDb = () => ({ calls: [], async query() { throw dbDownError(); } });
+const downAuth = () => ({ calls: [], api: { async getSession() { throw new Error("session read failed"); } } });
 
 async function guard(reqOptions, { env = PROD_ENV, auth = fakeAuth(), db = fakeDb(1), mutation = false } = {}) {
   const res = fakeRes();
@@ -29,6 +38,34 @@ test("isAdminEnabled only in production on www.kevinwong.co", () => {
     assert.equal(isAdminEnabled(req, env), expected, `${env.VERCEL_ENV} ${host}`);
   }
 });
+
+test("NODE_ENV=production never enables admin without VERCEL_ENV=production", () => {
+  // NODE_ENV is "production" on every Vercel preview and under `next start`.
+  for (const env of [{ NODE_ENV: "production" }, { VERCEL_ENV: "preview", NODE_ENV: "production" }]) {
+    assert.equal(isAdminEnabled(fakeReq(), env), false, JSON.stringify(env));
+  }
+});
+
+test("isAdminEnabled reads Host only, never X-Forwarded-Host", () => {
+  const req = { method: "GET", headers: { host: "kevinwong-co.vercel.app", "x-forwarded-host": "www.kevinwong.co" }, query: {}, url: "/" };
+  assert.equal(isAdminEnabled(req, PROD_ENV), false);
+});
+
+test("isAdminEnabled and requireAdmin read process.env when no env is passed", () =>
+  withEnv({ VERCEL_ENV: undefined }, async () => {
+    // Every real caller passes no env: the route, the admin API routes and the pages.
+    assert.equal(isAdminEnabled(fakeReq()), false);
+    const auth = fakeAuth();
+    const res = fakeRes();
+    assert.equal(await requireAdmin(fakeReq(), res, { deps: { auth, db: fakeDb(1) } }), null);
+    assert.equal(res.statusCode, 404);
+    assert.equal(auth.calls.length, 0);
+    process.env.VERCEL_ENV = "preview";
+    assert.equal(isAdminEnabled(fakeReq()), false);
+    process.env.VERCEL_ENV = "production";
+    assert.equal(isAdminEnabled(fakeReq()), true);
+    assert.deepEqual(await requireAdmin(fakeReq(), fakeRes(), { deps: { auth, db: fakeDb(1) } }), OWNER);
+  }));
 
 test("isSameOrigin requires exactly https://www.kevinwong.co", () => {
   assert.equal(isSameOrigin(fakeReq({ origin: "https://www.kevinwong.co" })), true);
@@ -66,6 +103,12 @@ test("getOwnerSession checks the session user's GitHub 1741711 account and retur
 
 test("getOwnerSession returns null when the user has no GitHub 1741711 account", async () => {
   assert.equal(await getOwnerSession(fakeReq(), { auth: fakeAuth(), db: fakeDb(0) }), null);
+});
+
+test("getOwnerSession rejects when the session or account read fails", async () => {
+  // The admin pages rely on this to fail closed: no owner is ever resolved from a failed read.
+  await assert.rejects(getOwnerSession(fakeReq(), { auth: fakeAuth(), db: downDb() }), { code: "ECONNREFUSED" });
+  await assert.rejects(getOwnerSession(fakeReq(), { auth: downAuth(), db: fakeDb(1) }), /session read failed/);
 });
 
 test("requireAdmin 404s on a preview deployment without reading the session", async () => {
@@ -128,7 +171,43 @@ test("requireAdmin lets a non-mutation GET through without an Origin", async () 
   assert.deepEqual(owner, OWNER);
 });
 
-test("isAllowedAuthRequest allows exactly the three Better Auth routes", () => {
+test("requireAdmin answers 500 with one redacted line when the owner check fails", async (t) => {
+  const consoleError = t.mock.method(console, "error", () => {});
+  const consoleWarn = t.mock.method(console, "warn", () => {});
+  const consoleLog = t.mock.method(console, "log", () => {});
+  for (const deps of [{ auth: fakeAuth(), db: downDb() }, { auth: downAuth(), db: fakeDb(1) }]) {
+    const { owner, res } = await guard({ method: "POST", origin: "https://www.kevinwong.co" }, { ...deps, mutation: true });
+    assert.equal(owner, null);
+    assert.equal(res.statusCode, 500);
+    assert.deepEqual(res.body, { error: "server_error" });
+    assert.equal(res.ended, true);
+    assert.equal(res.getHeader("Cache-Control"), NO_STORE);
+  }
+  assert.deepEqual(consoleError.mock.calls.map((call) => call.arguments), [
+    ["[admin] owner check failed:", "Error [ECONNREFUSED]: connect ECONNREFUSED for postgres://[redacted]@db.example/neondb"],
+    ["[admin] owner check failed:", "Error: session read failed"],
+  ]);
+  assert.equal(consoleWarn.mock.callCount() + consoleLog.mock.callCount(), 0, "nothing else was logged");
+  const written = consoleError.mock.calls.flatMap((call) => call.arguments).join("\n");
+  assert.ok(!written.includes("hunter2") && !written.includes("detail-secret") && !written.includes("    at "));
+});
+
+test("AUTH_ALLOWLIST is frozen and is exactly the three Better Auth routes", () => {
+  assert.ok(Object.isFrozen(AUTH_ALLOWLIST));
+  assert.deepEqual([...AUTH_ALLOWLIST].sort(), ["GET /api/auth/callback/github", "POST /api/auth/sign-in/social", "POST /api/auth/sign-out"]);
+  // Across every router path lib/auth.js disables, the three it serves and a few others, crossed with every
+  // method, isAllowedAuthRequest admits exactly the listed pairs. (Routes outside this list are covered by
+  // the list being closed, not by this loop.)
+  const paths = [...buildAuthOptions({ env: {}, db: {} }).disabledPaths,
+    "/sign-in/social", "/callback/github", "/callback/google", "/sign-out", "/reset-password/abc", "/sign-in/oauth2"];
+  const allowed = [];
+  for (const path of paths) for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]) {
+    if (isAllowedAuthRequest(method, `/api/auth${path}`)) allowed.push(`${method} /api/auth${path}`);
+  }
+  assert.deepEqual(allowed.sort(), [...AUTH_ALLOWLIST].sort());
+});
+
+test("isAllowedAuthRequest admits the three routes and refuses near misses", () => {
   const cases = [
     ["POST", "/api/auth/sign-in/social", true],
     ["GET", "/api/auth/callback/github?code=abc&state=xyz", true],
@@ -188,4 +267,20 @@ test("forwardAuthRequest logs one redacted line and answers 500 when Better Auth
   const written = consoleError.mock.calls.flatMap((call) => call.arguments);
   assert.ok(written.every((a) => typeof a === "string"), "no Error object printed");
   assert.ok(!written.join("\n").includes("hunter2") && !written.join("\n").includes("detail-secret") && !written.join("\n").includes("    at "));
+});
+
+test("forwardAuthRequest pins the forwarded protocol before Better Auth builds its URL", async () => {
+  // better-call builds the Request URL from X-Forwarded-Proto (else the socket), :authority (else Host) and
+  // req.url. The caller has checked Host and req.url; a client can send the other two.
+  const req = fakeReq({ method: "POST", url: "/api/auth/sign-out" });
+  req.headers["x-forwarded-proto"] = "https://www.kevinwong.co/api/auth/callback/github?code=x&state=y#";
+  req.headers[":authority"] = "evil.example";
+  let seen;
+  await forwardAuthRequest(req, fakeRes(), async (r) => { seen = { ...r.headers }; });
+  assert.equal(seen["x-forwarded-proto"], "https");
+  assert.equal(":authority" in seen, false);
+  assert.equal(seen.host, "www.kevinwong.co");
+  const plain = fakeReq({ method: "POST", url: "/api/auth/sign-out" });
+  await forwardAuthRequest(plain, fakeRes(), async (r) => { seen = { ...r.headers }; });
+  assert.equal(seen["x-forwarded-proto"], "https");
 });
