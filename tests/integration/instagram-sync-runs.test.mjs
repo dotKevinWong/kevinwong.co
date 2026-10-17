@@ -50,9 +50,10 @@ const fakeUpload = async (pathname, _buffer, contentType) => ({ url: `https://bl
 
 const CLI = fileURLToPath(new URL("../../scripts/instagram-sync.mjs", import.meta.url));
 const CLI_FETCH_STUB = new URL("../helpers/cli-fetch-stub.mjs", import.meta.url).href;
-// Runs `npm run instagram:sync -- <args>` against the test database (DATABASE_URL is inherited). It runs in an
-// empty directory, so the script's .env loading finds nothing, with cli-fetch-stub.mjs preloaded, so it reaches
-// no real API, and without npm's npm_config_* variables, which the script reads as options.
+// Runs scripts/instagram-sync.mjs with node directly (what `npm run instagram:sync -- <args>` runs) against the
+// test database (DATABASE_URL is inherited). It runs in an empty directory, so the script's .env loading finds
+// nothing, with cli-fetch-stub.mjs preloaded, so it reaches no real API, and without any npm_config_* variables
+// inherited from an npm-run test command, which the script would read as its options.
 function runCli(t, args = []) {
   const cwd = mkdtempSync(join(tmpdir(), "kw-instagram-sync-cli-"));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
@@ -216,6 +217,9 @@ describe("syncInstagram records its runs (integration)", { skip: db.skip }, () =
     assert.equal(typeof summary.resize, "string");
     assert.equal(fetchStub.mock.callCount(), 1);
     assert.ok(errors.mock.calls.some((c) => String(c.arguments[0]).startsWith("[instagram-sync] Could not record this run")));
+    // describeError: the line names pg's error code, not just its message.
+    assert.ok(errors.mock.calls.some((c) => c.arguments[0] === "[instagram-sync] Could not record this run:" &&
+      /\[42P01\]: relation "sync_runs" does not exist$/.test(c.arguments[1])));
   });
 
   test("a real run fails closed when the 30-day count cannot be read", async (t) => {
@@ -283,8 +287,8 @@ describe("syncInstagram records its runs (integration)", { skip: db.skip }, () =
     assert.equal(await leaseHeld(), false);
   });
 
-  test("a run's row is final before its lease is released", async (t) => {
-    // Records, as the row leaves 'running', whether this run's lease is still held.
+  // Records in lease_probe, as a row leaves 'running', whether the lease is still held. Returns a reader for it.
+  async function installLeaseProbe(t) {
     await db.pool.query("create table lease_probe (held boolean)");
     await db.pool.query(`create function lease_probe_fn() returns trigger language plpgsql as $$
       begin
@@ -300,9 +304,24 @@ describe("syncInstagram records its runs (integration)", { skip: db.skip }, () =
       await db.pool.query("drop function if exists lease_probe_fn()");
       await db.pool.query("drop table if exists lease_probe");
     });
+    return async () => (await db.pool.query("select held from lease_probe")).rows;
+  }
+
+  test("a run's row is final before its lease is released", async (t) => {
+    const probed = await installLeaseProbe(t);
     stubFetch(t, { [MEDIA]: () => Response.json({ data: [] }) });
     await syncInstagram({ trigger: "cron" });
-    assert.deepEqual((await db.pool.query("select held from lease_probe")).rows, [{ held: true }]);
+    assert.deepEqual(await probed(), [{ held: true }]);
+    assert.equal(await leaseHeld(), false);
+  });
+
+  test("a run that throws also has its row final before its lease is released", async (t) => {
+    const probed = await installLeaseProbe(t);
+    stubFetch(t, { [MEDIA]: () => Response.json(
+      { error: { code: 2, type: "OAuthException", message: "Service temporarily unavailable" } }, { status: 500 }) });
+    await assert.rejects(syncInstagram({ trigger: "cron" }), /HTTP 500 code=2/);
+    assert.equal((await lastRow()).status, "failed");
+    assert.deepEqual(await probed(), [{ held: true }]);
     assert.equal(await leaseHeld(), false);
   });
 

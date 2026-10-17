@@ -3623,7 +3623,7 @@ Nothing else in the route changes.
 
 `scripts/instagram-sync.mjs`: add `trigger: "cli"` to the `syncInstagram({ ... })` call, and change the
 `--max-uploads=N` line of `USAGE` to
-`  --max-uploads=N      Cap media uploads this run (default 25; backlogs resume later; never past 1,800 in 30 days)`.
+`  --max-uploads=N      Cap media uploads this run (default 25; backlogs resume later; stops new uploads at 1,800 in 30 days)`.
 
 - [ ] **Step 9: Run tests to verify they pass, then lint and build**
 

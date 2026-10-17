@@ -61,6 +61,14 @@ describe("sync-runs (integration)", { skip: db.skip }, () => {
     assert.deepEqual([r.status, r.uploads], ["failed", 3]);
   });
 
+  test("incrementRunUploads counts whatever the row's status, so a run swept as abandoned keeps counting", async () => {
+    const id = await start("cron", false);
+    await pool.query("update sync_runs set status = 'abandoned', finished_at = now() where id = $1", [id]);
+    await incrementRunUploads(id, 1, pool);
+    const r = await row(id);
+    assert.deepEqual([r.status, r.uploads], ["abandoned", 1]);
+  });
+
   test("incrementRunUploads rejects when no row has that id, so the upload cannot go uncounted", async () => {
     const id = await start("cli", false);
     await assert.rejects(incrementRunUploads(id + 1_000_000, 1, pool), /no sync_runs row with id/);

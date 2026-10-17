@@ -1,7 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import { syncInstagram } from "../../../lib/instagram-sync";
+import { describeError, syncInstagram } from "../../../lib/instagram-sync";
 import { InstagramReauthRequiredError } from "../../../lib/instagram";
-import { redact } from "../../../lib/redact";
 
 export const config = {
   // Each media item is a download from Instagram plus an upload to Blob, and a
@@ -77,9 +76,9 @@ export default async function handler(req, res) {
       });
     }
 
-    // The message only, redacted: an Error object would also print a pg error's
-    // fields and the stack.
-    console.error("[cron/sync-instagram] failed:", redact(error?.message ?? String(error)));
+    // Name, code and message, redacted: an Error object would also print a pg
+    // error's fields and the stack.
+    console.error("[cron/sync-instagram] failed:", describeError(error));
     return res.status(500).json({ error: "Sync failed", detail: error.message });
   }
 }
