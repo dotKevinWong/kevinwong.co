@@ -10,6 +10,7 @@ import { logAdminEvent } from "../../../../lib/admin/audit-log";
 export const config = { maxDuration: 300, api: { bodyParser: false } };
 
 const handler = createInstagramSyncHandler({
-  requireAdmin, readJsonBody, checkPanelRunAllowed, claimPanelSlot, releasePanelImportSlot, syncInstagram, logAdminEvent,
+  requireAdmin, readBody: readJsonBody, checkPanelRunAllowed, claimPanelSlot, releasePanelImportSlot, syncInstagram,
+  logAdminEvent,
 });
 export default handler;
