@@ -8,6 +8,7 @@ const oauth = (id, login = "someone", providerId = "github", action = "create-us
   ({ method: "oauth", oauth: { providerId, profile: { id, login } }, action });
 const REJECTED = [
   ["another GitHub id", oauth(999)],
+  ["a link-account for another id", oauth(999, "someone", "github", "link-account")],
   ["a longer id", oauth(17417110)],
   ["a zero-padded id", oauth("01741711")],
   ["an id with a trailing space", oauth("1741711 ")],
@@ -57,11 +58,18 @@ test("validateOwner schedules one rejected-sign-in log and does not await it", a
   assert.equal(scheduled.length, 1, "the owner schedules nothing");
 });
 
-test("validateOwner still rejects when the rejected-sign-in log fails", async () => {
+test("validateOwner still rejects when the rejected-sign-in log fails, and logs only the redacted message", async (t) => {
+  const consoleError = t.mock.method(console, "error", () => {});
   const scheduled = [];
-  const deps = { logRejected: async () => { throw new Error("database down"); }, schedule: (p) => { scheduled.push(p); } };
+  const failure = Object.assign(new Error("database down at postgres://kw:hunter2@db.example/kw"), {
+    code: "57P01", detail: "Failing row contains (hunter2).",
+  });
+  const deps = { logRejected: async () => { throw failure; }, schedule: (p) => { scheduled.push(p); } };
   assert.deepEqual(validateOwner({ source: oauth(999, "intruder") }, null, deps), NOT_OWNER);
   await assert.doesNotReject(scheduled[0]);
+  assert.deepEqual(consoleError.mock.calls.map((call) => call.arguments), [
+    ["[auth] could not log a rejected sign-in:", "database down at postgres://[redacted]@db.example/kw"],
+  ]);
 });
 
 test("githubProfileToUser fills a placeholder email and falls back to the login", () => {
@@ -104,8 +112,63 @@ test("buildAuthOptions pins the reviewed options", () => {
     "/revoke-other-sessions", "/link-social", "/unlink-account", "/get-access-token", "/refresh-token",
     "/list-accounts", "/account-info", "/update-user", "/delete-user", "/change-email", "/change-password",
     "/sign-in/email", "/sign-up/email", "/error",
+    "/verify-email", "/send-verification-email", "/request-password-reset", "/reset-password",
+    "/verify-password", "/delete-user/callback", "/ok",
   ]);
+  assert.ok(o.disabledPaths.includes("/verify-email"), "the JWT path that mints a session without validateOwner");
   for (const p of ["/sign-in/social", "/callback/github", "/sign-out"]) assert.ok(!o.disabledPaths.includes(p), p);
+  // Nothing beyond the reviewed options: an added trustedOrigins, plugin, origin-check switch or cookie
+  // attribute would otherwise pass every assertion above.
+  assert.deepEqual(Object.keys(o).sort(), ["account", "advanced", "appName", "baseURL", "database", "databaseHooks",
+    "disabledPaths", "emailAndPassword", "hooks", "logger", "onAPIError", "rateLimit", "secret", "session",
+    "socialProviders", "telemetry", "user", "verification"]);
+  assert.deepEqual(Object.keys(o.advanced).sort(), ["backgroundTasks", "useSecureCookies"]);
+  assert.deepEqual(Object.keys(gh).sort(), ["clientId", "clientSecret", "disableDefaultScope", "mapProfileToUser"]);
+  assert.deepEqual(Object.keys(o.hooks), ["before"]);
+  assert.equal(typeof o.hooks.before, "function");
+  assert.deepEqual(Object.keys(o.logger), ["log"], "Better Auth's default level");
+  assert.equal(typeof o.logger.log, "function");
+});
+
+test("the background-task handler catches a rejection and logs fixed text", async (t) => {
+  const consoleError = t.mock.method(console, "error", () => {});
+  const unhandled = [];
+  const onUnhandled = (reason) => { unhandled.push(reason); };
+  process.on("unhandledRejection", onUnhandled);
+  try {
+    const { handler } = buildAuthOptions({ env: VALID_ENV, db: {} }).advanced.backgroundTasks;
+    handler(Promise.reject(new Error("token=abc123 failed")));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  } finally {
+    process.off("unhandledRejection", onUnhandled);
+  }
+  assert.equal(unhandled.length, 0, "no unhandled rejection");
+  assert.deepEqual(consoleError.mock.calls.map((call) => call.arguments), [["[auth] a background task failed"]]);
+});
+
+test("the Better Auth logger writes one redacted line per call and never an Error object", (t) => {
+  const consoleError = t.mock.method(console, "error", () => {});
+  const consoleWarn = t.mock.method(console, "warn", () => {});
+  const consoleLog = t.mock.method(console, "log", () => {});
+  const { log } = buildAuthOptions({ env: VALID_ENV, db: {} }).logger;
+  const pgError = Object.assign(new Error('duplicate key value violates unique constraint "auth_session_token_key"'), {
+    code: "23505", detail: "Key (token)=(abcdefghijklmnopqrstuvwxyz0123456789ABCD) already exists.",
+  });
+  log("error", "Better auth was unable to query your database.\nError: ", pgError);
+  log("warn", "Token exchange failed: https://github.com/login/oauth/access_token?code=abc123def&client_secret=s3cr3t",
+    "Bearer gho_abcdef1234567890");
+  log("info", "plain message");
+  assert.deepEqual(consoleError.mock.calls.map((call) => call.arguments), [[
+    '[better-auth] error: Better auth was unable to query your database. Error: Error [23505]: duplicate key value violates unique constraint "auth_session_token_key"',
+  ]]);
+  assert.deepEqual(consoleWarn.mock.calls.map((call) => call.arguments), [[
+    "[better-auth] warn: Token exchange failed: https://github.com/login/oauth/access_token?code=[redacted]&client_secret=[redacted] Bearer [redacted]",
+  ]]);
+  assert.deepEqual(consoleLog.mock.calls.map((call) => call.arguments), [["[better-auth] info: plain message"]]);
+  const written = [...consoleError.mock.calls, ...consoleWarn.mock.calls].map((call) => call.arguments[0]).join("\n");
+  for (const leak of ["Key (token)", "abcdefghijklmnopqrstuvwxyz", "    at ", "abc123def", "s3cr3t", "gho_"]) {
+    assert.ok(!written.includes(leak), leak);
+  }
 });
 
 test("buildAuthOptions requires BETTER_AUTH_URL in production only", () => {
@@ -125,5 +188,15 @@ test("buildAuthOptions requires a 32-character BETTER_AUTH_SECRET in production"
   for (const secret of [undefined, "", "x".repeat(31)]) {
     assert.throws(() => buildAuthOptions({ env: { ...PROD_ENV, BETTER_AUTH_SECRET: secret }, db: {} }),
       { message: "BETTER_AUTH_SECRET must be set to at least 32 characters" });
+  }
+});
+
+test("buildAuthOptions refuses BETTER_AUTH_TRUSTED_ORIGINS and BETTER_AUTH_SECRETS in production", () => {
+  // Better Auth reads both from process.env itself, past these options.
+  for (const name of ["BETTER_AUTH_TRUSTED_ORIGINS", "BETTER_AUTH_SECRETS"]) {
+    for (const value of ["https://evil.example", "1:" + "b".repeat(64), ""]) {
+      assert.throws(() => buildAuthOptions({ env: { ...PROD_ENV, [name]: value }, db: {} }), { message: `${name} must not be set` }, name);
+    }
+    assert.doesNotThrow(() => buildAuthOptions({ env: { ...VALID_ENV, [name]: "https://evil.example" }, db: {} }), `${name} outside production`);
   }
 });
