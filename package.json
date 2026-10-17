@@ -12,7 +12,7 @@
     "db:apply": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/db-apply.mjs",
     "db:test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-db.mjs",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
-    "spotify:reauth": "node scripts/spotify-reauth.mjs",
+    "spotify:reauth": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/spotify-reauth.mjs",
     "instagram:token": "node scripts/instagram-token.mjs",
     "instagram:sync": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/instagram-sync.mjs",
     "instagram:repair": "node scripts/instagram-repair-source-keys.mjs",
