@@ -1,3 +1,13 @@
+// Admin and auth routes: no framing at all, no indexing. Listed after the generic rule
+// because Next applies matching rules in order and the later value wins for a repeated key
+// (Content-Security-Policy here). Same key casing as the generic rule. No Cache-Control
+// rule: the handlers send no-store themselves (lib/admin/guard.js setNoStore).
+const ADMIN_HEADERS = [
+  { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "X-Robots-Tag", value: "noindex, nofollow" },
+];
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -18,6 +28,9 @@ const nextConfig = {
           { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
         ],
       },
+      { source: "/admin/:path*", headers: ADMIN_HEADERS },
+      { source: "/api/admin/:path*", headers: ADMIN_HEADERS },
+      { source: "/api/auth/:path*", headers: ADMIN_HEADERS },
     ];
   },
 };
