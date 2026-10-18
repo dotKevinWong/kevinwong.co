@@ -15,7 +15,7 @@ test("owner constants", () => {
   assert.equal(SITE_HOST, "www.kevinwong.co");
 });
 
-test("OWNER_SPOTIFY_ACCOUNT_ID has been filled in", { todo: "Kevin's Spotify account id pending (Task 7 Step 8)" }, () => {
+test("OWNER_SPOTIFY_ACCOUNT_ID has been filled in", () => {
   assert.notEqual(OWNER_SPOTIFY_ACCOUNT_ID, "<from --whoami>");
   assert.match(OWNER_SPOTIFY_ACCOUNT_ID, /^[A-Za-z0-9._-]{1,64}$/);
 });

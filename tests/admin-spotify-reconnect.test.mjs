@@ -74,8 +74,7 @@ function muteConsole(t) {
   return { consoleError: t.mock.method(console, "error", () => {}), consoleWarn: t.mock.method(console, "warn", () => {}) };
 }
 
-// A todo, like tests/admin-owner.test.mjs's: the id is still the placeholder until Kevin fills it in.
-test("OWNER_SPOTIFY_ACCOUNT_ID is filled in", { todo: "Kevin's Spotify account id pending (Task 7 Step 8)" }, () => {
+test("OWNER_SPOTIFY_ACCOUNT_ID is filled in", () => {
   assert.match(OWNER_SPOTIFY_ACCOUNT_ID, /^[^<>\s]+$/);
 });
 
