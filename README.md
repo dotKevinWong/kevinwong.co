@@ -88,34 +88,50 @@ To apply one:
    Docker passes each to the container by name. So the URL and password are never typed and never appear on a
    command line, on your Mac or in the container. The postgres image has no CA bundle, so macOS's is mounted
    for `verify-full`. The dump holds the live tokens, so `umask 077` and the file's own mode make it readable
-   by you alone, and the parentheses keep that umask from outlasting the command:
+   by you alone. A `DATABASE_URL` exported in this shell would win over `.env`, so the block unsets one first,
+   and it prints the target it reads before dumping. The parentheses keep the `unset` and the umask from
+   outlasting the command:
    ````sh
-   ( umask 077 && mkdir -p ~/Backups && node --env-file=.env --input-type=module -e '
+   ( unset DATABASE_URL && umask 077 && mkdir -p ~/Backups && node --env-file=.env --input-type=module -e '
    import { spawnSync } from "node:child_process";
    import fs from "node:fs";
    const file = process.argv[1];
-   let pgEnv;
+   let pgEnv, target;
    try {
      const u = new URL(process.env.DATABASE_URL);
      pgEnv = { PGHOST: u.hostname.replace(/^([^.]+)-pooler\./, "$1."), PGPORT: u.port || "5432", PGUSER: decodeURIComponent(u.username), PGPASSWORD: decodeURIComponent(u.password), PGDATABASE: decodeURIComponent(u.pathname.slice(1)) };
+     target = `${pgEnv.PGHOST}${u.port ? ":" + u.port : ""}/${pgEnv.PGDATABASE}`;
    } catch { console.error("DATABASE_URL in .env is missing or not a valid URL."); process.exit(1); }
+   console.log(`Target: ${target}`);
    const env = { ...process.env, ...pgEnv, PGSSLMODE: "verify-full", PGSSLROOTCERT: "/etc/ssl/certs/host-ca.pem" };
    delete env.DATABASE_URL;
    let out;
-   try { out = fs.openSync(file, "wx", 0o600); } catch (e) { console.error(e.code === "EEXIST" ? `${file} already exists: rename it, then run this block again.` : `Could not create ${file} (${e.code}).`); process.exit(1); }
-   const r = spawnSync("docker", ["run", "--rm", "-v", "/etc/ssl/cert.pem:/etc/ssl/certs/host-ca.pem:ro", "-e", "PGHOST", "-e", "PGPORT", "-e", "PGUSER", "-e", "PGPASSWORD", "-e", "PGDATABASE", "-e", "PGSSLMODE", "-e", "PGSSLROOTCERT", "postgres:18", "pg_dump", "--format=custom", "--no-owner"], { env, stdio: ["ignore", out, "inherit"] });
+   try { out = fs.openSync(file, "wx", 0o600); } catch (e) { console.error(e.code === "EEXIST" ? `${file} already exists, so nothing was written: rename an earlier backup, or delete the empty file of a failed run, then run this block again.` : `Could not create ${file} (${e.code}).`); process.exit(1); }
+   let r;
+   try { r = spawnSync("docker", ["run", "--rm", "-v", "/etc/ssl/cert.pem:/etc/ssl/certs/host-ca.pem:ro", "-e", "PGHOST", "-e", "PGPORT", "-e", "PGUSER", "-e", "PGPASSWORD", "-e", "PGDATABASE", "-e", "PGSSLMODE", "-e", "PGSSLROOTCERT", "postgres:18", "pg_dump", "--format=custom", "--no-owner"], { env, stdio: ["ignore", out, "inherit"] }); }
+   catch (e) { console.error(`docker could not start (${e.code ?? "unknown error"}); nothing from .env was printed.`); process.exit(1); }
    if (r.error) console.error(`Could not run docker (${r.error.code}).`);
    process.exit(r.status ?? 1);' ~/Backups/kevinwong-before-005.dump ); echo "exit=$?"
    ````
-   Expected: `exit=0` and nothing else. If it says the file already exists, a dump with that name is in
-   `~/Backups` and was left as it was: rename the old one and run the block again. Then count what it holds:
+   Expected: `Target: ep-<id>.<region>.aws.neon.tech/<db>`, the Neon host with no `-pooler`, then `exit=0`
+   and nothing else. The target never shows the user or the password.
+   - **If `Target:` names any other host, the dump read the wrong database:** delete the file it wrote, and
+     don't apply anything until `.env` names production.
+   - If it says the file already exists, nothing was written, and the file there was left as it was. If that
+     file is an earlier backup, rename it. If it is the empty or partial file of a failed run of this block
+     (`ls -l ~/Backups` shows its size), delete it. Then run the block again.
+   - If it says `docker could not start`, a value from `.env` can't be passed to Docker, and nothing from
+     `.env` was printed. Fix `.env` before trying again.
+
+   Then count what it holds:
    ````sh
    docker run --rm -i postgres:18 pg_restore --list < ~/Backups/kevinwong-before-005.dump | grep -c "TABLE DATA"
    ````
    It prints one line per table, so 4 or more (`integration_tokens`, `job_locks`, `instagram_posts` and
    `instagram_media`, plus `sync_runs` and `admin_audit_log` once `006` is on). **If the dump block printed
    an error or `exit=1`, or the count is lower, the dump failed: don't apply anything.** A failed dump leaves
-   an empty or partial file behind, so delete it before trying again. Or make the Neon branch instead.
+   an empty or partial file behind under the block's file name, so delete that file before trying again. Or
+   make the Neon branch instead.
 2. Rehearse on the local test database (see *Local test database* below), which loads production's schema
    and then every migration:
    ````sh
@@ -136,7 +152,10 @@ To apply one:
 
 **Undoing 005 and 006.** Rolling the code back (Vercel → Deployments → the previous deployment → ⋯ →
 **Instant Rollback**) is the planned way back, and the schema normally stays: the code from before these
-migrations ignores both files. To remove them as well, back up first (step 1 above).
+migrations ignores both files. After an Instant Rollback, pushes to `main` don't go live until you undo it with
+**Undo Rollback** on the project's Production Deployment tile (see *If something goes wrong* in the
+[Deploy B runbook](docs/superpowers/plans/2026-10-17-deploy-b-runbook.md)). To remove the two migrations as well,
+back up first (step 1 above).
 
 The SQL is in two files in [`sql/undo/`](sql/undo/): [`delete-spotify-row.sql`](sql/undo/delete-spotify-row.sql)
 and [`undo-005-006.sql`](sql/undo/undo-005-006.sql). They are not migrations: setup and
@@ -176,7 +195,8 @@ Both migrations are safe to apply again afterwards.
 code from before the admin panel never reads them. Removing them signs everyone out and deletes the owner's
 GitHub sign-in record, which the next sign-in creates again. The activity log in `admin_audit_log` keeps
 its history. Back up first (step 1 above), naming the backup `before-undo-007`, because the one taken before
-`007` went on may still be kept, then:
+`007` went on may still be kept. For the dump, that means changing `kevinwong-before-005.dump` to
+`kevinwong-before-undo-007.dump` in two places: the last line of the dump block and the count line. Then:
 
 1. Roll the code back first. While the panel's code is live, Better Auth fails every request without its
    tables.
@@ -191,7 +211,10 @@ its history. Back up first (step 1 above), naming the backup `before-undo-007`, 
    ````
    It prints `applied sql/undo/undo-007.sql`. The drops run in one transaction, so if it prints
    `sql/undo/undo-007.sql: canceling statement due to lock timeout` instead and exits 1, another session held
-   one of the tables for more than 5 seconds, and nothing was dropped. Run it again.
+   one of the tables for more than 5 seconds, and nothing was dropped. Run it again. If it prints
+   `sql/undo/undo-007.sql: cannot drop table <name> because other objects depend on it` (Postgres error
+   `2BP01`) instead, something else in the database depends on that auth table, and the undo refused to drop
+   it along with the table. Nothing was dropped: find out what depends on it before going further.
 
 It is safe to run twice, and `007` applies again afterwards.
 
@@ -232,7 +255,8 @@ database can't be reached, the Spotify widgets show their empty states instead.
 expires, and concurrent requests share one refresh. When the refresh token dies, Spotify answers
 `400 invalid_grant`, and the app stops calling Spotify and, once a `spotify` row exists, marks it dead
 (until the first reconnect, a failed env token has no row to mark). Instances look at the row again at most
-once a minute, so a reconnect takes effect everywhere within a minute, with no redeploy. If Spotify hands back
+once a minute, so once the old token has died, a reconnect takes effect everywhere within a minute, with no
+redeploy (see *Reconnecting* for when it still works). If Spotify hands back
 a new refresh token, it replaces the stored one only if the row still holds the token that instance used, so a
 slow instance can't overwrite a newer one.
 
@@ -355,8 +379,10 @@ try { console.table((await pool.query(process.argv[1])).rows); } finally { await
     `Error: BETTER_AUTH_SECRET must be set to at least 32 characters`,
     `Error: BETTER_AUTH_TRUSTED_ORIGINS must not be set` or `Error: BETTER_AUTH_SECRETS must not be set`. The
     API routes answer `{"error":"server_error"}`. Fixing an env var takes a redeploy, because a deployment keeps
-    the env vars it was built with: correct it in Vercel, then **Deployments** → the current Production
-    deployment → **⋯** → **Redeploy**.
+    the env vars it was built with: correct it in Vercel, then **Deployments** → the newest Production
+    deployment of the panel's code → **⋯** → **Redeploy**. After an Instant Rollback, that isn't the current
+    Production deployment, and the new one doesn't go live until **Undo Rollback** promotes it (see the
+    Deploy B runbook's *If something goes wrong*).
   - `[auth] request failed:`: Better Auth failed during sign-in, its callback or sign-out, including on the
     env-var checks above, and `/api/auth/*` answers `{"error":"server_error"}`.
   - `[admin/status] status read failed:`: `/api/admin/status` answers `{"error":"status_failed"}`, and the

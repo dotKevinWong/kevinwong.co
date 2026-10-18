@@ -59,15 +59,34 @@ git worktree add --detach /tmp/kw-deploy-b-gate claude/admin-panel-deploy-b && c
 
 Expected: git's two lines, `Preparing worktree (detached HEAD <the id>)` and
 `HEAD is now at <the id> Fill in the owner's Spotify account id`, then `v24.21.0` (the version in `.nvmrc`), then
-npm's `added … packages`. `npm ci` takes a minute. An `npm warn install-scripts` about `unrs-resolver` is harmless.
+npm's `added … packages`. `npm ci` takes a minute. Two things in its output are harmless: an
+`npm warn install-scripts` about `unrs-resolver`, and its audit summary, `N vulnerabilities (…)`, which counts the
+known advisories listed under *What the session checked*.
 - If git says the folder `already exists`, or that it `is a missing but already registered worktree`, an earlier gate
   run left it behind. Run the removal block at the end of this section, then this line again. If git still says
   `already exists`, the folder isn't a git checkout: stop and tell the session.
-- If nothing prints after git's two lines, `nvm use` failed: the version in `.nvmrc` isn't installed. Run
-  `nvm install`, then the removal block, then this line again.
+- If nothing prints after git's two lines, `nvm use` failed: the version in `.nvmrc` isn't installed. Check which
+  version that is before installing it:
+
+  ```sh
+  cat /tmp/kw-deploy-b-gate/.nvmrc
+  ```
+
+  If it prints anything other than `v24.21.0`, the branch's `.nvmrc` has changed: stop and tell the session.
+  Otherwise run `cd /tmp/kw-deploy-b-gate && nvm install`, then the removal block, then this line again.
 - If `node -v` prints any version other than `v24.21.0`, the branch's `.nvmrc` has changed: stop and tell the
   session.
 - If `npm ci` fails, stop and tell the session.
+
+Then check that the folder holds exactly the branch's commit, not one left by an earlier run. Run it from the main
+checkout:
+
+```sh
+cd /Users/Kevin/Git/kevinwong.co && [ "$(git -C /tmp/kw-deploy-b-gate rev-parse HEAD)" = "$(git rev-parse claude/admin-panel-deploy-b)" ] && echo "gate folder matches the branch"
+```
+
+Expected: `gate folder matches the branch`. **If that line doesn't appear, stop:** run the removal block at the end
+of this section, and tell the session.
 
 Then, in that folder:
 
@@ -89,13 +108,19 @@ the session ran them against its test database.
 stop and tell the session.** A `1` or a `todo` above `0` means the id is not in this branch. A `fail` above `0` can
 mean the id is malformed. Either way, the deploy would ship a reconnect that always fails.
 
-Either way, remove the temporary folder:
+Whatever the result, remove the temporary folder. It is a throwaway checkout of a commit that stays on the branch,
+so nothing in it needs keeping, and `--force` removes it even if a file in it was changed or deleted (if macOS
+cleaned part of `/tmp`, say):
 
 ```sh
-cd /Users/Kevin/Git/kevinwong.co && git worktree remove /tmp/kw-deploy-b-gate
+cd /Users/Kevin/Git/kevinwong.co && git worktree remove --force /tmp/kw-deploy-b-gate
 ```
 
-If git says `is not a working tree`, there was nothing to remove.
+Expected: nothing. If git prints:
+- `is not a working tree`: git has no checkout there. If the folder doesn't exist, there was nothing to remove. If
+  it does (`ls /tmp/kw-deploy-b-gate` lists files), something other than git made it: stop and tell the session.
+- `cannot remove a locked working tree`: something locked it, and this runbook never does. Stop and tell the
+  session.
 
 ### Deploy A is done
 
@@ -202,31 +227,45 @@ zero. Check: the **Branches** list shows `before-admin-007`.
 Or a dump. Node splits `.env`'s `DATABASE_URL` into the `PG*` variables that `pg_dump` reads, switched to the direct
 (non-pooler) host, and Docker passes each to the container by name. So the URL and password never appear on a
 command line, on your Mac or in the container. The postgres image has no CA bundle, so macOS's is mounted for
-`verify-full`. The dump holds the live tokens, so `umask 077` and the file's own mode make it readable by you alone,
-and the parentheses keep that umask from outlasting the command:
+`verify-full`. The dump holds the live tokens, so `umask 077` and the file's own mode make it readable by you alone.
+A `DATABASE_URL` exported in this shell would win over `.env`, so the block unsets one first, and it prints the
+target it reads before dumping. The parentheses keep the `unset` and the umask from outlasting the command:
 
 ```sh
 cd /Users/Kevin/Git/kevinwong.co
-( umask 077 && mkdir -p ~/Backups && node --env-file=.env --input-type=module -e '
+( unset DATABASE_URL && umask 077 && mkdir -p ~/Backups && node --env-file=.env --input-type=module -e '
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 const file = process.argv[1];
-let pgEnv;
+let pgEnv, target;
 try {
   const u = new URL(process.env.DATABASE_URL);
   pgEnv = { PGHOST: u.hostname.replace(/^([^.]+)-pooler\./, "$1."), PGPORT: u.port || "5432", PGUSER: decodeURIComponent(u.username), PGPASSWORD: decodeURIComponent(u.password), PGDATABASE: decodeURIComponent(u.pathname.slice(1)) };
+  target = `${pgEnv.PGHOST}${u.port ? ":" + u.port : ""}/${pgEnv.PGDATABASE}`;
 } catch { console.error("DATABASE_URL in .env is missing or not a valid URL."); process.exit(1); }
+console.log(`Target: ${target}`);
 const env = { ...process.env, ...pgEnv, PGSSLMODE: "verify-full", PGSSLROOTCERT: "/etc/ssl/certs/host-ca.pem" };
 delete env.DATABASE_URL;
 let out;
-try { out = fs.openSync(file, "wx", 0o600); } catch (e) { console.error(e.code === "EEXIST" ? `${file} already exists: rename it, then run this block again.` : `Could not create ${file} (${e.code}).`); process.exit(1); }
-const r = spawnSync("docker", ["run", "--rm", "-v", "/etc/ssl/cert.pem:/etc/ssl/certs/host-ca.pem:ro", "-e", "PGHOST", "-e", "PGPORT", "-e", "PGUSER", "-e", "PGPASSWORD", "-e", "PGDATABASE", "-e", "PGSSLMODE", "-e", "PGSSLROOTCERT", "postgres:18", "pg_dump", "--format=custom", "--no-owner"], { env, stdio: ["ignore", out, "inherit"] });
+try { out = fs.openSync(file, "wx", 0o600); } catch (e) { console.error(e.code === "EEXIST" ? `${file} already exists, so nothing was written: rename an earlier backup, or delete the empty file of a failed run, then run this block again.` : `Could not create ${file} (${e.code}).`); process.exit(1); }
+let r;
+try { r = spawnSync("docker", ["run", "--rm", "-v", "/etc/ssl/cert.pem:/etc/ssl/certs/host-ca.pem:ro", "-e", "PGHOST", "-e", "PGPORT", "-e", "PGUSER", "-e", "PGPASSWORD", "-e", "PGDATABASE", "-e", "PGSSLMODE", "-e", "PGSSLROOTCERT", "postgres:18", "pg_dump", "--format=custom", "--no-owner"], { env, stdio: ["ignore", out, "inherit"] }); }
+catch (e) { console.error(`docker could not start (${e.code ?? "unknown error"}); nothing from .env was printed.`); process.exit(1); }
 if (r.error) console.error(`Could not run docker (${r.error.code}).`);
 process.exit(r.status ?? 1);' ~/Backups/kevinwong-before-admin-007.dump ); echo "exit=$?"
 ```
 
-Expected: `exit=0` and nothing else. If it says the file already exists, a dump with that name is in `~/Backups` and
-was left as it was: rename the old one and run the block again. Then count what it holds:
+Expected: `Target: ep-<id>.<region>.aws.neon.tech/<db>`, the Neon host with no `-pooler`, then `exit=0` and nothing
+else. The target never shows the user or the password.
+- **If `Target:` names any other host, the dump read the wrong database:** delete
+  `~/Backups/kevinwong-before-admin-007.dump`, and stop and tell the session.
+- If it says the file already exists, nothing was written, and the file there was left as it was. If that file is
+  an earlier backup, rename it. If it is the empty or partial file of a failed run of this block (`ls -l ~/Backups`
+  shows its size), delete it. Then run the block again.
+- If it says `docker could not start`, a value from `.env` can't be passed to Docker, and nothing from `.env` was
+  printed: stop and tell the session.
+
+Then count what it holds:
 
 ```sh
 docker run --rm -i postgres:18 pg_restore --list < ~/Backups/kevinwong-before-admin-007.dump | grep -c "TABLE DATA"
@@ -234,8 +273,9 @@ docker run --rm -i postgres:18 pg_restore --list < ~/Backups/kevinwong-before-ad
 
 It prints 6 or more (`integration_tokens`, `job_locks`, `instagram_posts`, `instagram_media`, and Deploy A's
 `sync_runs` and `admin_audit_log`). **If the dump block printed an error or `exit=1`, or the count is under 6, the
-dump failed: don't start Step 9.** A failed dump leaves an empty or partial file behind, so delete it before trying
-again. Or make the Neon branch instead.
+dump failed: don't start Step 9.** A failed dump leaves an empty or partial
+`~/Backups/kevinwong-before-admin-007.dump` behind, so delete that file before trying again. Or make the Neon branch
+instead.
 
 ## Step 9: merge, apply `007`, check the schema, deploy
 
@@ -255,7 +295,8 @@ secret is typed or pasted. Nothing is deployed until item 7's push.
    ```
 
    Expected:
-   - `node -v` prints `v24.21.0`. If not, run `nvm install`, then this block again.
+   - `node -v` prints `v24.21.0`. If not, check `cat .nvmrc` first: if it prints anything other than `v24.21.0`,
+     stop and tell the session. Otherwise run `nvm install`, then this block again.
    - `git switch` says `Switched to branch 'main'` or `Already on 'main'`, and `git branch --show-current` prints
      `main`. If it prints anything else (for example because `main` is checked out in another worktree), stop and
      tell the session.
@@ -290,8 +331,9 @@ secret is typed or pasted. Nothing is deployed until item 7's push.
 
    Expected: `Fast-forward` and a list of files. That is the usual case, because the branch is built on Deploy A. If
    `origin/main` has moved past Deploy A, the first command prints some `hint:` lines and
-   `fatal: Not possible to fast-forward, aborting.`, and the second makes a merge commit (`Merge made by the 'ort' strategy.`). **If it prints `CONFLICT`**, undo the
-   half-done merge, then stop and tell the session:
+   `fatal: Not possible to fast-forward, aborting.`, and the second makes a merge commit
+   (`Merge made by the 'ort' strategy.`). **If it prints `CONFLICT`**, undo the half-done merge, then stop and tell
+   the session:
 
    ```sh
    git merge --abort
@@ -311,7 +353,8 @@ secret is typed or pasted. Nothing is deployed until item 7's push.
    npm ci
    ```
 
-   If `npm ci` fails, stop and tell the session.
+   Its `N vulnerabilities (…)` audit summary is harmless here: it counts the known advisories listed under *What the
+   session checked*. If `npm ci` fails, stop and tell the session.
 
 2. **Look at the target.** Without `--yes`, `db:apply` only prints it:
 
@@ -346,10 +389,11 @@ secret is typed or pasted. Nothing is deployed until item 7's push.
    and database that `prodsql` reads, in the same form as `Target:`, and the two must be the same:
 
    ```sh
-   node --env-file=.env -p 'const u = new URL(process.env.DATABASE_URL); u.host.replace(/^([^.]+)-pooler\./, "$1.") + u.pathname'
+   node --env-file=.env -p 'try { const u = new URL(process.env.DATABASE_URL); u.host.replace(/^([^.]+)-pooler\./, "$1.") + u.pathname } catch { "DATABASE_URL in .env is missing or not a valid URL." }'
    ```
 
-   If they differ, `.env.local` names another database: stop and tell the session.
+   If they differ, `.env.local` names another database: stop and tell the session. If it prints
+   `DATABASE_URL in .env is missing or not a valid URL.`, stop and tell the session too.
 
    **Pre-flight, read-only.** It prints role and schema facts, never the URL:
 
@@ -361,7 +405,8 @@ secret is typed or pasted. Nothing is deployed until item 7's push.
    - `current_user` equals `sync_runs_owner` and `audit_log_owner`. Deploy A applied those tables as this role, and
      its Step 10 showed production writing them, so the four tables `007` creates, owned by this role, will be
      writable by production too.
-   - `schemas` is `{pg_catalog,public}`, `can_create` is `true`, and `auth_tables` is `0`.
+   - `schemas` is `{pg_catalog,public}`, `can_create` is `true`, and `auth_tables` is `0`. The one exception: `4` if
+     you are redoing Step 9 after item 6's way back and the session didn't have you undo `007`.
    - **If any differ, stop and tell the session before applying.** An empty owner means Deploy A's `006` is missing.
      `auth_tables` above `0` means an earlier attempt left tables behind, and `007` would keep them as they are.
    - If your `DATABASE_URL` still says `sslmode=require`, pg prints a SECURITY WARNING, here and below. It is
@@ -415,19 +460,24 @@ secret is typed or pasted. Nothing is deployed until item 7's push.
         it, so this moves local `main` back to `origin/main` and touches nothing pushed:
 
         ```sh
-        git switch main
-        git reset --keep origin/main
-        git log --oneline origin/main..main
-        npm ci
+        git switch main && git reset --keep origin/main && git log --oneline origin/main..main
         ```
 
-        `git log` prints nothing. `--keep` refuses, and changes nothing, if a file has uncommitted changes; item 1
-        checked there were none.
+        Expected: git's `Already on 'main'` and `Your branch is ahead of 'origin/main' …` lines, then nothing
+        from `git log`. `--keep` refuses, and changes nothing, if a file has uncommitted changes; item 1 checked
+        there were none. **If `git reset` prints an error, or `git log` lists any commit, stop and tell the
+        session.** Otherwise reinstall Deploy A's dependencies:
+
+        ```sh
+        npm ci
+        ```
      3. `007` stays applied. That is harmless: Deploy A's code never reads its tables, and nothing has been deployed.
         `007` creates only tables that are missing, so it can't change the ones it already made. If the fix changes
         `sql/007_auth.sql`, the session will tell you whether to undo it first (*If something goes wrong*, below)
         before item 4 applies it again.
-     4. Run the gate again, then Step 9 from item 1.
+     4. Run the gate again, then Step 9 from item 1. Unless the session had you undo `007`, item 3 now prints
+        `auth_tables` `4`, which is expected on this redo, and item 4 applies `007` again, which changes nothing
+        and prints `applied sql/007_auth.sql`. On a first run, `4` still means stop.
    - On `exit=2`, the config didn't load or the database didn't connect. Check that `npm ci` succeeded and that
      `.env` has `DATABASE_URL`.
 
@@ -447,9 +497,13 @@ secret is typed or pasted. Nothing is deployed until item 7's push.
    git push origin main
    ```
 
-   Vercel → **Deployments** → wait until the new **Production** deployment for that commit is **Ready**. If it ends
-   **Error** instead, stop and tell the session, with the last error lines of its build log. Production keeps serving
-   Deploy A's deployment, and `007` is harmless. Once it is Ready, the fixed branch is merged, so you can delete it:
+   Expected: git's `main -> main` line. **If it prints `rejected` or `error:`, nothing was pushed or deployed**, for
+   example because `origin/main` moved after item 1: stop and tell the session.
+
+   Then Vercel → **Deployments** → wait until the new **Production** deployment for that commit is **Ready**. If it
+   ends **Error** instead, stop and tell the session, with the last error lines of its build log. Production keeps
+   serving Deploy A's deployment, and `007` is harmless. Once it is Ready, the fixed branch is merged, so you can
+   delete it:
 
    ```sh
    git branch -d claude/admin-panel-deploy-b
@@ -638,8 +692,8 @@ Use a browser where you are signed in to Vercel, because Deployment Protection a
 
       Expected: `429`. The request is same-origin, so it carries your session cookie and `Origin`, and the server
       refuses it as too soon. If more than 10 minutes have passed since the Check, it answers `200` instead: the
-      limit had run out, so the server ran another check. That is a pass too. Item 2's rows then differ as noted
-      there.
+      limit had run out, so the server ran another check. That is a pass too. The rows in step 2 below then differ,
+      as noted there.
    2. Then, in the Step 9 terminal:
 
       ```sh
@@ -686,7 +740,8 @@ Use a browser where you are signed in to Vercel, because Deployment Protection a
 - **After a rollback, a push doesn't go live by itself.** Vercel turns off the automatic assignment of the production
   domains, so a fix pushed to `main` builds but www keeps serving the rolled-back deployment. Once the fix's
   deployment is **Ready**:
-  1. If you undid `007` meanwhile, apply it again first (Step 9 items 2–6).
+  1. If you undid `007` meanwhile, apply it again first with Step 9 items 2–6. `main` is already pushed by then,
+     so if item 6's check fails, skip its way back (the reset is for an unpushed merge): stop and tell the session.
   2. Open the project's overview → the Production Deployment tile → **Undo Rollback** → select the new deployment →
      **Confirm**. That promotes it and turns the automatic assignment back on, so later pushes go live again.
 - **A 500 from the panel** writes one redacted line to Vercel → **Logs** (Hobby keeps an hour), never a token. The
@@ -701,8 +756,15 @@ Use a browser where you are signed in to Vercel, because Deployment Protection a
       `Error: BETTER_AUTH_URL must be https://www.kevinwong.co`,
       `Error: BETTER_AUTH_SECRET must be set to at least 32 characters`,
       `Error: BETTER_AUTH_TRUSTED_ORIGINS must not be set` or `Error: BETTER_AUTH_SECRETS must not be set`. Fix the
-      variable in Vercel (Step 6). A deployment keeps the env vars it was built with, so then **Redeploy**: Vercel →
-      **Deployments** → the current Production deployment → **⋯** → **Redeploy**.
+      variable in Vercel (Step 6). A deployment keeps the env vars it was built with, so then rebuild Deploy B's code
+      with the new value: Vercel → **Deployments** → the newest Production deployment of Deploy B's commit → **⋯** →
+      **Redeploy**.
+      - If you haven't rolled back, that is the current Production deployment, and the new one goes live once it is
+        **Ready**.
+      - If you have rolled back, the current one is Deploy A's: don't redeploy that one. Redeploy Deploy B's, and
+        once the new deployment is **Ready**, promote it with **Undo Rollback** (above).
+      - On Hobby, Instant Rollback goes back only one deployment. After a Redeploy, check which deployment its
+        dialog offers before you confirm a later rollback: it may be Deploy B's earlier deployment, not Deploy A's.
   - `[auth] request failed:`: Better Auth failed during sign-in, its callback or sign-out, including on the env-var
     checks above, and `/api/auth/*` answers `{"error":"server_error"}`.
   - `[admin/status] status read failed:`: `/api/admin/status` answers `{"error":"status_failed"}`, and the dashboard
@@ -757,7 +819,12 @@ Use a browser where you are signed in to Vercel, because Deployment Protection a
      The activity log keeps its history. If it prints `sql/undo/undo-007.sql: canceling statement due to lock
      timeout` instead and exits 1, another session held one of the tables for more than 5 seconds, and nothing was
      dropped: run it again.
+     - If it prints `sql/undo/undo-007.sql: cannot drop table <name> because other objects depend on it` (Postgres
+       error `2BP01`) and exits 1, something else in the database, a view say, depends on that auth table, and the
+       undo refused to drop it along with the table. Nothing was dropped. Stop and tell the session.
+     - On any other error, stop and tell the session.
 
   The same steps are in the [README](../../../README.md), *Database migrations* → *Undoing 007*, and
   [`undo-007.sql`](../../../sql/undo/undo-007.sql) is safe to run twice. Before shipping Deploy B again, apply `007`
-  again (Step 9 items 2–6).
+  again with Step 9 items 2–6. `main` is already pushed by then, so if item 6's check fails, skip its way back: stop
+  and tell the session.
