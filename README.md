@@ -12,9 +12,9 @@ twice a year, and follow-ups from the last codebase audit.
 ### 🦾 Prerequisites
 
 - [Node.js](https://nodejs.org/en/) 24 and npm 11. The exact version is pinned in [`.nvmrc`](.nvmrc), so `nvm use` picks it up.
-- A Postgres database (production uses Neon) for /snapshots, the Instagram sync and the Spotify
-  token, and a [Vercel Blob](https://vercel.com/docs/vercel-blob) store for /snapshots. See
-  *Database migrations*, *Spotify token* and *Instagram sync* below.
+- A Postgres database (production uses Neon) for /snapshots, the Instagram sync, the Spotify
+  token and /admin, and a [Vercel Blob](https://vercel.com/docs/vercel-blob) store for /snapshots. See
+  *Database migrations*, *Spotify token*, *Admin panel* and *Instagram sync* below.
 
 ### 👨‍💻 Installation
 
@@ -45,15 +45,23 @@ both, `.env.local` wins. Both files are git-ignored.
 | `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | Spotify app credentials (now playing, top tracks), read on the server at runtime. Until the cleanup a week after the first reconnect (see [TODO.md](TODO.md)), the old lowercase `client_id` / `client_secret` still work as a fallback |
 | `refresh_token` | Spotify's refresh token, **only until Spotify is reconnected**: after that the token lives in Postgres and this is ignored (see *Spotify token*). Removed in the same cleanup |
 | `GOODREADS_RSS_URL` | The Goodreads shelf feed behind /bookshelf. Optional: without it the page says the feed isn't configured. `GOODREADS_MAX_BOOKS` sets how many it returns by default (8) |
-| `DATABASE_URL` | Postgres (the pooled Neon URL): /snapshots, the Instagram sync and its run history, and the Spotify token. Without it the Spotify widgets show their empty states |
+| `DATABASE_URL` | Postgres (the pooled Neon URL): /snapshots, the Instagram sync and its run history, the Spotify token, and /admin's sign-in, sessions and activity log. Without it the Spotify widgets show their empty states |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob when running locally. In production the connected store supplies credentials |
 | `CRON_SECRET` | Authenticates the daily Instagram cron |
 | `INSTAGRAM_CLIENT_SECRET` | Only needed for `npm run instagram:token -- --exchange` |
+| `BETTER_AUTH_SECRET` | Production only (Vercel). Signs /admin's sessions. Generate it with `openssl rand -hex 32` |
+| `BETTER_AUTH_URL` | Production only (Vercel). Exactly `https://www.kevinwong.co`, with no trailing slash |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | Production only (Vercel). The GitHub OAuth App behind /admin's sign-in |
 
 The Instagram access token, and the Spotify refresh token once Spotify has been reconnected,
 are deliberately not env vars. They live in Postgres in `integration_tokens`
 ([`sql/001`](sql/001_integration_tokens.sql), [`sql/005`](sql/005_integration_tokens_spotify.sql)),
 where the app can refresh, rotate or replace them without a redeploy.
+
+The four auth variables stay out of `.env`, because the panel is switched off everywhere except production
+(see *Admin panel*). Don't set `BETTER_AUTH_TRUSTED_ORIGINS` or `BETTER_AUTH_SECRETS` anywhere. Better Auth
+reads both straight from the environment, past the app's own settings, so [`lib/auth.js`](lib/auth.js)
+refuses to start in production while either is set.
 
 ### 🗄️ Database migrations
 
@@ -67,6 +75,7 @@ code ignores what it adds.
 | `001`–`004` | The Instagram token table, its assumed-expiry flag, the Blob asset columns, the sync's run lease | The Instagram sync |
 | [`005`](sql/005_integration_tokens_spotify.sql) | Spotify columns on `integration_tokens` | `lib/spotify.js` reading the token from Postgres |
 | [`006`](sql/006_sync_runs.sql) | `sync_runs` (one row per sync run) and `admin_audit_log` | The sync recording its runs and its upload ceiling |
+| [`007`](sql/007_auth.sql) | Better Auth's `auth_user`, `auth_session`, `auth_account` and `auth_verification` | Signing in to /admin |
 
 To apply one:
 
@@ -136,6 +145,28 @@ on after a failed statement and would drop the tables anyway. In order:
 
 Both migrations are safe to apply again afterwards.
 
+**Undoing 007.** Here too the planned way back is rolling the code back, and the auth tables can stay: the
+code from before the admin panel never reads them. Removing them signs everyone out and deletes the owner's
+GitHub sign-in record, which the next sign-in creates again. The activity log in `admin_audit_log` keeps
+its history. Back up first (step 1 above), then:
+
+1. Roll the code back first. While the panel's code is live, Better Auth fails every request without its
+   tables.
+2. Look at the target. Without `--yes`, `db:apply` prints it and stops, and it must name the Neon host
+   without `-pooler`:
+   ````sh
+   npm run db:apply -- sql/undo/undo-007.sql
+   ````
+3. Drop the four tables with [`undo-007.sql`](sql/undo/undo-007.sql):
+   ````sh
+   npm run db:apply -- --yes sql/undo/undo-007.sql
+   ````
+   It prints `applied sql/undo/undo-007.sql`. The drops run in one transaction, so if it prints
+   `sql/undo/undo-007.sql: canceling statement due to lock timeout` instead and exits 1, another session held
+   one of the tables for more than 5 seconds, and nothing was dropped. Run it again.
+
+It is safe to run twice, and `007` applies again afterwards.
+
 **Local test database.** The tests run against a throwaway Postgres in Docker, the `kw-test-pg` container on
 `127.0.0.1:55432`. Its generated password lives only in `.env.test.local` in the project root (git-ignored), as
 `TEST_DATABASE_URL`. To create both, from the project root:
@@ -177,8 +208,9 @@ once a minute, so a reconnect takes effect everywhere within a minute, with no r
 a new refresh token, it replaces the stored one only if the row still holds the token that instance used, so a
 slow instance can't overwrite a newer one.
 
-**Reconnecting.** The /admin panel's Reconnect button will do this from the browser once it ships. Until then,
-and as the fallback afterwards, use the script:
+**Reconnecting.** Use the admin panel: https://www.kevinwong.co/admin → the Spotify card → **Reconnect** →
+approve on Spotify. It takes effect within a minute, with no redeploy (see *Admin panel*). The fallback is
+the script:
 
 1. Add `http://127.0.0.1:8888/callback` to the Redirect URIs of the app in the
    [Spotify dashboard](https://developer.spotify.com/dashboard). Spotify rejects `localhost`, so the loopback
@@ -199,6 +231,126 @@ and falls back to `client_id` / `client_secret` until the cleanup a week after t
 [TODO.md](TODO.md)).
 
 [spotify-blog]: https://developer.spotify.com/blog/2026-06-18-refresh-token-expiration
+
+### 🔐 Admin panel
+
+https://www.kevinwong.co/admin is a private dashboard, and nothing on the site links to it. Only GitHub
+account `1741711` (`@dotKevinWong`) can sign in. Sessions last 24 hours and do not extend.
+
+It reconnects Spotify. It shows the Instagram token, the last cron run, the library's size, the uploads over
+the last 30 days and the recent runs, with **Check for new posts** and **Import** buttons. It also shows the
+activity log (`admin_audit_log`).
+
+**Production only.** `/admin`, `/api/admin/*` and `/api/auth/*` return 404 unless `VERCEL_ENV=production` and
+the host is `www.kevinwong.co`. That includes `next dev`, every preview, and the production deployment's own
+`*.vercel.app` URL. Local development shares the production database, so the panel is switched off there
+instead of getting a second sign-in. `npm test` covers it, with unit tests and integration tests against a
+throwaway local Postgres.
+
+**Limits.**
+
+| Action | Limit |
+| --- | --- |
+| Check for new posts (dry run) | Once per 10 minutes |
+| Import from the panel | Once per rolling 24 hours. An import that is running, finished, or was killed mid-way counts, and so does any import that uploaded something. One that failed, stood down because another sync was running, or couldn't record its run, before uploading anything doesn't count |
+| Panel imports | Refused once uploads over the last 30 days reach 1,000 |
+| Any real sync (cron, panel, CLI) | Stops at 1,800 uploads in 30 days, under Blob's 2,000-a-month hard stop |
+
+Panel runs are fixed at 50 posts, 25 uploads and a 60-second budget. The browser only chooses Check or Import.
+A refused run answers 429 with the wait in seconds, and the activity log records it as `panel_run_refused`.
+
+**Signing in.** Four checks keep everyone else out:
+
+- **The profile gate.** Better Auth's `validateUserInfo` hook lets through only the GitHub profile with id
+  `1741711`, and sends any other account back to `/admin/sign-in?error=not_owner` before a user, account or
+  session is written.
+- **Account linking is off**, so no second GitHub account can be attached to the owner's user.
+- **The path allowlist.** The `/api/auth/*` route passes only `POST /api/auth/sign-in/social`,
+  `GET /api/auth/callback/github` and `POST /api/auth/sign-out` to Better Auth, and answers 404 to every other
+  path, `get-session` included.
+- **The per-request owner check.** Every admin page and API request reads the session, then checks that its
+  user holds the GitHub account `1741711` in `auth_account`, so a session on its own isn't enough.
+
+Better Auth is pinned to exactly `1.7.10`, and so is its CLI, the `auth@1.7.10` devDependency. Upgrade the two
+together, and check the disabled paths in [`lib/auth.js`](lib/auth.js) against the new version's routes. Don't
+add Better Auth's organization plugin: advisory GHSA-fmh4-wcc4-5jm3 applies only with it.
+
+**One-time setup.**
+
+1. Create a GitHub OAuth App (GitHub → **Settings** → **Developer settings** → **OAuth Apps** → **New OAuth
+   App**) with homepage `https://www.kevinwong.co` and callback `https://www.kevinwong.co/api/auth/callback/github`.
+   Sign-in requests no scopes. Set the four env vars from *Environment variables*, `BETTER_AUTH_SECRET`,
+   `BETTER_AUTH_URL`, `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`, in Vercel for **Production** only, each
+   marked **Sensitive**.
+2. In the [Spotify dashboard](https://developer.spotify.com/dashboard), add
+   `https://www.kevinwong.co/api/admin/spotify/callback` to the app's Redirect URIs. Keep
+   `http://127.0.0.1:8888/callback` there too, for `npm run spotify:reauth`.
+3. Apply [`sql/007_auth.sql`](sql/007_auth.sql) as described in *Database migrations*, before the deploy that
+   uses it, because Better Auth refuses every request while its tables are missing.
+4. Check the result. Run this in the main checkout after `npm ci`, which installs the pinned CLI, so that it
+   reads `DATABASE_URL` from `.env`. It only reads:
+   ````sh
+   npx --no-install auth check --config scripts/auth.config.mjs
+   ````
+   It prints `Schema check passed against the live database.` and exits 0. It exits 1 on a mismatch and 2 when
+   it can't load the config or reach the database. Warnings that the base URL isn't set and that the GitHub
+   provider has no client id are harmless here. `--no-install` runs only the pinned copy, and never downloads one.
+
+**Troubleshooting.** The checks below use `prodsql`, a helper for read-only queries. Define it in a terminal
+in the main checkout. It reads `DATABASE_URL` from `.env`, so the URL is never typed and never appears in any
+process's arguments:
+
+````sh
+prodsql() { node --env-file=.env --input-type=module -e '
+import pg from "pg";
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: true } });
+try { console.table((await pool.query(process.argv[1])).rows); } finally { await pool.end(); }' "$1"; }
+````
+
+- **`/admin/sign-in?error=not_owner`** means another GitHub account tried to sign in. The dashboard counts
+  these above the activity table ("Refused sign-ins in the last 24 hours"), and the table itself never lists
+  them.
+- **`Database schema mismatch` in the logs** (Better Auth's `SCHEMA_MISMATCH`) means `007` is missing or wrong,
+  so run the check above. Ignore its hint to run `npx auth migrate`: the schema comes only from `sql/`.
+- **A 500 from the panel** writes one redacted line to Vercel → **Logs**, never a stack trace or a token:
+  - `[admin] owner check failed:` (`[admin/spotify] owner check failed:` on the Spotify routes): the owner
+    check itself failed, because of the database or Better Auth's schema check. The API routes answer
+    `{"error":"server_error"}`, and `/admin` shows the site's 500 page.
+  - `[auth] request failed:`: Better Auth failed during sign-in, its callback or sign-out, and `/api/auth/*`
+    answers `{"error":"server_error"}`.
+  - `[admin/status] status read failed:`: `/api/admin/status` answers `{"error":"status_failed"}`, and the
+    dashboard says it couldn't load the status.
+  - `[admin/instagram] sync failed:`: the Check or Import run itself threw, answered with
+    `{"error":"sync_failed"}`. `[admin/instagram] request failed:`: the limits read or the slot claim failed,
+    answered with `{"error":"server_error"}`.
+- **`/admin?spotify_error=<code>`** after a reconnect. Nothing was stored in any case:
+  - `denied`: Approve was not clicked on Spotify's page.
+  - `state_mismatch`: the 10-minute cookie expired or the flow came from elsewhere, so start again.
+  - `exchange_failed`: Spotify refused the code. Start again, and check that the redirect URI is registered.
+  - `missing_scopes`: a permission was unticked on Spotify's page. Approve all of them.
+  - `account_lookup_failed`: Spotify's profile lookup failed. Try again.
+  - `wrong_account`: approved with a different Spotify account than the site's.
+  - `not_configured`: `SPOTIFY_CLIENT_ID` or `SPOTIFY_CLIENT_SECRET` is missing in Vercel Production.
+  - `save_failed`: the database write failed. Try again.
+- **Import stays disabled after an import that failed.** Each Import claims a 24-hour slot, the `job_locks`
+  row `instagram-panel-import`, before it runs, and gives the slot back when it uploaded nothing. If that fails
+  too (the logs show `[admin/instagram] limit re-read failed:` or `import slot release failed:`), or the request
+  fails some other way after the claim, Import stays disabled for up to 24 hours, though **Recent runs** shows
+  no import that counts. Look first:
+  ````sh
+  prodsql "select locked_until, locked_until > now() as held from job_locks where name = 'instagram-panel-import'"
+  prodsql "select status, uploads, started_at from sync_runs where job = 'instagram' and trigger = 'panel' and not dry_run order by started_at desc limit 1"
+  ````
+  Clear the slot only when `held` is `true` and the newest panel import's `status` is not `running`. A
+  `running` import is either still going or was killed, and a killed one counts anyway. To clear it:
+  ````sh
+  node --env-file=.env --input-type=module -e '
+  import pg from "pg";
+  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: true } });
+  try { console.log({ updated: (await pool.query(process.argv[1])).rowCount }); } finally { await pool.end(); }' "update job_locks set locked_until = 'epoch' where name = 'instagram-panel-import'"
+  ````
+  It prints `{ updated: 1 }`. This never lifts the daily limit itself: each Import is checked against
+  `sync_runs` first, so an import that really counts still blocks the next one for 24 hours.
 
 ### 📸 Instagram sync
 
