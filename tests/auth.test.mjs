@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { betterAuth } from "better-auth";
+import { memoryAdapter } from "better-auth/adapters/memory";
 import { buildAuthOptions, githubProfileToUser, validateOwner } from "../lib/auth.js";
+import { withEnv } from "./helpers/admin-fakes.mjs";
 
 const NOT_OWNER = { error: "not_owner", errorDescription: "This GitHub account can't sign in here." };
 const quiet = { logRejected: async () => {}, schedule: () => {} };
@@ -68,9 +71,21 @@ test("validateOwner still rejects when the rejected-sign-in log fails, and logs 
   assert.deepEqual(validateOwner({ source: oauth(999, "intruder") }, null, deps), NOT_OWNER);
   await assert.doesNotReject(scheduled[0]);
   assert.deepEqual(consoleError.mock.calls.map((call) => call.arguments), [
-    ["[auth] could not log a rejected sign-in:", "database down at postgres://[redacted]@db.example/kw"],
+    ["[auth] could not log a rejected sign-in:", "Error [57P01]: database down at postgres://[redacted]@db.example/kw"],
   ]);
 });
+
+test("the sign_in hook logs one describeError line when the audit write fails, and doesn't reject", (t) =>
+  withEnv({ DATABASE_URL: undefined }, async () => {
+    const consoleError = t.mock.method(console, "error", () => {});
+    const { after } = buildAuthOptions({ env: VALID_ENV, db: {} }).databaseHooks.session.create;
+    await assert.doesNotReject(after({ ipAddress: "203.0.113.9", userAgent: "test-agent" }));
+    // The write runs in the background (waitUntil), so wait for its one line.
+    for (let i = 0; i < 50 && consoleError.mock.callCount() === 0; i += 1) await new Promise((r) => setTimeout(r, 2));
+    assert.deepEqual(consoleError.mock.calls.map((call) => call.arguments), [
+      ["[auth] could not log sign_in:", "Error: DATABASE_URL is not set"],
+    ]);
+  }));
 
 test("githubProfileToUser fills a placeholder email and falls back to the login", () => {
   assert.deepEqual(githubProfileToUser({ id: 1741711, login: "dotKevinWong", name: null, email: null }),
@@ -106,6 +121,8 @@ test("buildAuthOptions pins the reviewed options", () => {
   assert.deepEqual(o.rateLimit, { enabled: true, storage: "memory" });
   assert.deepEqual(o.telemetry, { enabled: false });
   assert.equal(o.advanced.useSecureCookies, true);
+  assert.equal(o.advanced.disableOriginCheck, false, "a TEST env var can't switch the origin and redirect checks off");
+  assert.equal(o.advanced.disableCSRFCheck, false, "nor the CSRF check");
   assert.equal(typeof o.advanced.backgroundTasks.handler, "function");
   assert.deepEqual(o.disabledPaths, [
     "/get-session", "/list-sessions", "/update-session", "/revoke-session", "/revoke-sessions",
@@ -122,7 +139,7 @@ test("buildAuthOptions pins the reviewed options", () => {
   assert.deepEqual(Object.keys(o).sort(), ["account", "advanced", "appName", "baseURL", "database", "databaseHooks",
     "disabledPaths", "emailAndPassword", "hooks", "logger", "onAPIError", "rateLimit", "secret", "session",
     "socialProviders", "telemetry", "user", "verification"]);
-  assert.deepEqual(Object.keys(o.advanced).sort(), ["backgroundTasks", "useSecureCookies"]);
+  assert.deepEqual(Object.keys(o.advanced).sort(), ["backgroundTasks", "disableCSRFCheck", "disableOriginCheck", "useSecureCookies"]);
   assert.deepEqual(Object.keys(gh).sort(), ["clientId", "clientSecret", "disableDefaultScope", "mapProfileToUser"]);
   assert.deepEqual(Object.keys(o.hooks), ["before"]);
   assert.equal(typeof o.hooks.before, "function");
@@ -197,6 +214,50 @@ test("buildAuthOptions requires a 32-character BETTER_AUTH_SECRET in production"
       { message: "BETTER_AUTH_SECRET must be set to at least 32 characters" });
   }
 });
+
+test("buildAuthOptions refuses a TEST env var in production, whatever its value", () => {
+  // Better Auth reads TEST from process.env itself: set, it would skip the secret check and change rate-limit keys.
+  for (const value of ["1", "true", "false", "0", ""]) {
+    assert.throws(() => buildAuthOptions({ env: { ...PROD_ENV, TEST: value }, db: {} }), { message: "TEST must not be set" }, value);
+  }
+  assert.doesNotThrow(() => buildAuthOptions({ env: { ...VALID_ENV, TEST: "1" }, db: {} }), "outside production");
+});
+
+// The real Better Auth handler, built from these options over Better Auth's in-memory adapter, so it needs no
+// database. Better Auth turns its origin, CSRF and redirect-URL checks off whenever process.env.TEST is set to
+// anything but "false", unless advanced.disableOriginCheck says otherwise.
+const OFF_SITE = "https://evil.example";
+const CROSS_SITE_REQUESTS = [
+  ["an off-site callbackURL", "/sign-in/social", { provider: "github", callbackURL: `${OFF_SITE}/x` }, {}],
+  ["an off-site errorCallbackURL", "/sign-in/social", { provider: "github", callbackURL: "/admin", errorCallbackURL: `${OFF_SITE}/e` }, {}],
+  ["an off-site newUserCallbackURL", "/sign-in/social", { provider: "github", callbackURL: "/admin", newUserCallbackURL: `${OFF_SITE}/n` }, {}],
+  ["a sign-out from another site that carries a cookie", "/sign-out", {},
+    { origin: OFF_SITE, cookie: "__Secure-better-auth.session_token=x" }],
+  ["a sign-in from another site that carries a cookie", "/sign-in/social", { provider: "github", callbackURL: "/admin" },
+    { origin: OFF_SITE, cookie: "__Secure-better-auth.session_token=x" }],
+];
+
+for (const TEST of [undefined, "1", "true"]) {
+  test(`with TEST ${TEST === undefined ? "unset" : `set to "${TEST}"`}, Better Auth refuses off-site redirects and cross-site cookie POSTs`, (t) =>
+    withEnv({ TEST }, async () => {
+      t.mock.method(console, "error", () => {});
+      t.mock.method(console, "warn", () => {});
+      const auth = betterAuth(buildAuthOptions({ env: VALID_ENV, db: memoryAdapter({}) }));
+      let address = 0;
+      const post = (path, body, headers) => auth.handler(new Request(`https://www.kevinwong.co/api/auth${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-forwarded-for": `203.0.113.${(address += 1)}`, ...headers },
+        body: JSON.stringify(body),
+      }));
+      for (const [label, path, body, headers] of CROSS_SITE_REQUESTS) {
+        const res = await post(path, body, headers);
+        assert.equal(res.status, 403, label);
+        assert.ok(!(await res.text()).includes("github.com"), label);
+      }
+      // The sign-in page's own request still gets GitHub's URL.
+      assert.equal((await post("/sign-in/social", { provider: "github", callbackURL: "/admin" }, {})).status, 200);
+    }));
+}
 
 test("buildAuthOptions refuses BETTER_AUTH_TRUSTED_ORIGINS and BETTER_AUTH_SECRETS in production", () => {
   // Better Auth reads both from process.env itself, past these options.

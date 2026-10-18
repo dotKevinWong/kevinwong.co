@@ -39,3 +39,17 @@ test("getDbPool passes sslFor(DATABASE_URL) to the pool", async () => {
   assert.equal(pool.options.ssl, false);
   await pool.end();
 });
+
+test("the pool's error listener logs one describeError line, never the Error object", async (t) => {
+  const consoleError = t.mock.method(console, "error", () => {});
+  process.env.DATABASE_URL = "postgres://postgres:pw@127.0.0.1:55432/kw_test";
+  const pool = getDbPool();
+  const idleError = Object.assign(new Error("terminating connection for postgres://kw:hunter2@db.example/kw"), {
+    code: "57P01", detail: "Failing row contains (detail-secret).",
+  });
+  pool.emit("error", idleError);
+  assert.deepEqual(consoleError.mock.calls.map((call) => call.arguments), [
+    ["[db] Unexpected pool error:", "Error [57P01]: terminating connection for postgres://[redacted]@db.example/kw"],
+  ]);
+  await pool.end().catch(() => {});
+});
