@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { testDb } from "../helpers/db.mjs";
 import { INTRUDER_PROFILE, OWNER_PROFILE, stubGitHub } from "../helpers/github-stub.mjs";
+import { LEAKY_MESSAGE, REDACTED_LINE } from "../helpers/admin-fakes.mjs";
 import { getAuth } from "../../lib/auth.js";
 import { getDbPool } from "../../lib/db.js";
 import { getOwnerSession } from "../../lib/admin/guard.js";
@@ -181,11 +182,14 @@ describe("GitHub sign-in through Better Auth", { skip: db.skip }, () => {
   });
 
   // The audit writes run in the background (waitUntil), after the response: a failed one logs one line and
-  // changes nothing about the sign-in. Hiding the table makes both writes fail.
+  // changes nothing about the sign-in. A trigger that raises a credential-bearing error makes both writes fail.
   test("a failed audit write logs one redacted line, and the sign-in still succeeds or is still refused", async (t) => {
     const consoleError = t.mock.method(console, "error", () => {});
-    await db.pool.query("alter table admin_audit_log rename to admin_audit_log_hidden");
-    t.after(() => db.pool.query("alter table admin_audit_log_hidden rename to admin_audit_log"));
+    // Every insert fails with a credential in pg's message and detail, as a failed connection's error can.
+    await db.pool.query(`create function kw_test_leaky_audit() returns trigger language plpgsql as $$
+      begin raise exception using errcode = '28P01', message = '${LEAKY_MESSAGE}', detail = 'Key (refresh_token)=(detail-secret)'; end $$;
+      create trigger kw_test_leaky_audit before insert on admin_audit_log for each row execute function kw_test_leaky_audit();`);
+    t.after(() => db.pool.query("drop trigger kw_test_leaky_audit on admin_audit_log; drop function kw_test_leaky_audit()"));
 
     const owner = await signIn(OWNER_PROFILE);
     assert.equal(owner.res.status, 302);
@@ -201,6 +205,6 @@ describe("GitHub sign-in through Better Auth", { skip: db.skip }, () => {
     for (const args of lines) assert.ok(args.every((arg) => typeof arg === "string"), "only strings are logged");
     assert.deepEqual(lines.map((args) => args[0]).sort(),
       ["[auth] could not log a rejected sign-in:", "[auth] could not log sign_in:"]);
-    for (const [, described] of lines) assert.match(described, /^error \[42P01\]: /, "pg's name and code, from describeError");
+    for (const [, described] of lines) assert.equal(described, REDACTED_LINE.replace(/^Error/, "error"), "describeError's redacted line");
   });
 });

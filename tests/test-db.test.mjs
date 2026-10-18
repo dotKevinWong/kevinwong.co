@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import {
   assertResettable,
@@ -15,8 +17,24 @@ const REMOTE =
   "postgresql://kw_owner:npg_SECRETVALUE@ep-quiet-sky-123456-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require";
 
 // The guard runs once, at import, so each case imports the helper in a fresh process. vars sets (or, with
-// undefined, unsets) variables for it; after the import, `then` runs as more of the child's code.
-const importHelper = (databaseUrl, { vars = {}, then = "" } = {}) => {
+// undefined, unsets) variables for it; after the import, `then` runs as more of the child's code. envFile, when
+// given, is the text the child reads in place of .env.test.local, from a temporary file: the real one is never
+// read or changed.
+const importHelper = (databaseUrl, { vars = {}, then = "", envFile } = {}) => {
+  let preamble = "";
+  if (envFile !== undefined) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kw-test-env-"));
+    const file = path.join(dir, ".env.test.local");
+    fs.writeFileSync(file, envFile);
+    preamble = `import fs from "node:fs";
+const isTestEnv = (p) => String(p).endsWith(".env.test.local");
+const existsSync = fs.existsSync;
+fs.existsSync = (p) => isTestEnv(p) || existsSync(p);
+const loadEnvFile = process.loadEnvFile;
+process.loadEnvFile = (p) => loadEnvFile.call(process, isTestEnv(p) ? ${JSON.stringify(file)} : p);
+`;
+    process.on("exit", () => fs.rmSync(dir, { recursive: true, force: true }));
+  }
   const env = { ...process.env };
   delete env.DATABASE_URL;
   delete env.REQUIRE_TEST_DB;
@@ -31,7 +49,7 @@ const importHelper = (databaseUrl, { vars = {}, then = "" } = {}) => {
       "--disable-warning=MODULE_TYPELESS_PACKAGE_JSON",
       "--input-type=module",
       "--eval",
-      `const helper = await import(${JSON.stringify(HELPER)});\n${then}`,
+      `${preamble}const helper = await import(${JSON.stringify(HELPER)});\n${then}`,
     ],
     { env, encoding: "utf8" }
   );
@@ -68,7 +86,6 @@ test("tests/helpers/db.mjs refuses a loopback DATABASE_URL on any port but 55432
     ["postgres://postgres:pw@127.0.0.1:5434/kw_test", 5434],
     ["postgres://postgres:pw@127.0.0.1:54329/kw_test", 54329],
     ["postgres://postgres:pw@127.0.0.1:55433/kw_test", 55433],
-    ["postgres://postgres:pw@127.0.0.1:55432/kw_test?port=5432", 5432],
   ]) {
     const r = importHelper(databaseUrl);
     assert.equal(r.status, 1, databaseUrl);
@@ -87,6 +104,50 @@ test("tests/helpers/db.mjs refuses a TEST_DATABASE_URL that isn't a loopback dat
   assert.equal(remote.status, 1);
   assert.match(remote.stderr, /Refusing to run integration tests: TEST_DATABASE_URL points at a remote database/);
   assert.ok(!remote.stderr.includes("npg_SECRETVALUE"));
+});
+
+// pg-connection-string copies every query parameter in order, so the last of a repeated one wins, and a port
+// parameter replaces the URL's port. The guard refuses both rather than guess which port pg will use.
+test("tests/helpers/db.mjs refuses a port query parameter, and a repeated host, hostaddr, port or service", () => {
+  const base = "postgres://postgres:pw@127.0.0.1:55432/kw_test";
+  for (const [query, problem] of [
+    ["?port=5432", "has a port query parameter"],
+    ["?port=55432", "has a port query parameter"],
+    ["?port=55432&port=5433", "repeats the port query parameter"],
+    ["?host=127.0.0.1&host=ep-x.neon.tech", "repeats the host query parameter"],
+    ["?hostaddr=127.0.0.1&hostaddr=10.0.0.9", "repeats the hostaddr query parameter"],
+    ["?service=a&service=b", "repeats the service query parameter"],
+  ]) {
+    for (const name of ["DATABASE_URL", "TEST_DATABASE_URL"]) {
+      const r = name === "DATABASE_URL"
+        ? importHelper(base + query)
+        : importHelper(undefined, { vars: { TEST_DATABASE_URL: base + query } });
+      assert.equal(r.status, 1, `${name}${query}`);
+      assert.ok(r.stderr.includes(`Refusing to run integration tests: ${name} ${problem}`), r.stderr);
+      assert.ok(!r.stderr.includes("pw@"), "no password");
+    }
+  }
+});
+
+// .env.test.local is loaded before the checks, so a DATABASE_URL in it is checked as well.
+test("tests/helpers/db.mjs checks a DATABASE_URL that .env.test.local sets", () => {
+  const r = importHelper(undefined, {
+    vars: { TEST_DATABASE_URL: undefined },
+    envFile: "TEST_DATABASE_URL=postgres://postgres:pw@127.0.0.1:55432/kw_test\n" +
+      "DATABASE_URL=postgres://postgres:pw@127.0.0.1:5433/otherproject\n",
+    then: "console.log(process.env.DATABASE_URL);",
+  });
+  assert.equal(r.status, 1, r.stdout);
+  assert.ok(r.stderr.includes(
+    `Refusing to run integration tests: DATABASE_URL uses port 5433, not the test database's 55432 (${OTHER_PORTS})`), r.stderr);
+  // The same file without the stray DATABASE_URL loads, which shows the file was read.
+  const ok = importHelper(undefined, {
+    vars: { TEST_DATABASE_URL: undefined },
+    envFile: "TEST_DATABASE_URL=postgres://postgres:pw@127.0.0.1:55432/kw_from_file\n",
+    then: "console.log(new URL(process.env.TEST_DATABASE_URL).pathname);",
+  });
+  assert.equal(ok.status, 0, ok.stderr);
+  assert.equal(ok.stdout.trim(), "/kw_from_file");
 });
 
 // npm run test:integration sets REQUIRE_TEST_DB=1, so a missing test database fails the run instead of skipping
@@ -190,11 +251,25 @@ test("assertResettable refuses the ports that belong to other projects", () => {
       new RegExp(`port ${port} belongs to another project`)
     );
   }
-  assert.throws(
-    () => assertResettable("postgres://postgres:pw@127.0.0.1:55432/kw_test?port=5432"),
-    /port 5432 belongs to another project/
-  );
   assert.equal(assertResettable("postgres://postgres:pw@127.0.0.1:55432/kw_test"), "kw_test");
+});
+
+test("assertResettable refuses a port query parameter, and a repeated host, hostaddr, port or service", () => {
+  const base = "postgres://postgres:pw@127.0.0.1:55432/kw_test";
+  for (const [query, problem] of [
+    ["?port=5432", "has a port query parameter"],
+    ["?port=55432&port=5433", "repeats the port query parameter"],
+    ["?host=127.0.0.1&host=ep-x.neon.tech", "repeats the host query parameter"],
+    ["?hostaddr=127.0.0.1&hostaddr=10.0.0.9", "repeats the hostaddr query parameter"],
+    ["?service=a&service=b", "repeats the service query parameter"],
+  ]) {
+    assert.throws(() => assertResettable(base + query), (error) => {
+      assert.ok(error.message.startsWith("Refusing to reset "), error.message);
+      assert.ok(error.message.includes(`: the URL ${problem}`), error.message);
+      assert.ok(!error.message.includes("pw@"), "no password");
+      return true;
+    }, query);
+  }
 });
 
 test("migrationFiles lists sql/005 and later in filename order", () => {

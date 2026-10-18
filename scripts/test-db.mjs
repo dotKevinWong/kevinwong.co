@@ -71,14 +71,34 @@ export function pgEnvFromUrl(connectionString) {
   };
 }
 
+// Query parameters that pg lets replace the URL's host or port. pg-connection-string copies every query parameter
+// in order, so the last of a repeated one wins.
+const OVERRIDE_PARAMS = ["host", "hostaddr", "port", "service"];
+
+/**
+ * Why a test database URL's query string could send pg somewhere other than where its host and port say, or null:
+ * a repeated host, hostaddr, port or service parameter, or any port parameter. The test database never needs
+ * either, so both are refused rather than read the way pg might. (sslFor already treats any host, hostaddr or
+ * service parameter as remote.)
+ */
+export function queryOverride(connectionString) {
+  if (!URL.canParse(connectionString)) return null;
+  const params = new URL(connectionString).searchParams;
+  const repeated = OVERRIDE_PARAMS.find((name) => params.getAll(name).length > 1);
+  if (repeated) return `repeats the ${repeated} query parameter, and pg uses the last one`;
+  if (params.has("port")) return "has a port query parameter, which pg lets replace the URL's port: put the port in the URL itself";
+  return null;
+}
+
 /** The database name, once the URL is known to be a local kw_test* database on a port no other project uses. */
 export function assertResettable(connectionString) {
+  const override = queryOverride(connectionString);
+  if (override) throw new Error(`Refusing to reset ${describeTarget(connectionString)}: the URL ${override}`);
   if (sslFor(connectionString) !== false) {
     throw new Error(`Refusing to reset ${describeTarget(connectionString)}: not a local database`);
   }
   const url = new URL(connectionString);
-  // pg lets a port query parameter replace the URL's port, so it is read first.
-  const port = Number(url.searchParams.get("port") || url.port || 5432);
+  const port = Number(url.port || 5432);
   if (OTHER_PROJECT_PORTS.has(port)) {
     throw new Error(`Refusing to reset ${describeTarget(connectionString)}: port ${port} belongs to another project`);
   }

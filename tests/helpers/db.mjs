@@ -1,6 +1,6 @@
 import pg from "pg";
 import { sslFor } from "../../lib/db.js";
-import { loadTestEnv, resetTestDatabase } from "../../scripts/test-db.mjs";
+import { loadTestEnv, queryOverride, resetTestDatabase } from "../../scripts/test-db.mjs";
 
 // The test database is the kw-test-pg container on 127.0.0.1:55432. Kevin's other projects run Postgres on the
 // loopback too, on these ports, and a test must never write to them.
@@ -9,10 +9,11 @@ const OTHER_PROJECT_PORTS = "ports 5432, 5433, 5434 and 54329 belong to other pr
 
 /** Why a connection string can't be the test database, or null when it is a loopback host on port 55432. */
 function notTheTestDatabase(connectionString) {
+  // A repeated host, hostaddr, port or service parameter, or any port parameter: pg might not go where the URL says.
+  const override = queryOverride(connectionString);
+  if (override) return override;
   if (sslFor(connectionString) !== false) return "points at a remote database";
-  const url = new URL(connectionString);
-  // pg lets a port query parameter replace the URL's port, so it is read first (as in scripts/test-db.mjs).
-  const port = Number(url.searchParams.get("port") || url.port || 5432);
+  const port = Number(new URL(connectionString).port || 5432);
   if (port !== TEST_DB_PORT) return `uses port ${port}, not the test database's ${TEST_DB_PORT} (${OTHER_PROJECT_PORTS})`;
   return null;
 }
@@ -23,12 +24,14 @@ function refuseUnlessTestDatabase(name) {
   if (problem) throw new Error(`Refusing to run integration tests: ${name} ${problem}`);
 }
 
-// lib code's getDbPool() connects to DATABASE_URL, and in a developer's shell that can be production (D1) or another
-// project's container. Refuse to load unless it is unset or the test database, so no test can write anywhere else.
-refuseUnlessTestDatabase("DATABASE_URL");
-
-// .env.test.local holds TEST_DATABASE_URL (README, Local test database). A variable already set wins.
+// .env.test.local holds TEST_DATABASE_URL (README, Local test database). A variable already set wins. It is loaded
+// first, so the checks below also see anything it sets.
 loadTestEnv();
+
+// lib code's getDbPool() connects to DATABASE_URL, and in a developer's shell (or a stray line in .env.test.local)
+// that can be production (D1) or another project's container. Refuse to load unless it is unset or the test
+// database, so no test can write anywhere else.
+refuseUnlessTestDatabase("DATABASE_URL");
 refuseUnlessTestDatabase("TEST_DATABASE_URL");
 
 let shared = null;

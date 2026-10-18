@@ -75,7 +75,7 @@ test("validateOwner still rejects when the rejected-sign-in log fails, and logs 
   ]);
 });
 
-test("the sign_in hook logs one describeError line when the audit write fails, and doesn't reject", (t) =>
+test("the sign_in hook logs one name-and-message line when the audit write fails, and doesn't reject", (t) =>
   withEnv({ DATABASE_URL: undefined }, async () => {
     const consoleError = t.mock.method(console, "error", () => {});
     const { after } = buildAuthOptions({ env: VALID_ENV, db: {} }).databaseHooks.session.create;

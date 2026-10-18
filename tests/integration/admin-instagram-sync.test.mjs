@@ -47,18 +47,34 @@ function carouselRoutes(shortcode, slides) {
   };
 }
 
-let uploadDelayMs = 0;
 const uploaded = [];
 const fakeUpload = async (pathname, _buffer, contentType) => {
-  if (uploadDelayMs) await new Promise((resolve) => setTimeout(resolve, uploadDelayMs));
   uploaded.push(pathname);
   return { url: `https://blob.test/${pathname}`, pathname, contentType };
 };
 
+// While a test holds it, each request waits after its limits check until `size` requests have passed theirs, so all
+// of them read sync_runs before any claims a slot. Only the slot claim can then stop the second of two.
+let barrier = null;
+function holdAfterLimitsCheck(size) {
+  let open;
+  const opened = new Promise((resolve) => { open = resolve; });
+  barrier = { size, verdicts: [], open, opened };
+  return barrier;
+}
+
 const handler = createInstagramSyncHandler({
   requireAdmin: async () => ({ name: "Kevin Wong", image: null }),
   readBody: readJsonBody,
-  checkPanelRunAllowed,
+  checkPanelRunAllowed: async (...args) => {
+    const verdict = await checkPanelRunAllowed(...args);
+    if (barrier) {
+      barrier.verdicts.push(verdict);
+      if (barrier.verdicts.length === barrier.size) barrier.open();
+      await barrier.opened;
+    }
+    return verdict;
+  },
   claimPanelSlot,
   releasePanelImportSlot,
   syncInstagram: (options) => syncInstagram({ ...options, upload: fakeUpload }),
@@ -96,8 +112,8 @@ describe("the panel's Check and Import through the real limits and syncInstagram
       admin_audit_log restart identity cascade`);
     // Fresh, so no run refreshes it.
     await storeToken({ accessToken: "T-panel", expiresInSeconds: 60 * 86_400 });
-    uploadDelayMs = 0;
     uploaded.length = 0;
+    barrier = null;
   });
   after(async () => { await getDbPool().end(); await db.close(); });
 
@@ -150,12 +166,15 @@ describe("the panel's Check and Import through the real limits and syncInstagram
     assert.equal(again.body.error, "daily_limit");
   });
 
-  test("a double-clicked Import starts one run: the second request is refused while the first is still running", async (t) => {
+  // The timeout ends the test if a request never reaches the barrier, instead of leaving the other one waiting.
+  test("a double-clicked Import starts one run: both pass the limits check, and the slot claim refuses the second", { timeout: 10_000 }, async (t) => {
     mute(t);
     stubFetch(t, carouselRoutes("DOUBLE1", 2));
-    uploadDelayMs = 200; // so the two requests overlap the whole run
+    // Both requests read sync_runs before either claims, as two clicks can when neither run has written its row.
+    const held = holdAfterLimitsCheck(2);
 
     const responses = await Promise.all([call(false), call(false)]);
+    assert.deepEqual(held.verdicts, [{ allowed: true }, { allowed: true }], "the ledger let both through");
     assert.deepEqual(responses.map((r) => r.statusCode).sort(), [200, 429]);
     assert.equal(responses.find((r) => r.statusCode === 429).body.error, "daily_limit");
     assert.equal(responses.find((r) => r.statusCode === 200).body.status, "ok");
