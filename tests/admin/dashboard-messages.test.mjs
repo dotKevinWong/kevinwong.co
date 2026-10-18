@@ -100,9 +100,9 @@ test("checkResultMessage and importResultMessage summarise a run", () => {
 
 test("an import whose every new post failed says so, never \"No new posts\"", () => {
   assert.equal(importResultMessage(sync({ status: "partial", errorCount: 3 })),
-    "Nothing was imported: 3 posts failed. The runs table has the errors.");
+    "Nothing was imported: 3 posts failed. The runs table's Errors column counts them, and Vercel's function logs have each post's error.");
   assert.equal(importResultMessage(sync({ status: "partial", errorCount: 1, deferred: 2 })),
-    "Nothing was imported: 1 post failed. The runs table has the errors. 2 more posts wait for a later run.");
+    "Nothing was imported: 1 post failed. The runs table's Errors column counts them, and Vercel's function logs have each post's error. 2 more posts wait for a later run.");
 });
 
 test("importNotice: success for an ok import, error when every post failed, warning otherwise", () => {
