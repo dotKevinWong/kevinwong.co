@@ -1,6 +1,7 @@
 import { after, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
+import pg from "pg";
 import { testDb } from "../helpers/db.mjs";
 import { applySqlFiles } from "../../scripts/db-apply.mjs";
 
@@ -26,6 +27,7 @@ const migrateThrough007 = async () => {
 };
 
 const AUTH_TABLES = ["auth_account", "auth_session", "auth_user", "auth_verification"];
+const ONE_OF_EACH = { users: 1, sessions: 1, accounts: 1, verifications: 1 };
 
 /** Everything in `public` that a table drop could leave behind or take with it. */
 async function schema() {
@@ -64,15 +66,21 @@ const authRowCounts = async () =>
             (select count(*) from auth_verification)::int as verifications`
   )).rows[0];
 
-// The rows outside 007 that the undo must leave alone.
+// The rows outside 007 that the undo must leave alone: one or more in every other table in `public`.
 const keptRows = async () => {
   const q = async (sql) => (await db.pool.query(sql)).rows;
   return {
     tokens: await q("select provider, access_token, expires_at from integration_tokens order by provider"),
     runs: await q("select job, trigger, dry_run, status, uploads from sync_runs order by id"),
     events: await q("select event, actor, details from admin_audit_log order by id"),
+    locks: await q("select name, locked_until from job_locks order by name"),
+    posts: await q("select id, source_key, posted_at from instagram_posts order by id"),
+    media: await q("select id, post_id, position, kind::text, asset_url from instagram_media order by id"),
   };
 };
+
+const POST_ID = "00000000-0000-4000-8000-000000000001";
+const MEDIA_ID = "00000000-0000-4000-8000-000000000002";
 
 async function seed() {
   await db.pool.query(
@@ -82,6 +90,22 @@ async function seed() {
   );
   await db.pool.query("insert into sync_runs (job, trigger, dry_run, status, uploads) values ('instagram', 'panel', false, 'ok', 3)");
   await db.pool.query(`insert into admin_audit_log (event, actor, details) values ('sign_in', 'github:1741711', '{"ipAddress":null}')`);
+  await db.pool.query(
+    `insert into job_locks (name, locked_until)
+     values ('instagram-sync', '2026-10-18T05:15:00Z'), ('instagram-panel-import', '2026-10-19T12:00:00Z')`
+  );
+  await db.pool.query(
+    `insert into instagram_posts (id, source_key, posted_at) values ($1, 'ig:TESTCODE', '2026-10-01T12:00:00Z')`,
+    [POST_ID]
+  );
+  await db.pool.query(
+    `insert into instagram_media (id, post_id, position, kind, cloudinary_public_id, cloudinary_url, cloudinary_folder,
+                                  file_ext, source_uri, source_created_at, asset_url)
+     values ($1, $2, 0, 'image', 'snapshots/TESTCODE-0', 'https://res.cloudinary.example/TESTCODE-0.jpg', 'snapshots',
+             'jpg', 'https://instagram.example/TESTCODE-0.jpg', '2026-10-01T12:00:00Z',
+             'https://blob.example/snapshots/202610/TESTCODE-0.jpg')`,
+    [MEDIA_ID, POST_ID]
+  );
   await db.pool.query(
     `insert into auth_user ("id", "name", "email", "updatedAt")
      values ('u1', 'Kevin Wong', '1741711@github.placeholder.invalid', now())`
@@ -114,7 +138,7 @@ describe("undoing 007 (sql/undo/undo-007.sql)", { skip: db.skip }, () => {
     await seed();
     assert.deepEqual(await authTables(), AUTH_TABLES);
     const kept = await keptRows();
-    assert.equal(kept.events.length, 1);
+    for (const [table, rows] of Object.entries(kept)) assert.ok(rows.length > 0, `${table} is seeded`);
 
     await apply(UNDO);
 
@@ -140,29 +164,59 @@ describe("undoing 007 (sql/undo/undo-007.sql)", { skip: db.skip }, () => {
     assert.deepEqual(await authRowCounts(), { users: 0, sessions: 0, accounts: 0, verifications: 0 });
   });
 
-  test("the undo is all or nothing: blocked by a lock on auth_user, it times out and every auth table and row stays", async () => {
+  // A timeout, so that an undo without its lock_timeout fails this test instead of hanging the run. The holder
+  // also ends itself: after 12 idle seconds in its transaction the server closes it and frees the lock, so such an
+  // undo then succeeds and assert.rejects fails.
+  test("the undo is all or nothing: blocked on auth_verification after two drops, it times out and rolls both back",
+    { timeout: 30_000 }, async () => {
+      await migrateThrough007();
+      await seed();
+      const migrated = await schema();
+
+      // auth_verification is the third drop, so by the time the undo waits for this reader's lock it has already
+      // dropped auth_session and auth_account. Its 5-second lock_timeout then fails the transaction, and the
+      // rollback has to bring both back.
+      const holder = new pg.Client({ connectionString: process.env.TEST_DATABASE_URL, ssl: false });
+      holder.on("error", () => {});
+      await holder.connect();
+      try {
+        await holder.query("set idle_in_transaction_session_timeout = '12s'");
+        await holder.query("begin");
+        await holder.query("select count(*) from auth_verification");
+        await assert.rejects(apply(UNDO), (error) => {
+          assert.equal(error.message, "sql/undo/undo-007.sql: canceling statement due to lock timeout");
+          assert.equal(error.cause?.code, "55P03");
+          return true;
+        });
+      } finally {
+        await holder.query("rollback").catch(() => {});
+        await holder.end().catch(() => {});
+      }
+
+      assert.deepEqual(await authTables(), AUTH_TABLES);
+      assert.deepEqual(await schema(), migrated);
+      assert.deepEqual(await authRowCounts(), ONE_OF_EACH);
+    });
+
+  test("the undo drops nothing it didn't create: a view on auth_user makes it fail and change nothing", async () => {
     await migrateThrough007();
     await seed();
-    const migrated = await schema();
+    await db.pool.query(`create view owner_names as select "id", "name" from auth_user`);
+    const withView = await schema();
+    const kept = await keptRows();
 
-    // An open transaction that has read auth_user holds a lock that the drops wait for, past the file's
-    // 5-second lock_timeout. The rollback takes back every drop the transaction had already made.
-    const holder = await db.pool.connect();
-    try {
-      await holder.query("begin");
-      await holder.query("select count(*) from auth_user");
-      await assert.rejects(apply(UNDO), (error) => {
-        assert.equal(error.message, "sql/undo/undo-007.sql: canceling statement due to lock timeout");
-        assert.equal(error.cause?.code, "55P03");
-        return true;
-      });
-    } finally {
-      await holder.query("rollback");
-      holder.release();
-    }
+    // Without a CASCADE, Postgres refuses to drop auth_user while the view depends on it. The first three drops had
+    // succeeded, and the rollback brings them back.
+    await assert.rejects(apply(UNDO), (error) => {
+      assert.equal(error.message, "sql/undo/undo-007.sql: cannot drop table auth_user because other objects depend on it");
+      assert.equal(error.cause?.code, "2BP01");
+      return true;
+    });
 
+    assert.deepEqual(await schema(), withView);
     assert.deepEqual(await authTables(), AUTH_TABLES);
-    assert.deepEqual(await schema(), migrated);
-    assert.deepEqual(await authRowCounts(), { users: 1, sessions: 1, accounts: 1, verifications: 1 });
+    assert.deepEqual(await authRowCounts(), ONE_OF_EACH);
+    assert.deepEqual(await keptRows(), kept);
+    assert.deepEqual((await db.pool.query("select id, name from owner_names")).rows, [{ id: "u1", name: "Kevin Wong" }]);
   });
 });
