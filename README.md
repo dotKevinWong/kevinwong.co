@@ -60,8 +60,9 @@ where the app can refresh, rotate or replace them without a redeploy.
 
 The four auth variables stay out of `.env`, because the panel is switched off everywhere except production
 (see *Admin panel*). Don't set `BETTER_AUTH_TRUSTED_ORIGINS` or `BETTER_AUTH_SECRETS` anywhere. Better Auth
-reads both straight from the environment, past the app's own settings, so [`lib/auth.js`](lib/auth.js)
-refuses to start in production while either is set.
+reads both straight from the environment, past the app's own settings, so in production
+[`lib/auth.js`](lib/auth.js) throws while either is set. Better Auth is built on first use, so the build and
+the deploy still succeed, and then every admin request answers 500.
 
 ### 🗄️ Database migrations
 
@@ -101,11 +102,13 @@ To apply one:
    there and switches to the direct host, because the pooled one goes through PgBouncer in transaction mode,
    which DDL must avoid. Without `--yes` it prints the target and stops, so look first:
    ````sh
-   npm run db:apply -- sql/005_integration_tokens_spotify.sql sql/006_sync_runs.sql         # prints Target: and stops
-   npm run db:apply -- --yes sql/005_integration_tokens_spotify.sql sql/006_sync_runs.sql   # applies them, in order
+   npm run db:apply -- sql/005_integration_tokens_spotify.sql sql/006_sync_runs.sql
    ````
-   `Target:` must name the Neon host without `-pooler`. `--yes` goes after the `--`; npm keeps one that comes
-   before it.
+   `Target:` must name the Neon host without `-pooler`. Then apply them, in order:
+   ````sh
+   npm run db:apply -- --yes sql/005_integration_tokens_spotify.sql sql/006_sync_runs.sql
+   ````
+   `--yes` goes after the `--`; npm keeps one that comes before it.
 
 **Undoing 005 and 006.** Rolling the code back (Vercel → Deployments → the previous deployment → ⋯ →
 **Instant Rollback**) is the planned way back, and the schema normally stays: the code from before these
@@ -148,7 +151,8 @@ Both migrations are safe to apply again afterwards.
 **Undoing 007.** Here too the planned way back is rolling the code back, and the auth tables can stay: the
 code from before the admin panel never reads them. Removing them signs everyone out and deletes the owner's
 GitHub sign-in record, which the next sign-in creates again. The activity log in `admin_audit_log` keeps
-its history. Back up first (step 1 above), then:
+its history. Back up first (step 1 above), naming the backup `before-undo-007`, because the one taken before
+`007` went on may still be kept, then:
 
 1. Roll the code back first. While the panel's code is live, Better Auth fails every request without its
    tables.
@@ -209,8 +213,11 @@ a new refresh token, it replaces the stored one only if the row still holds the 
 slow instance can't overwrite a newer one.
 
 **Reconnecting.** Use the admin panel: https://www.kevinwong.co/admin → the Spotify card → **Reconnect** →
-approve on Spotify. It takes effect within a minute, with no redeploy (see *Admin panel*). The fallback is
-the script:
+approve on Spotify. There is nothing to redeploy (see *Admin panel*). In the usual case, where Spotify has
+already rejected the old token, the new one takes effect everywhere within a minute, because instances recheck
+a dead row once a minute. If the old token still works, the instance that handled the reconnect switches at
+once, and each other instance keeps its cached access token until its next refresh, within an hour. Spotify
+keeps working throughout. The fallback is the script:
 
 1. Add `http://127.0.0.1:8888/callback` to the Redirect URIs of the app in the
    [Spotify dashboard](https://developer.spotify.com/dashboard). Spotify rejects `localhost`, so the loopback
@@ -281,7 +288,7 @@ add Better Auth's organization plugin: advisory GHSA-fmh4-wcc4-5jm3 applies only
    App**) with homepage `https://www.kevinwong.co` and callback `https://www.kevinwong.co/api/auth/callback/github`.
    Sign-in requests no scopes. Set the four env vars from *Environment variables*, `BETTER_AUTH_SECRET`,
    `BETTER_AUTH_URL`, `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`, in Vercel for **Production** only, each
-   marked **Sensitive**.
+   with **Type** set to **Secret** (older dashboards: **Sensitive** turned on).
 2. In the [Spotify dashboard](https://developer.spotify.com/dashboard), add
    `https://www.kevinwong.co/api/admin/spotify/callback` to the app's Redirect URIs. Keep
    `http://127.0.0.1:8888/callback` there too, for `npm run spotify:reauth`.
@@ -294,7 +301,9 @@ add Better Auth's organization plugin: advisory GHSA-fmh4-wcc4-5jm3 applies only
    ````
    It prints `Schema check passed against the live database.` and exits 0. It exits 1 on a mismatch and 2 when
    it can't load the config or reach the database. Warnings that the base URL isn't set and that the GitHub
-   provider has no client id are harmless here. `--no-install` runs only the pinned copy, and never downloads one.
+   provider has no client id are harmless here. So is a `◇ injected env (N) from .env` line from dotenv, if one
+   appears: it prints a count, not values, and shows only when `DOTENV_CONFIG_QUIET=false` or
+   `DOTENV_CONFIG_DEBUG` is set. `--no-install` runs only the pinned copy, and never downloads one.
 
 **Troubleshooting.** The checks below use `prodsql`, a helper for read-only queries. Define it in a terminal
 in the main checkout. It reads `DATABASE_URL` from `.env`, so the URL is never typed and never appears in any
@@ -312,12 +321,20 @@ try { console.table((await pool.query(process.argv[1])).rows); } finally { await
   them.
 - **`Database schema mismatch` in the logs** (Better Auth's `SCHEMA_MISMATCH`) means `007` is missing or wrong,
   so run the check above. Ignore its hint to run `npx auth migrate`: the schema comes only from `sql/`.
-- **A 500 from the panel** writes one redacted line to Vercel → **Logs**, never a stack trace or a token:
+- **A 500 from the panel** writes one redacted line to Vercel → **Logs**, never a token. The two admin pages
+  (`/admin`, `/admin/sign-in`) then also log Next's own `Error: Admin page unavailable`, whose stack trace holds
+  nothing secret, and render Next's built-in 500 page.
   - `[admin] owner check failed:` (`[admin/spotify] owner check failed:` on the Spotify routes): the owner
-    check itself failed, because of the database or Better Auth's schema check. The API routes answer
-    `{"error":"server_error"}`, and `/admin` shows the site's 500 page.
-  - `[auth] request failed:`: Better Auth failed during sign-in, its callback or sign-out, and `/api/auth/*`
-    answers `{"error":"server_error"}`.
+    check itself failed. The cause is the database, Better Auth's schema check, or one of the production checks
+    on the env vars in `lib/auth.js`, which reads `Error: BETTER_AUTH_URL is not set`,
+    `Error: BETTER_AUTH_URL must be https://www.kevinwong.co`,
+    `Error: BETTER_AUTH_SECRET must be set to at least 32 characters`,
+    `Error: BETTER_AUTH_TRUSTED_ORIGINS must not be set` or `Error: BETTER_AUTH_SECRETS must not be set`. The
+    API routes answer `{"error":"server_error"}`. Fixing an env var takes a redeploy, because a deployment keeps
+    the env vars it was built with: correct it in Vercel, then **Deployments** → the current Production
+    deployment → **⋯** → **Redeploy**.
+  - `[auth] request failed:`: Better Auth failed during sign-in, its callback or sign-out, including on the
+    env-var checks above, and `/api/auth/*` answers `{"error":"server_error"}`.
   - `[admin/status] status read failed:`: `/api/admin/status` answers `{"error":"status_failed"}`, and the
     dashboard says it couldn't load the status.
   - `[admin/instagram] sync failed:`: the Check or Import run itself threw, answered with
@@ -333,16 +350,20 @@ try { console.table((await pool.query(process.argv[1])).rows); } finally { await
   - `not_configured`: `SPOTIFY_CLIENT_ID` or `SPOTIFY_CLIENT_SECRET` is missing in Vercel Production.
   - `save_failed`: the database write failed. Try again.
 - **Import stays disabled after an import that failed.** Each Import claims a 24-hour slot, the `job_locks`
-  row `instagram-panel-import`, before it runs, and gives the slot back when it uploaded nothing. If that fails
-  too (the logs show `[admin/instagram] limit re-read failed:` or `import slot release failed:`), or the request
-  fails some other way after the claim, Import stays disabled for up to 24 hours, though **Recent runs** shows
-  no import that counts. Look first:
+  row `instagram-panel-import`, before it runs. It gives the slot back when the import failed or stood down
+  without uploading anything, because such an import doesn't count. If giving it back fails (the logs show
+  `[admin/instagram] limit re-read failed:` or `import slot release failed:`), or the request fails some other
+  way after the claim (`[admin/instagram] request failed:`, or the function stopped before the run was
+  recorded), Import stays disabled for up to 24 hours, though **Recent runs** shows no import that counts.
+  Look first:
   ````sh
   prodsql "select locked_until, locked_until > now() as held from job_locks where name = 'instagram-panel-import'"
   prodsql "select status, uploads, started_at from sync_runs where job = 'instagram' and trigger = 'panel' and not dry_run order by started_at desc limit 1"
   ````
-  Clear the slot only when `held` is `true` and the newest panel import's `status` is not `running`. A
-  `running` import is either still going or was killed, and a killed one counts anyway. To clear it:
+  Clear the slot only when `held` is `true` and the second query shows no `running` import: its row's
+  `status` is not `running`, or it prints no row at all, because the import that claimed the slot never
+  recorded a run. A `running` import is either still going or was killed, and a killed one counts anyway. To
+  clear it:
   ````sh
   node --env-file=.env --input-type=module -e '
   import pg from "pg";
@@ -399,9 +420,10 @@ npm run instagram:sync -- --probe-caption
    Don't keep `INSTAGRAM_ACCESS_TOKEN` in a `.env` file: the token lives in Postgres, and the
    script only reads it from the command line's environment.
 6. Reconcile the posts that came from the old data-export import. This is only needed for
-   rows imported from an Instagram "Download Your Information" ZIP, and it's already done here:
+   rows imported from an Instagram "Download Your Information" ZIP, and it's already done here. The first
+   command is a dry run; the second applies it:
    ````sh
-   npm run instagram:repair            # dry run
+   npm run instagram:repair
    npm run instagram:repair -- --apply
    ````
 7. Dry-run the sync, then let it run for real:
