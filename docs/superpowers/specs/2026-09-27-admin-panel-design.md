@@ -134,8 +134,9 @@ has expired is shown as `abandoned`.
 and resizing work, says what it would import) and **Import N posts** (shown only when there is
 something new, with a confirmation step). The browser can only choose between those two; the
 server fixes every other parameter. Panel runs get a 60-second budget and the D4 limits; the
-existing lease stops a panel run and the cron overlapping. A check can renew the Instagram
-token when due, exactly as the cron would.
+existing lease stops a panel Import and the cron overlapping; a Check uploads nothing, and the
+only thing it shares with the cron, the Instagram token refresh, is compare-and-swap guarded.
+A check can renew the Instagram token when due, exactly as the cron would.
 
 ## Dashboard
 

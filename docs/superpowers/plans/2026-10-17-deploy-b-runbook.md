@@ -31,24 +31,26 @@ no command here carries one.
 
 ### The Spotify id gate
 
-The panel's reconnect accepts only the Spotify account named in `lib/admin/owner.js`. While that file still holds
-the placeholder `<from --whoami>`, every reconnect ends `wrong_account`, and two tests are still marked todo. The
-session fills in your account id in one commit, `Fill in the owner's Spotify account id`, and puts the Deploy B
-branch `claude/admin-panel-deploy-b` on it. Check that branch, not your main checkout:
+The panel's reconnect accepts only the Spotify account named in `lib/admin/owner.js`. While that file holds the
+placeholder `<from --whoami>`, every reconnect ends `wrong_account`, and two tests fail. The session filled in your
+account id in one commit, `Fill in the owner's Spotify account id`, and the Deploy B branch
+`claude/admin-panel-deploy-b` contains it, with the final review's fixes after it. Check that branch, not your main
+checkout. The block stops at the first command that fails:
 
 ```sh
 cd /Users/Kevin/Git/kevinwong.co &&
-git log -1 --format=%s claude/admin-panel-deploy-b &&
-git diff --name-only claude/admin-panel-deploy-b~1 claude/admin-panel-deploy-b &&
+git log --format=%s claude/admin-panel-deploy-b | grep -cx "Fill in the owner's Spotify account id" &&
 git rev-parse --short claude/admin-panel-deploy-b
 ```
 
 Expected:
-1. `Fill in the owner's Spotify account id`.
-2. Exactly three lines: `lib/admin/owner.js`, `tests/admin-owner.test.mjs` and `tests/admin-spotify-reconnect.test.mjs`.
-3. A short commit id. Note it down: Step 9 checks that the merge takes exactly this commit.
+1. `1`: the branch holds the id commit exactly once.
+2. A short commit id, the branch's newest commit. Note it down: Step 9 checks that the merge takes exactly this
+   commit.
 
-If the first two differ, or git says `unknown revision`, stop and tell the session.
+**If the first line is anything but `1`, or no short id follows it, stop and tell the session.** A `0` with nothing
+after it means the id commit isn't on the branch; if git also printed `fatal:` (for example `unknown revision`),
+the branch doesn't exist here. A `2` or more means the branch holds the commit more than once.
 
 Then check the branch out on its own, in a temporary folder with no `.env`, so its tests can't reach production.
 This is one line, and it stops at the first command that fails:
@@ -58,8 +60,8 @@ git worktree add --detach /tmp/kw-deploy-b-gate claude/admin-panel-deploy-b && c
 ```
 
 Expected: git's two lines, `Preparing worktree (detached HEAD <the id>)` and
-`HEAD is now at <the id> Fill in the owner's Spotify account id`, then `v24.21.0` (the version in `.nvmrc`), then
-npm's `added … packages`. `npm ci` takes a minute. Two things in its output are harmless: an
+`HEAD is now at <the id> <the subject of the branch's newest commit>`, then `v24.21.0` (the version in `.nvmrc`),
+then npm's `added … packages`. `npm ci` takes a minute. Two things in its output are harmless: an
 `npm warn install-scripts` about `unrs-resolver`, and its audit summary, `N vulnerabilities (…)`, which counts every
 known advisory in the whole dependency tree, dev tools included. *What the session checked* lists the production
 ones.
@@ -92,10 +94,11 @@ of this section, and tell the session.
 Then, in that folder:
 
 ```sh
-cd /tmp/kw-deploy-b-gate && git log -1 --format=%s && grep -c '<from --whoami>' lib/admin/owner.js
+cd /tmp/kw-deploy-b-gate && grep -c '<from --whoami>' lib/admin/owner.js
 ```
 
-Expected: `Fill in the owner's Spotify account id`, then `0`.
+Expected: `0`, the placeholder is gone. (`grep -c` exits 1 when it counts nothing, which is harmless here: nothing
+follows it in this block.)
 
 ```sh
 cd /tmp/kw-deploy-b-gate && env -u DATABASE_URL npm test 2>&1 | grep '^ℹ'
@@ -106,8 +109,9 @@ Expected: the test summary, with `ℹ fail 0`, `ℹ cancelled 0` and `ℹ todo 0
 the session ran them against its test database.
 
 **If `grep -c` prints anything but `0`, or no `ℹ` summary lines appear, or `fail`, `cancelled` or `todo` is not `0`,
-stop and tell the session.** A `1` or a `todo` above `0` means the id is not in this branch. A `fail` above `0` can
-mean the id is malformed. Either way, the deploy would ship a reconnect that always fails.
+stop and tell the session.** A `1` means the placeholder is still in this branch's `lib/admin/owner.js`. A `fail`
+above `0` can mean the id is missing or malformed, and a `todo` above `0` that this branch isn't the one the session
+checked. Either way, the deploy would ship a reconnect that always fails.
 
 Whatever the result, remove the temporary folder. It is a throwaway checkout of a commit that stays on the branch,
 so nothing in it needs keeping, and `--force` removes it even if a file in it was changed or deleted (if macOS
@@ -140,9 +144,11 @@ It prints `Deploy A is on origin/main`. If it prints nothing, or an error, Deplo
 
 On the branch, the session ran:
 
-- `npm test` against its local test database, with `ℹ fail 0`, `ℹ cancelled 0` and no `﹣` line, so every
-  integration suite ran. Its count was `todo 2`, because the Spotify id was still the placeholder; the gate above is
-  what checks that it is now filled in;
+- `npm test` against its local test database, with `ℹ fail 0`, `ℹ cancelled 0`, `ℹ todo 0` and no `﹣` line, so
+  every integration suite ran, the id's two tests included. The gate above is what checks that this branch still
+  holds the id;
+- `npm run test:integration` against the same database, with `ℹ fail 0`. Without the test database it fails rather
+  than skipping, so a pass means every integration suite ran;
 - ESLint;
 - a build with no auth env vars;
 - `tsc`;
@@ -202,14 +208,15 @@ saved, so set all four before Step 9's push.
   pbcopy < /dev/null
   ```
 
-**Don't add `BETTER_AUTH_TRUSTED_ORIGINS` or `BETTER_AUTH_SECRETS`**, in any environment. Better Auth reads both
-straight from the environment, past the app's own settings, so `lib/auth.js` throws in production while either is
-set. The deploy still succeeds, and then every admin request answers 500.
+**Don't add `BETTER_AUTH_TRUSTED_ORIGINS`, `BETTER_AUTH_SECRETS` or `TEST`**, in any environment. Better Auth reads
+all three straight from the environment, past the app's own settings (a set `TEST` puts it in test mode), so
+`lib/auth.js` throws in production while any of them is set, whatever its value. The deploy still succeeds, and
+then every admin request answers 500.
 
 Check: the Environment Variables list shows all four names, each listed for "Production" only and shown as
-**Secret** (older dashboards: **Sensitive**). It does not show `BETTER_AUTH_TRUSTED_ORIGINS` or
-`BETTER_AUTH_SECRETS`. It still shows `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` for Production, added for
-Deploy A. Don't add the four to `.env`: local development never signs in (D1).
+**Secret** (older dashboards: **Sensitive**). It does not show `BETTER_AUTH_TRUSTED_ORIGINS`,
+`BETTER_AUTH_SECRETS` or `TEST`. It still shows `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` for Production,
+added for Deploy A. Don't add the four to `.env`: local development never signs in (D1).
 
 ## Step 7: add the panel's redirect URI to the Spotify app (any time before Step 9)
 
@@ -298,15 +305,16 @@ secret is typed or pasted. Nothing is deployed until item 7's push.
      tell the session.
    - `git status --short` prints nothing. If it prints anything, stop and tell the session.
 
-   Check that the branch is still the commit the gate checked:
+   Check that the branch is still the commit the gate checked. The block stops at the first command that fails:
 
    ```sh
-   git rev-parse --short claude/admin-panel-deploy-b
-   git log -1 --format=%s claude/admin-panel-deploy-b
+   git rev-parse --short claude/admin-panel-deploy-b &&
+   git log --format=%s claude/admin-panel-deploy-b | grep -cx "Fill in the owner's Spotify account id"
    ```
 
-   Expected: the same short id you noted in the gate, then `Fill in the owner's Spotify account id`. If the id
-   differs, the branch has moved since the gate: run the gate again before going on.
+   Expected: the same short id you noted in the gate, then `1`. If the id differs, the branch has moved since the
+   gate: run the gate again before going on. If git prints `fatal:` instead of an id, or the second line is
+   anything but `1`, stop and tell the session.
 
    Bring `main` up to date, and check it holds nothing unpushed:
 
@@ -487,9 +495,9 @@ secret is typed or pasted. Nothing is deployed until item 7's push.
    ```
 
    Expected: the first prints nothing, or only the merge commit if item 1 needed `--no-ff`. The second lists Deploy
-   B's commits, newest first: the merge commit, if any, then `Fill in the owner's Spotify account id` and the commits
-   under it. Nothing from Deploy A, which is already on `origin/main`. If the first prints anything else, stop and tell
-   the session. Then:
+   B's commits, newest first: the merge commit, if any, then the final review's fixes, then
+   `Fill in the owner's Spotify account id` and the commits under it. Nothing from Deploy A, which is already on
+   `origin/main`. If the first prints anything else, stop and tell the session. Then:
 
    ```sh
    git push origin main
@@ -634,9 +642,9 @@ Use a browser where you are signed in to Vercel, because Deployment Protection a
 3. Play something on Spotify. `curl -s https://www.kevinwong.co/api/nowplaying` shows `"isPlaying":true`. It keeps
    working throughout, because the old token still works today. The server instance that handled the reconnect
    switches to the stored token at once. Each other instance keeps its cached access token and switches at its next
-   refresh, within an hour. The alert's "within a minute" is for the usual case, a reconnect after the old token has
-   died, when instances recheck the row once a minute. Then check the listening chart, the only caller that needs
-   `user-read-recently-played` (the query string skips the CDN's day-long cache):
+   refresh, within an hour. The green alert states both cases: within an hour, as here, or within a minute after the
+   old token has died, when instances recheck the row once a minute. Then check the listening chart, the only
+   caller that needs `user-read-recently-played` (the query string skips the CDN's day-long cache):
 
    ```sh
    curl -sS "https://www.kevinwong.co/api/listeningtimeline?check=$(date +%s)" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log(j.is_working===false?`FAILED: ${s}`:`ok: ${Object.keys(j).length} days`)})'
@@ -677,6 +685,8 @@ Use a browser where you are signed in to Vercel, because Deployment Protection a
    - Any new posts listed by date, file count and shortcode (a link to the post), without captions.
    - Once the status refreshes, the **Recent runs** table's top row reads `panel (check)` with a green **OK** badge.
      The activity log lists "Signed in", "Spotify reconnected" and "Checked for new posts".
+   - **If the alert is red instead and says Blob or resizing failed its check**, an import would fail, so Import
+     stays disabled. Stop and tell the session, with the alert's text and the `Blob:` and `Resize:` lines.
 
    Import only if it lists posts, and only after item 3's query; otherwise the 05:00 UTC cron imports them.
 3. **See the limit hold.** Once the result shows, the dashboard refreshes its status. Expected: **Check** is
@@ -750,14 +760,15 @@ Use a browser where you are signed in to Vercel, because Deployment Protection a
     itself failed. The API routes answer `{"error":"server_error"}`. The cause is one of these:
     - the database;
     - Better Auth's schema check: a `Database schema mismatch` there means `007` is missing or wrong, so run Step 9
-      item 6's check;
+      item 6's check. Once `007` is fixed and that check passes, redeploy Deploy B's code as for an env var
+      (below), because each running instance keeps the mismatch it found until it restarts;
     - one of the production checks on the env vars in `lib/auth.js`, which reads `Error: BETTER_AUTH_URL is not set`,
       `Error: BETTER_AUTH_URL must be https://www.kevinwong.co`,
       `Error: BETTER_AUTH_SECRET must be set to at least 32 characters`,
-      `Error: BETTER_AUTH_TRUSTED_ORIGINS must not be set` or `Error: BETTER_AUTH_SECRETS must not be set`. Fix the
-      variable in Vercel (Step 6). A deployment keeps the env vars it was built with, so then rebuild Deploy B's code
-      with the new value: Vercel → **Deployments** → the newest Production deployment of Deploy B's commit → **⋯** →
-      **Redeploy**.
+      `Error: BETTER_AUTH_TRUSTED_ORIGINS must not be set`, `Error: BETTER_AUTH_SECRETS must not be set` or
+      `Error: TEST must not be set`. Fix the variable in Vercel (Step 6). A deployment keeps the env vars it was
+      built with, so then rebuild Deploy B's code with the new value: Vercel → **Deployments** → the newest
+      Production deployment of Deploy B's commit → **⋯** → **Redeploy**.
       - If you haven't rolled back, that is the current Production deployment, and the new one goes live once it is
         **Ready**.
       - If you have rolled back, the current one is Deploy A's: don't redeploy that one. Redeploy Deploy B's, and
@@ -771,8 +782,10 @@ Use a browser where you are signed in to Vercel, because Deployment Protection a
   - `[admin/instagram] sync failed:` answers `{"error":"sync_failed"}`, and `[admin/instagram] request failed:`
     answers `{"error":"server_error"}`.
 - **Import stays disabled after an import that failed.** Each Import claims a 24-hour slot, the `job_locks` row
-  `instagram-panel-import`, before it runs. It gives the slot back when the import failed or stood down without
-  uploading anything, because such an import doesn't count. If giving it back fails (the logs show
+  `instagram-panel-import`, before it runs. Only an import that failed or stood down before uploading anything gives
+  the slot back, because such an import doesn't count. One that finished, `ok` or `partial`, uses up the 24 hours
+  even with 0 uploads, for example when every new post failed or the cron had already imported them (D4: one import
+  per rolling 24 hours). If giving the slot back fails (the logs show
   `[admin/instagram] limit re-read failed:` or `import slot release failed:`), or the request fails some other way
   after the claim (`[admin/instagram] request failed:`, or the function stopped before the run was recorded), Import
   stays disabled for up to 24 hours, though **Recent runs** shows no import that counts. Look first, with `prodsql`

@@ -4,8 +4,11 @@
 -- recorded, including the uploads the 1,800-in-30-days ceiling counts.
 --
 -- Two preconditions, in this order:
---   1. The code is rolled back first (Vercel Instant Rollback). Without
---      sync_runs, a real sync in the new code stands down and imports nothing.
+--   1. The code from before Deploy A is live first. Once Deploy B is live,
+--      Instant Rollback reaches only Deploy A, whose code still reads 005's
+--      columns and writes sync_runs: revert Deploy B's and Deploy A's commits
+--      on main and push (README, *Undoing 005 and 006*). Without sync_runs, a
+--      real sync in the newer code stands down and imports nothing.
 --   2. Then the spotify row is deleted (delete-spotify-row.sql), which throws
 --      away the stored Spotify refresh token. With that row still there, the
 --      SET NOT NULL fails with 23502 and nothing is changed.

@@ -59,10 +59,11 @@ are deliberately not env vars. They live in Postgres in `integration_tokens`
 where the app can refresh, rotate or replace them without a redeploy.
 
 The four auth variables stay out of `.env`, because the panel is switched off everywhere except production
-(see *Admin panel*). Don't set `BETTER_AUTH_TRUSTED_ORIGINS` or `BETTER_AUTH_SECRETS` anywhere. Better Auth
-reads both straight from the environment, past the app's own settings, so in production
-[`lib/auth.js`](lib/auth.js) throws while either is set. Better Auth is built on first use, so the build and
-the deploy still succeed, and then every admin request answers 500.
+(see *Admin panel*). Don't set `BETTER_AUTH_TRUSTED_ORIGINS`, `BETTER_AUTH_SECRETS` or `TEST` anywhere.
+Better Auth reads all three straight from the environment, past the app's own settings: the first two widen its
+trusted origins and replace its secret, and a set `TEST` puts it in test mode. So in production
+[`lib/auth.js`](lib/auth.js) throws while any of them is set, whatever its value. Better Auth is built on first
+use, so the build and the deploy still succeed, and then every admin request answers 500.
 
 ### 🗄️ Database migrations
 
@@ -153,11 +154,13 @@ To apply one:
    `--yes` goes after the `--`; npm keeps one that comes before it.
 
 **Undoing 005 and 006.** Rolling the code back (Vercel → Deployments → the previous deployment → ⋯ →
-**Instant Rollback**) is the planned way back, and the schema normally stays: the code from before these
-migrations ignores both files. After an Instant Rollback, pushes to `main` don't go live until you undo it with
-**Undo Rollback** on the project's Production Deployment tile (see *If something goes wrong* in the
-[Deploy B runbook](docs/superpowers/plans/2026-10-17-deploy-b-runbook.md)). To remove the two migrations as well,
-back up first (step 1 above).
+**Instant Rollback**) is the planned way back, and the schema normally stays. After an Instant Rollback, pushes
+to `main` don't go live until you undo it with **Undo Rollback** on the project's Production Deployment tile (see
+*If something goes wrong* in the [Deploy B runbook](docs/superpowers/plans/2026-10-17-deploy-b-runbook.md)).
+Only the code from before Deploy A ignores both files, and once Deploy B is live, Instant Rollback can't reach
+it: on Hobby it goes back one deployment only, to Deploy A, whose Spotify code reads `005`'s columns and whose
+sync records its runs in `006`'s `sync_runs`. To remove the two migrations as well, back up first (step 1
+above).
 
 The SQL is in two files in [`sql/undo/`](sql/undo/): [`delete-spotify-row.sql`](sql/undo/delete-spotify-row.sql)
 and [`undo-005-006.sql`](sql/undo/undo-005-006.sql). They are not migrations: setup and
@@ -165,8 +168,14 @@ and [`undo-005-006.sql`](sql/undo/undo-005-006.sql). They are not migrations: se
 root, like the migrations, and not by pasting the SQL into a client: psql, with its default settings, carries
 on after a failed statement and would drop the tables anyway. In order:
 
-1. Roll the code back first. Without `sync_runs`, a real sync in the new code stands down and imports
-   nothing.
+1. Put the code from before Deploy A live first, in this order:
+   1. If Deploy B is live, undo it: roll back to Deploy A, which takes the panel down at once. Remove `007` too
+      if you want it gone (*Undoing 007* below).
+   2. Revert everything Deploy B and Deploy A brought into `main`, newest first, and push. If a rollback is
+      active, the push builds but doesn't go live: promote its deployment with **Undo Rollback**.
+
+   Only then go on. While Deploy A's code is live, removing `005` makes every Spotify refresh fail, so Now
+   Playing and Top Tracks stay empty, and without `sync_runs` a real sync stands down and imports nothing.
 2. Look at the target. Without `--yes`, `db:apply` prints it and stops, and it must name the Neon host
    without `-pooler`:
    ````sh
@@ -237,8 +246,9 @@ The server's major version matches production's, and its sessions run in UTC lik
 assume. If the container already exists, run `docker start kw-test-pg` instead, and copy `.env.test.local`
 from the checkout that created it. `tests/fixtures/prod-schema.sql` is production's schema, without data; after
 production's schema changes, refresh it with `npm run db:test -- dump-schema`, run where `.env` holds
-production's `DATABASE_URL` (it only reads production). Without `TEST_DATABASE_URL` the integration suites
-skip themselves: a `﹣` line in the test output means they did not run.
+production's `DATABASE_URL` (it only reads production). Without `TEST_DATABASE_URL`, `npm test` skips the
+integration suites (a `﹣` line in its output means they did not run), and `npm run test:integration` fails
+instead, so it can't pass without running them.
 
 ### 🎧 Spotify token
 
@@ -309,7 +319,7 @@ throwaway local Postgres.
 | Action | Limit |
 | --- | --- |
 | Check for new posts (dry run) | Once per 10 minutes |
-| Import from the panel | Once per rolling 24 hours. An import that is running, finished, or was killed mid-way counts, and so does any import that uploaded something. One that failed, stood down because another sync was running, or couldn't record its run, before uploading anything doesn't count |
+| Import from the panel | Once per rolling 24 hours. An import that is running, finished (`ok` or `partial`, even with 0 uploads), or was killed mid-way counts, and so does any import that uploaded something. One that failed, stood down because another sync was running, or couldn't record its run, before uploading anything doesn't count |
 | Panel imports | Refused once uploads over the last 30 days reach 1,000 |
 | Any real sync (cron, panel, CLI) | Stops at 1,800 uploads in 30 days, under Blob's 2,000-a-month hard stop |
 
@@ -330,7 +340,8 @@ A refused run answers 429 with the wait in seconds, and the activity log records
 
 Better Auth is pinned to exactly `1.7.10`, and so is its CLI, the `auth@1.7.10` devDependency. Upgrade the two
 together, and check the disabled paths in [`lib/auth.js`](lib/auth.js) against the new version's routes. Don't
-add Better Auth's organization plugin: advisory GHSA-fmh4-wcc4-5jm3 applies only with it.
+add Better Auth's organization plugin: advisory GHSA-fmh4-wcc4-5jm3 applies only with it. GitHub's Dependabot
+alerts are meant to flag new advisories in it; turning them on is in [TODO.md](TODO.md).
 
 **One-time setup.**
 
@@ -370,7 +381,10 @@ try { console.table((await pool.query(process.argv[1])).rows); } finally { await
   these above the activity table ("Refused sign-ins in the last 24 hours"), and the table itself never lists
   them.
 - **`Database schema mismatch` in the logs** (Better Auth's `SCHEMA_MISMATCH`) means `007` is missing or wrong,
-  so run the check above. Ignore its hint to run `npx auth migrate`: the schema comes only from `sql/`.
+  so run the check above. Ignore its hint to run `npx auth migrate`: the schema comes only from `sql/`. Once
+  `007` is fixed and the check passes, redeploy (Vercel → **Deployments** → the newest Production deployment of
+  the panel's code → **⋯** → **Redeploy**), because each running instance keeps the mismatch it found until it
+  restarts. After an Instant Rollback, the new deployment doesn't go live until **Undo Rollback** promotes it.
 - **A 500 from the panel** writes one redacted line to Vercel → **Logs**, never a token. The two admin pages
   (`/admin`, `/admin/sign-in`) then also log Next's own `Error: Admin page unavailable`, whose stack trace holds
   nothing secret, and render Next's built-in 500 page.
@@ -379,9 +393,10 @@ try { console.table((await pool.query(process.argv[1])).rows); } finally { await
     on the env vars in `lib/auth.js`, which reads `Error: BETTER_AUTH_URL is not set`,
     `Error: BETTER_AUTH_URL must be https://www.kevinwong.co`,
     `Error: BETTER_AUTH_SECRET must be set to at least 32 characters`,
-    `Error: BETTER_AUTH_TRUSTED_ORIGINS must not be set` or `Error: BETTER_AUTH_SECRETS must not be set`. The
-    API routes answer `{"error":"server_error"}`. Fixing an env var takes a redeploy, because a deployment keeps
-    the env vars it was built with: correct it in Vercel, then **Deployments** → the newest Production
+    `Error: BETTER_AUTH_TRUSTED_ORIGINS must not be set`, `Error: BETTER_AUTH_SECRETS must not be set` or
+    `Error: TEST must not be set`. The API routes answer `{"error":"server_error"}`. Fixing an env var takes a
+    redeploy, because a deployment keeps the env vars it was built with: correct it in Vercel, then
+    **Deployments** → the newest Production
     deployment of the panel's code → **⋯** → **Redeploy**. After an Instant Rollback, that isn't the current
     Production deployment, and the new one doesn't go live until **Undo Rollback** promotes it (see the
     Deploy B runbook's *If something goes wrong*).
@@ -402,8 +417,10 @@ try { console.table((await pool.query(process.argv[1])).rows); } finally { await
   - `not_configured`: `SPOTIFY_CLIENT_ID` or `SPOTIFY_CLIENT_SECRET` is missing in Vercel Production.
   - `save_failed`: the database write failed. Try again.
 - **Import stays disabled after an import that failed.** Each Import claims a 24-hour slot, the `job_locks`
-  row `instagram-panel-import`, before it runs. It gives the slot back when the import failed or stood down
-  without uploading anything, because such an import doesn't count. If giving it back fails (the logs show
+  row `instagram-panel-import`, before it runs. Only an import that failed or stood down before uploading
+  anything gives the slot back, because such an import doesn't count. One that finished, `ok` or `partial`, uses
+  up the 24 hours even with 0 uploads, for example when every new post failed or the cron had already imported
+  them (D4: one import per rolling 24 hours). If giving the slot back fails (the logs show
   `[admin/instagram] limit re-read failed:` or `import slot release failed:`), or the request fails some other
   way after the claim (`[admin/instagram] request failed:`, or the function stopped before the run was
   recorded), Import stays disabled for up to 24 hours, though **Recent runs** shows no import that counts.
@@ -602,10 +619,11 @@ Check status any time with `npm run instagram:token` (no arguments). It only rea
 
 #### Run history and the upload ceiling
 
-Every run, from the cron or `npm run instagram:sync`, adds a row to `sync_runs`
+Every run, from the cron, `npm run instagram:sync` or the panel, adds a row to `sync_runs`
 ([`sql/006`](sql/006_sync_runs.sql)): what started it, whether it was a dry run, how it ended (`ok`,
-`partial` when some posts failed, `skipped`, `failed` or `reauth_required`) and its counts. Errors and the
-stored summary are redacted first. A row still `running` after 15 minutes, once the sync's lease has expired,
+`partial` when some posts failed, `skipped`, `failed` or `reauth_required`) and its counts. On a dry run,
+`imported` and `uploads` are what the run would have done. Errors and the stored summary are redacted
+first. A row still `running` after 15 minutes, once the sync's lease has expired,
 belongs to a run that was killed; the next run marks it `abandoned`, keeping the uploads it recorded.
 
 Real runs stop importing once the last 30 days of runs have uploaded 1,800 files, which leaves room under

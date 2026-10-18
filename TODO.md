@@ -143,6 +143,15 @@ Found in the 2026-09-27 codebase audit. Each needs something only I know.
 
 ## 🧹 Housekeeping
 
+### GitHub settings
+
+- [ ] **Turn on Dependabot alerts.** GitHub → the repository → **Settings** → **Code security** →
+  **Dependabot alerts** → **Enable**, and **Dependabot security updates** too if I want GitHub to open
+  the fix PRs. The admin panel's spec counts on these alerts to flag a new Better Auth advisory (its
+  Security table: "Exact version pin, no plugins, `npm run audit:prod` and Dependabot"). They are a
+  repository setting, and nothing in the repo turns them on, so check they are on even if I think
+  they are.
+
 ### Files to delete or shrink
 
 All unused or oversized, found in the audit. Everything is in git history if needed.
