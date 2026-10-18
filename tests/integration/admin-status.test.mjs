@@ -14,6 +14,9 @@ const SECRETS = { spotifyRefresh: "spotify-refresh-SECRET-1", spotifyAccess: "sp
 const status = (o = {}) => buildAdminStatus({ db: db.pool, env: {}, now: NOW, ...o });
 const between = (v, lo, hi) => assert.ok(v >= lo && v <= hi, `${v} not in [${lo}, ${hi}]`);
 const textOf = (q) => (typeof q === "string" ? q : q.text);
+// The database's clock. A held slot's locked_until comes from the database's now(), which in Docker can be a second
+// or more off the Mac's, so the tests that compare it with the status's now take that now from the database too.
+const dbNow = async () => (await db.pool.query("select now() as now")).rows[0].now;
 
 async function seedSpotify({ authorizedAt = new Date("2026-08-03T00:00:00Z"), expiresAt = new Date("2027-01-30T00:00:00Z"),
   accountId = OWNER_SPOTIFY_ACCOUNT_ID, scopes = SPOTIFY_SCOPES.join(" "), deadReason = null } = {}) {
@@ -196,13 +199,13 @@ describe("buildAdminStatus", { skip: db.skip }, () => {
     // Claims from Task 14's claimPanelSlot whose runs have not written a sync_runs row yet.
     await db.pool.query(`insert into job_locks (name, locked_until) values
       ('instagram-panel-check', now() + interval '5 minutes'), ('instagram-panel-import', now() + interval '3 hours')`);
-    const now = new Date();
+    const now = await dbNow();
     const p = (await status({ now })).instagram.panel;
     between(Date.parse(p.nextCheckAt) - now.getTime(), 295_000, 301_000);
     between(Date.parse(p.nextImportAt) - now.getTime(), 10_795_000, 10_801_000);
     assert.equal(p.importBlockedReason, "daily_limit");
     await db.pool.query(`update job_locks set locked_until = 'epoch' where name = 'instagram-panel-import'`);
-    const released = (await status({ now: new Date() })).instagram.panel;
+    const released = (await status({ now: await dbNow() })).instagram.panel;
     assert.equal(released.nextImportAt, null);
     assert.equal(released.importBlockedReason, null);
   });
@@ -386,7 +389,7 @@ describe("buildAdminStatus", { skip: db.skip }, () => {
     await seedRunAgo({ trigger: "panel", dryRun: false, ago: "23 hours", uploads: 2 });
     await db.pool.query(`insert into job_locks (name, locked_until) values
       ('instagram-panel-check', now() + interval '2 minutes'), ('instagram-panel-import', now() + interval '3 hours')`);
-    const now = new Date();
+    const now = await dbNow();
     const p = (await status({ now })).instagram.panel;
     between(Date.parse(p.nextCheckAt) - now.getTime(), 535_000, 541_000);
     between(Date.parse(p.nextImportAt) - now.getTime(), 10_795_000, 10_801_000);

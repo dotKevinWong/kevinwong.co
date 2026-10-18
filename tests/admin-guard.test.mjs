@@ -2,10 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { AUTH_ALLOWLIST, forwardAuthRequest, getOwnerSession, isAdminEnabled, isAllowedAuthRequest, isSameOrigin, requireAdmin, setNoStore } from "../lib/admin/guard.js";
 import { buildAuthOptions } from "../lib/auth.js";
-import { OWNER_SESSION, PROD_ENV, fakeAuth, fakeDb, fakeReq, fakeRes, withEnv } from "./helpers/admin-fakes.mjs";
-
-const NO_STORE = "private, no-store, max-age=0, must-revalidate";
-const OWNER = { name: "Kevin Wong", image: "https://avatars.githubusercontent.com/u/1741711?v=4" };
+import { NO_STORE, OWNER, OWNER_SESSION, PROD_ENV, fakeAuth, fakeDb, fakeReq, fakeRes, withEnv } from "./helpers/admin-fakes.mjs";
 
 // A database outage as pg reports it: a credential in the message and a `detail`, neither of which may be logged.
 const dbDownError = () => Object.assign(new Error("connect ECONNREFUSED for postgres://kevin:hunter2@db.example/neondb"), {

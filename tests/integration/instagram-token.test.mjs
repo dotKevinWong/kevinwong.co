@@ -7,7 +7,7 @@ import { stubFetch } from "../helpers/fetch-stub.mjs";
 
 const db = testDb();
 // lib/instagram.js uses getDbPool(), whose pool opens on first use (inside the tests): point it at the
-// local test database. tests/helpers/db.mjs has already refused a remote DATABASE_URL at import.
+// local test database. tests/helpers/db.mjs has already refused, at import, any DATABASE_URL but the test database.
 if (!db.skip) process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 
 const GRAPH = "https://graph.instagram.com";

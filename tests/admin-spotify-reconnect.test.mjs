@@ -9,10 +9,10 @@ import { SPOTIFY_ADMIN_REDIRECT_URI } from "../lib/spotify-oauth.js";
 import { SPOTIFY_SCOPES } from "../lib/spotify-token.js";
 import { OWNER_SPOTIFY_ACCOUNT_ID } from "../lib/admin/owner.js";
 import { OWNER_ACTOR } from "../lib/admin/audit-log.js";
-import { fakeAuth, fakeDb, fakeReq, fakeRes, withEnv } from "./helpers/admin-fakes.mjs";
+import { FILLED_SPOTIFY_ACCOUNT_ID, NO_AUTH_ENV, NO_STORE, REDACTED_LINE, fakeAuth, fakeDb, fakeReq, fakeRes, leakyError, withEnv }
+  from "./helpers/admin-fakes.mjs";
 import "./helpers/resolve-extensionless.mjs";
 
-const NO_STORE = "private, no-store, max-age=0, must-revalidate";
 const CLEAR = "__Host-kw_spotify_state=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0";
 const STATE_COOKIE_RE = /^__Host-kw_spotify_state=([A-Za-z0-9_-]{43}); HttpOnly; Secure; SameSite=Lax; Path=\/; Max-Age=600$/;
 const SPOTIFY_ENV = { VERCEL_ENV: "production", SPOTIFY_CLIENT_ID: "cid", SPOTIFY_CLIENT_SECRET: "csecret" };
@@ -47,13 +47,6 @@ function assertFailed(result, calls, code, { logged = true, details = { code }, 
   assert.deepEqual(calls.log, [{ event: "spotify_connect_failed", actor: OWNER_ACTOR, details }]);
 }
 
-const LEAKY_MESSAGE = "password authentication failed for postgresql://kw_owner:npg_hunter2@db.example.test/neondb";
-const REDACTED_LINE = "Error [28P01]: password authentication failed for postgresql://[redacted]@db.example.test/neondb";
-
-function leakyError() {
-  return Object.assign(new Error(LEAKY_MESSAGE), { code: "28P01", detail: "Key (refresh_token)=(detail-secret)" });
-}
-
 function rejectingDb() {
   const calls = [];
   return { calls, async query(sql, params) { calls.push({ sql, params }); throw leakyError(); } };
@@ -75,7 +68,7 @@ function muteConsole(t) {
 }
 
 test("OWNER_SPOTIFY_ACCOUNT_ID is filled in", () => {
-  assert.match(OWNER_SPOTIFY_ACCOUNT_ID, /^[^<>\s]+$/);
+  assert.match(OWNER_SPOTIFY_ACCOUNT_ID, FILLED_SPOTIFY_ACCOUNT_ID);
 });
 
 test("newState returns 43 base64url characters and differs each call", () => {
@@ -500,10 +493,6 @@ test("callback answers a rejection the reconnect doesn't handle with one redacte
 // injected deps, no auth configuration and no database.
 const authorizeRoute = await import("../pages/api/admin/spotify/authorize.js");
 const callbackRoute = await import("../pages/api/admin/spotify/callback.js");
-const NO_AUTH_ENV = {
-  VERCEL_ENV: undefined, NODE_ENV: undefined, DATABASE_URL: undefined,
-  BETTER_AUTH_URL: undefined, BETTER_AUTH_SECRET: undefined, GITHUB_CLIENT_ID: undefined, GITHUB_CLIENT_SECRET: undefined,
-};
 
 test("both Spotify routes turn the body parser off", () => {
   assert.deepEqual(authorizeRoute.config, { api: { bodyParser: false } });

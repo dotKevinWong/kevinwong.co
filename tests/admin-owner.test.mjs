@@ -4,6 +4,7 @@ import * as owner from "../lib/admin/owner.js";
 import {
   OWNER_GITHUB_ID, OWNER_GITHUB_LOGIN, OWNER_SPOTIFY_ACCOUNT_ID, SITE_ORIGIN, SITE_HOST,
 } from "../lib/admin/owner.js";
+import { FILLED_SPOTIFY_ACCOUNT_ID } from "./helpers/admin-fakes.mjs";
 
 test("owner constants", () => {
   assert.deepEqual(Object.keys(owner).sort(), [
@@ -17,5 +18,5 @@ test("owner constants", () => {
 
 test("OWNER_SPOTIFY_ACCOUNT_ID has been filled in", () => {
   assert.notEqual(OWNER_SPOTIFY_ACCOUNT_ID, "<from --whoami>");
-  assert.match(OWNER_SPOTIFY_ACCOUNT_ID, /^[A-Za-z0-9._-]{1,64}$/);
+  assert.match(OWNER_SPOTIFY_ACCOUNT_ID, FILLED_SPOTIFY_ACCOUNT_ID);
 });

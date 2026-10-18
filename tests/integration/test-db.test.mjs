@@ -75,10 +75,12 @@ describe("test database reset", { skip: db.skip }, () => {
 
   test("a failing file names itself and rolls back", async () => {
     const bad = sqlFile("bad.sql", "create table t_partial (x int);\nselect 1/0;");
-    await assert.rejects(
-      applySqlFiles(process.env.TEST_DATABASE_URL, [bad], quiet),
-      /bad\.sql: division by zero/
-    );
+    // Postgres's error code, not its message, which depends on the server's lc_messages and version.
+    await assert.rejects(applySqlFiles(process.env.TEST_DATABASE_URL, [bad], quiet), (error) => {
+      assert.match(error.message, /bad\.sql: /);
+      assert.equal(error.cause?.code, "22012");
+      return true;
+    });
     const { rows } = await db.pool.query("select to_regclass('public.t_partial') as t");
     assert.equal(rows[0].t, null);
   });

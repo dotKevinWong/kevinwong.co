@@ -25,7 +25,7 @@ const REFRESH = "https://graph.instagram.com/refresh_access_token";
 const JPEG = Buffer.from("ffd8ffc00011080002000203011100021101031101ffd9", "hex");
 const db = testDb();
 // syncInstagram and storeToken use getDbPool(), whose pool opens on first use: point it at the local
-// test database. tests/helpers/db.mjs has already refused a remote DATABASE_URL at import.
+// test database. tests/helpers/db.mjs has already refused, at import, any DATABASE_URL but the test database.
 if (!db.skip) process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 
 // One carousel post (the API's `item`) whose `slides` image slides download from cdn.test.
@@ -217,16 +217,16 @@ describe("syncInstagram records its runs (integration)", { skip: db.skip }, () =
     assert.equal(typeof summary.resize, "string");
     assert.equal(fetchStub.mock.callCount(), 1);
     assert.ok(errors.mock.calls.some((c) => String(c.arguments[0]).startsWith("[instagram-sync] Could not record this run")));
-    // describeError: the line names pg's error code, not just its message.
+    // describeError: the line names pg's error code (42P01, an undefined table), not just its message.
     assert.ok(errors.mock.calls.some((c) => c.arguments[0] === "[instagram-sync] Could not record this run:" &&
-      /\[42P01\]: relation "sync_runs" does not exist$/.test(c.arguments[1])));
+      /\[42P01\]: /.test(c.arguments[1])));
   });
 
   test("a real run fails closed when the 30-day count cannot be read", async (t) => {
     await hideUploadsColumn(t);
     t.mock.method(console, "error", () => {});
     const fetchStub = stubFetch(t, {});
-    await assert.rejects(syncInstagram({ trigger: "cron" }), /column "uploads" does not exist/);
+    await assert.rejects(syncInstagram({ trigger: "cron" }), { code: "42703" }); // an undefined column
     assert.equal(fetchStub.mock.callCount(), 0);
     assert.equal(await count("select count(*)::int as n from job_locks"), 0);
   });
@@ -282,7 +282,11 @@ describe("syncInstagram records its runs (integration)", { skip: db.skip }, () =
       if (calls === 1) await hideSyncRuns(t); // so the write that records this upload fails
       return fakeUpload(pathname, buffer, contentType);
     };
-    await assert.rejects(syncInstagram({ trigger: "cli", upload }), /relation "sync_runs" does not exist/);
+    await assert.rejects(syncInstagram({ trigger: "cli", upload }), (error) => {
+      assert.equal(error.name, "UploadNotRecordedError");
+      assert.ok(error.message.startsWith("Could not record an upload, so the run stopped: "), error.message);
+      return true;
+    });
     assert.equal(calls, 1); // the second slide was never uploaded
     assert.equal(await leaseHeld(), false);
   });

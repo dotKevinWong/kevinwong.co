@@ -14,22 +14,29 @@ const HELPER = new URL("./helpers/db.mjs", import.meta.url).href;
 const REMOTE =
   "postgresql://kw_owner:npg_SECRETVALUE@ep-quiet-sky-123456-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require";
 
-// The guard runs once, at import, so each case imports the helper in a fresh process.
-const importHelper = (databaseUrl) => {
+// The guard runs once, at import, so each case imports the helper in a fresh process. vars sets (or, with
+// undefined, unsets) variables for it; after the import, `then` runs as more of the child's code.
+const importHelper = (databaseUrl, { vars = {}, then = "" } = {}) => {
   const env = { ...process.env };
   delete env.DATABASE_URL;
+  delete env.REQUIRE_TEST_DB;
   if (databaseUrl !== undefined) env.DATABASE_URL = databaseUrl;
+  for (const [key, value] of Object.entries(vars)) {
+    if (value === undefined) delete env[key];
+    else env[key] = value;
+  }
   return spawnSync(
     process.execPath,
     [
       "--disable-warning=MODULE_TYPELESS_PACKAGE_JSON",
       "--input-type=module",
       "--eval",
-      `await import(${JSON.stringify(HELPER)});`,
+      `const helper = await import(${JSON.stringify(HELPER)});\n${then}`,
     ],
     { env, encoding: "utf8" }
   );
 };
+const OTHER_PORTS = "ports 5432, 5433, 5434 and 54329 belong to other projects";
 
 test("tests/helpers/db.mjs refuses to load while DATABASE_URL points at a remote database", () => {
   const r = importHelper(REMOTE);
@@ -44,11 +51,55 @@ test("tests/helpers/db.mjs refuses a local DATABASE_URL whose host parameter poi
   assert.match(r.stderr, /Refusing to run integration tests: DATABASE_URL points at a remote database/);
 });
 
-test("tests/helpers/db.mjs loads with a local DATABASE_URL or none", () => {
-  for (const databaseUrl of [undefined, "postgres://postgres:pw@127.0.0.1:55432/kw_test"]) {
+test("tests/helpers/db.mjs loads with a loopback DATABASE_URL on port 55432, or none", () => {
+  for (const databaseUrl of [undefined, "postgres://postgres:pw@127.0.0.1:55432/kw_test",
+    "postgres://postgres:pw@localhost:55432/kw_test", "postgres://postgres:pw@[::1]:55432/kw_test"]) {
     const r = importHelper(databaseUrl);
     assert.equal(r.status, 0, r.stderr);
   }
+});
+
+// The callback tests' audit writes and every lib module go through getDbPool(), which reads DATABASE_URL.
+test("tests/helpers/db.mjs refuses a loopback DATABASE_URL on any port but 55432", () => {
+  for (const [databaseUrl, port] of [
+    ["postgres://postgres:pw@127.0.0.1:5432/kw_test", 5432],
+    ["postgres://postgres:pw@localhost/kw_test", 5432],
+    ["postgres://postgres:pw@127.0.0.1:5433/kw_test", 5433],
+    ["postgres://postgres:pw@127.0.0.1:5434/kw_test", 5434],
+    ["postgres://postgres:pw@127.0.0.1:54329/kw_test", 54329],
+    ["postgres://postgres:pw@127.0.0.1:55433/kw_test", 55433],
+    ["postgres://postgres:pw@127.0.0.1:55432/kw_test?port=5432", 5432],
+  ]) {
+    const r = importHelper(databaseUrl);
+    assert.equal(r.status, 1, databaseUrl);
+    assert.ok(r.stderr.includes(
+      `Refusing to run integration tests: DATABASE_URL uses port ${port}, not the test database's 55432 (${OTHER_PORTS})`), r.stderr);
+    assert.ok(!r.stderr.includes("pw@"), "no password");
+  }
+});
+
+test("tests/helpers/db.mjs refuses a TEST_DATABASE_URL that isn't a loopback database on port 55432", () => {
+  const wrongPort = importHelper(undefined, { vars: { TEST_DATABASE_URL: "postgres://postgres:pw@127.0.0.1:5433/kw_test" } });
+  assert.equal(wrongPort.status, 1);
+  assert.ok(wrongPort.stderr.includes(
+    `Refusing to run integration tests: TEST_DATABASE_URL uses port 5433, not the test database's 55432 (${OTHER_PORTS})`), wrongPort.stderr);
+  const remote = importHelper(undefined, { vars: { TEST_DATABASE_URL: REMOTE } });
+  assert.equal(remote.status, 1);
+  assert.match(remote.stderr, /Refusing to run integration tests: TEST_DATABASE_URL points at a remote database/);
+  assert.ok(!remote.stderr.includes("npg_SECRETVALUE"));
+});
+
+// npm run test:integration sets REQUIRE_TEST_DB=1, so a missing test database fails the run instead of skipping
+// every suite. Plain npm test still skips them (the Deploy B gate's throwaway checkout relies on that).
+test("testDb() skips without TEST_DATABASE_URL, and throws instead when REQUIRE_TEST_DB=1", () => {
+  // .env.test.local is read at import, so the variable is removed after it.
+  const then = "delete process.env.TEST_DATABASE_URL; console.log(JSON.stringify(helper.testDb().skip));";
+  const skipped = importHelper(undefined, { then });
+  assert.equal(skipped.status, 0, skipped.stderr);
+  assert.equal(skipped.stdout.trim(), '"TEST_DATABASE_URL is not set"');
+  const required = importHelper(undefined, { vars: { REQUIRE_TEST_DB: "1" }, then });
+  assert.equal(required.status, 1);
+  assert.match(required.stderr, /TEST_DATABASE_URL is not set, and REQUIRE_TEST_DB=1 \(npm run test:integration\) needs the test database/);
 });
 
 test("majorFromVersionNum reads the major version", () => {

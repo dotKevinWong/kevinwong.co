@@ -1,10 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildAdminStatus, createStatusHandler } from "../lib/admin/status.js";
-import { fakeReq, fakeRes, withEnv } from "./helpers/admin-fakes.mjs";
+import { NO_AUTH_ENV, NO_STORE, OWNER, REDACTED_LINE, fakeReq, fakeRes, leakyError, withEnv } from "./helpers/admin-fakes.mjs";
 import "./helpers/resolve-extensionless.mjs";
-
-const OWNER = { userId: "user-1", name: "Kevin Wong", image: null, expiresAt: new Date() };
 
 test("buildAdminStatus rejects when the database query fails", async () => {
   const down = { query: async () => { throw new Error("connect ECONNREFUSED 10.0.0.1:5432"); } };
@@ -74,10 +72,6 @@ test("404 and 500 server_error from requireAdmin pass through and status is not 
 
 // Controller notes (Task 15), 3: a failure is logged as one describeError line, never the Error object, its stack
 // or pg's err.detail, and a rejection outside the status read is answered the same way while nothing has been sent.
-const LEAKY_MESSAGE = "password authentication failed for postgresql://kw_owner:npg_hunter2@db.example.test/neondb";
-const REDACTED_LINE = "Error [28P01]: password authentication failed for postgresql://[redacted]@db.example.test/neondb";
-const leakyError = () =>
-  Object.assign(new Error(LEAKY_MESSAGE), { code: "28P01", detail: "Key (refresh_token)=(detail-secret)" });
 
 test("a failed status read is one describeError line and a 500 status_failed", async (t) => {
   const consoleError = t.mock.method(console, "error", () => {});
@@ -113,11 +107,6 @@ test("a rejection after the response has gone out is logged and nothing more is 
 // Controller notes (Task 15), 1: the real pages/api/admin/status.js, loaded through
 // tests/helpers/resolve-extensionless.mjs, with no injected deps, no auth configuration and no database.
 const route = await import("../pages/api/admin/status.js");
-const NO_STORE = "private, no-store, max-age=0, must-revalidate";
-const NO_AUTH_ENV = {
-  VERCEL_ENV: undefined, NODE_ENV: undefined, DATABASE_URL: undefined,
-  BETTER_AUTH_URL: undefined, BETTER_AUTH_SECRET: undefined, GITHUB_CLIENT_ID: undefined, GITHUB_CLIENT_SECRET: undefined,
-};
 
 test("the status route turns the body parser off", () => {
   assert.deepEqual(route.config, { api: { bodyParser: false } });

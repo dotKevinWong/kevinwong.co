@@ -1,10 +1,11 @@
 import { after, before, beforeEach, describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import { getDbPool } from "../../lib/db.js";
 import { storeToken } from "../../lib/instagram.js";
 import { testDb } from "../helpers/db.mjs";
 import { stubFetch } from "../helpers/fetch-stub.mjs";
+import { fakeRes } from "../helpers/admin-fakes.mjs";
+import "../helpers/resolve-extensionless.mjs";
 
 process.env.CRON_SECRET = "cron-secret-for-tests";
 process.env.BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_fake_for_tests";
@@ -14,34 +15,13 @@ delete process.env.BLOB_STORE_ID;
 
 const db = testDb();
 // The route's sync uses getDbPool(), whose pool opens on first use: point it at the local test database.
-// tests/helpers/db.mjs has already refused a remote DATABASE_URL at import.
+// tests/helpers/db.mjs has already refused, at import, any DATABASE_URL but the test database.
 if (!db.skip) process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 
-// pages/api/* import lib modules without an extension, which Next resolves and plain Node does not. Retry a
-// relative specifier that was not found with ".js" added, so the route loads here as it is.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    try {
-      return nextResolve(specifier, context);
-    } catch (error) {
-      if (error?.code !== "ERR_MODULE_NOT_FOUND" || !/^\.\.?\//.test(specifier)) throw error;
-      return nextResolve(`${specifier}.js`, context);
-    }
-  },
-});
+// The real route, loaded through tests/helpers/resolve-extensionless.mjs.
 const { default: handler } = await import("../../pages/api/cron/sync-instagram.js");
 
 const MEDIA = "https://graph.instagram.com/v25.0/me/media";
-
-function fakeRes() {
-  return {
-    statusCode: null,
-    body: null,
-    setHeader() {},
-    status(code) { this.statusCode = code; return this; },
-    json(body) { this.body = body; return this; },
-  };
-}
 
 describe("the Instagram sync cron route (integration)", { skip: db.skip }, () => {
   before(() => db.resetSchema());

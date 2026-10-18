@@ -2,24 +2,13 @@ import { describe, test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { createServer, request } from "node:http";
-import { registerHooks } from "node:module";
 import { testDb } from "../helpers/db.mjs";
 import { withEnv } from "../helpers/admin-fakes.mjs";
 import { getAuth } from "../../lib/auth.js";
 import { getDbPool } from "../../lib/db.js";
+import "../helpers/resolve-extensionless.mjs";
 
-// pages/api/* import lib modules without an extension, which Next resolves and plain Node does not. Retry a
-// relative specifier that was not found with ".js" added (as in cron-sync-instagram.test.mjs).
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    try {
-      return nextResolve(specifier, context);
-    } catch (error) {
-      if (error?.code !== "ERR_MODULE_NOT_FOUND" || !/^\.\.?\//.test(specifier)) throw error;
-      return nextResolve(`${specifier}.js`, context);
-    }
-  },
-});
+// The real route, loaded through tests/helpers/resolve-extensionless.mjs.
 const route = await import("../../pages/api/auth/[...all].js");
 
 const ORIGIN = "https://www.kevinwong.co";

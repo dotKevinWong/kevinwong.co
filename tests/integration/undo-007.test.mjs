@@ -1,5 +1,6 @@
 import { after, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { testDb } from "../helpers/db.mjs";
@@ -146,6 +147,20 @@ async function seed() {
   );
 }
 
+// Read as text, so it runs without the test database. Each table gets its own drop: the view tests above can't tell
+// one combined `drop table a, b, c, d` from four, because Postgres refuses either with the same code, and the README
+// and the runbook quote the per-table refusal. auth_user goes last, after the two tables that reference it.
+test("undo-007 drops each auth table in its own statement, auth_user last", async () => {
+  const sql = await readFile(UNDO, "utf8");
+  const drops = sql.split("\n").filter((line) => /^\s*drop\b/i.test(line)).map((line) => line.trim());
+  assert.deepEqual(drops, [
+    "drop table if exists auth_session;",
+    "drop table if exists auth_account;",
+    "drop table if exists auth_verification;",
+    "drop table if exists auth_user;",
+  ]);
+});
+
 describe("undoing 007 (sql/undo/undo-007.sql)", { skip: db.skip }, () => {
   let before007;
 
@@ -216,8 +231,9 @@ describe("undoing 007 (sql/undo/undo-007.sql)", { skip: db.skip }, () => {
         await holder.query("begin");
         await holder.query(`select count(*) from ${locked}`);
         release = setTimeout(() => holder.query("rollback").catch(() => {}), RELEASE_AFTER_MS);
+        // Postgres's error code, not its message, which depends on the server's lc_messages and version.
         await assert.rejects(apply(UNDO), (error) => {
-          assert.equal(error.message, "sql/undo/undo-007.sql: canceling statement due to lock timeout");
+          assert.ok(error.message.startsWith("sql/undo/undo-007.sql: "), error.message);
           assert.equal(error.cause?.code, "55P03");
           return true;
         });
@@ -246,7 +262,7 @@ describe("undoing 007 (sql/undo/undo-007.sql)", { skip: db.skip }, () => {
       const kept = await keptRows();
 
       await assert.rejects(apply(UNDO), (error) => {
-        assert.equal(error.message, `sql/undo/undo-007.sql: cannot drop table ${table} because other objects depend on it`);
+        assert.ok(error.message.startsWith("sql/undo/undo-007.sql: "), error.message);
         assert.equal(error.cause?.code, "2BP01");
         return true;
       });

@@ -1,34 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
-import { fakeReq, fakeRes, withEnv } from "./helpers/admin-fakes.mjs";
+import { NO_AUTH_ENV, NO_STORE, fakeReq, fakeRes, withEnv } from "./helpers/admin-fakes.mjs";
+import "./helpers/resolve-extensionless.mjs";
 
-// The real pages/api/auth/[...all].js, with no database. pages/api/* import lib modules without an extension,
-// which Next resolves and plain Node does not, so (as in tests/integration/cron-sync-instagram.test.mjs) a
-// relative specifier that was not found is retried with ".js".
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    try {
-      return nextResolve(specifier, context);
-    } catch (error) {
-      if (error?.code !== "ERR_MODULE_NOT_FOUND" || !/^\.\.?\//.test(specifier)) throw error;
-      return nextResolve(`${specifier}.js`, context);
-    }
-  },
-});
+// The real pages/api/auth/[...all].js, with no database, loaded through tests/helpers/resolve-extensionless.mjs.
 const route = await import("../pages/api/auth/[...all].js");
 
-const NO_STORE = "private, no-store, max-age=0, must-revalidate";
 const ALLOWLISTED = [
   ["POST", "/api/auth/sign-in/social"],
   ["GET", "/api/auth/callback/github?code=abc&state=xyz"],
   ["POST", "/api/auth/sign-out"],
 ];
-// No auth configuration and no database: if the route ever reached getAuth() here, it would throw and log.
-const NO_AUTH_ENV = {
-  VERCEL_ENV: undefined, NODE_ENV: undefined, DATABASE_URL: undefined,
-  BETTER_AUTH_URL: undefined, BETTER_AUTH_SECRET: undefined, GITHUB_CLIENT_ID: undefined, GITHUB_CLIENT_SECRET: undefined,
-};
 
 async function call(options) {
   const res = fakeRes();

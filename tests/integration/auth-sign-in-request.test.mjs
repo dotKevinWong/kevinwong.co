@@ -1,14 +1,19 @@
-import { describe, test, before, after, mock } from "node:test";
+import { describe, test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { betterAuth } from "better-auth";
 import { testDb } from "../helpers/db.mjs";
+import { INTRUDER_PROFILE, OWNER_PROFILE, stubGitHub } from "../helpers/github-stub.mjs";
 import { buildAuthOptions } from "../../lib/auth.js";
+import { getDbPool } from "../../lib/db.js";
 
 // The real Better Auth handler, built from lib/auth.js's options against the test database (its
 // router checks the schema before every request). Nothing here reaches GitHub: /sign-in/social only
 // builds the authorize URL, and the callback tests stub GitHub's three endpoints.
 const db = testDb();
+// The sign-in hooks' audit writes go through getDbPool(): point it at the test database, which tests/helpers/db.mjs
+// has already checked is a loopback database on port 55432.
+if (!db.skip) process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 const ORIGIN = "https://www.kevinwong.co";
 const ENV = {
   BETTER_AUTH_URL: ORIGIN,
@@ -35,19 +40,14 @@ const REFUSED = [
   ["a JSON null body", null],
 ];
 
-const OWNER_PROFILE = { id: 1741711, login: "dotKevinWong", name: "Kevin Wong", email: null, avatar_url: null };
-const INTRUDER_PROFILE = { id: 999, login: "intruder", name: null, email: null, avatar_url: null };
-
-function stubGitHub(profile) {
-  return mock.method(globalThis, "fetch", async (input) => {
-    const url = typeof input === "string" ? input : input.url ?? String(input);
-    if (url.startsWith("https://github.com/login/oauth/access_token")) {
-      return Response.json({ access_token: "gho_test", token_type: "bearer", scope: "" });
-    }
-    if (url === "https://api.github.com/user") return Response.json(profile);
-    if (url === "https://api.github.com/user/emails") return Response.json({ message: "Resource not accessible" }, { status: 403 });
-    throw new Error(`Unexpected fetch: ${url}`);
-  });
+// Waits for the audit row a callback writes in the background, so no write outlasts the test that started it.
+async function auditRowWritten(event) {
+  for (let i = 0; i < 40; i += 1) {
+    const { rows } = await db.pool.query("select count(*)::int as n from admin_audit_log where event = $1", [event]);
+    if (rows[0].n > 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.fail(`no ${event} row was written`);
 }
 
 // Every console.error argument must be a string: an Error object would print its stack and pg's err.detail.
@@ -63,7 +63,7 @@ describe("the Better Auth handler's request checks", { skip: db.skip }, () => {
     await db.resetSchema();
     auth = betterAuth(buildAuthOptions({ env: ENV, db: db.pool }));
   });
-  after(() => db.close());
+  after(async () => { await getDbPool().end(); await db.close(); });
 
   const signIn = (body) => auth.handler(new Request(`${ORIGIN}/api/auth/sign-in/social`, {
     method: "POST",
@@ -99,13 +99,16 @@ describe("the Better Auth handler's request checks", { skip: db.skip }, () => {
     });
   }
 
-  test("an off-site callbackURL is refused with 403", async (t) => {
-    const consoleError = t.mock.method(console, "error", () => {});
-    const res = await signIn({ provider: "github", callbackURL: "https://evil.example/x" });
-    assert.equal(res.status, 403);
-    assert.ok(!(await res.text()).includes("github.com"));
-    assertOnlyStrings(consoleError);
-  });
+  for (const key of ["callbackURL", "errorCallbackURL", "newUserCallbackURL"]) {
+    test(`an off-site ${key} is refused with 403`, async (t) => {
+      const consoleError = t.mock.method(console, "error", () => {});
+      const res = await signIn({ provider: "github", callbackURL: "/admin", [key]: "https://evil.example/x" });
+      assert.equal(res.status, 403);
+      assert.ok(!(await res.text()).includes("github.com"));
+      assert.ok(!res.headers.getSetCookie().some((c) => c.includes("oauth_state")), "no state cookie");
+      assertOnlyStrings(consoleError);
+    });
+  }
 
   async function callback(profile, t) {
     const start = await signIn({ provider: "github", callbackURL: "/admin" });
@@ -113,7 +116,6 @@ describe("the Better Auth handler's request checks", { skip: db.skip }, () => {
     const state = new URL((await start.json()).url).searchParams.get("state");
     const cookie = start.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
     const fetchMock = stubGitHub(profile);
-    // The audit-log writes use getDbPool(), and DATABASE_URL is unset here, so they log one string each.
     const consoleError = t.mock.method(console, "error", () => {});
     try {
       const res = await auth.handler(new Request(
@@ -134,6 +136,7 @@ describe("the Better Auth handler's request checks", { skip: db.skip }, () => {
     assert.equal(location.pathname, "/admin/sign-in");
     assert.equal(location.searchParams.get("error"), "not_owner");
     assert.ok(!res.headers.getSetCookie().some((c) => c.startsWith("__Secure-better-auth.session_token=")));
+    await auditRowWritten("sign_in_rejected");
   });
 
   test("the owner's callback still redirects to /admin with a session cookie", async (t) => {
@@ -141,6 +144,7 @@ describe("the Better Auth handler's request checks", { skip: db.skip }, () => {
     assert.equal(res.status, 302);
     assert.equal(res.headers.get("location"), "/admin");
     assert.ok(res.headers.getSetCookie().some((c) => c.startsWith("__Secure-better-auth.session_token=")));
+    await auditRowWritten("sign_in");
   });
 
   test("a body Better Auth cannot parse rejects and prints no Error object", async (t) => {

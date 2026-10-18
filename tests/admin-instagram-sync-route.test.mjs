@@ -4,10 +4,9 @@ import { Readable } from "node:stream";
 import { createInstagramSyncHandler, readJsonBody } from "../lib/admin/instagram-sync-route.js";
 import { OWNER_ACTOR } from "../lib/admin/audit-log.js";
 import { InstagramReauthRequiredError } from "../lib/instagram.js";
-import { fakeReq, fakeRes, withEnv } from "./helpers/admin-fakes.mjs";
+import { NO_AUTH_ENV, NO_STORE, OWNER, REDACTED_LINE, fakeReq, fakeRes, leakyError, withEnv } from "./helpers/admin-fakes.mjs";
 import "./helpers/resolve-extensionless.mjs";
 
-const OWNER = { userId: "user-1", name: "Kevin Wong", image: null, expiresAt: new Date("2026-10-17T12:00:00Z") };
 const PANEL_OPTIONS = { trigger: "panel", maxPosts: 50, maxUploads: 25, timeBudgetMs: 60_000 };
 
 const summary = (o = {}) => ({ dryRun: true, startDate: "2022-01-01T00:00:00.000Z", fetched: 0, alreadyPresent: 0,
@@ -251,10 +250,6 @@ test("a failed audit write does not change the response", async (t) => {
 
 // Controller notes (Task 14): a rejection the handler has no answer for is one describeError line and a 500,
 // never the Error object, its stack or pg's err.detail.
-const LEAKY_MESSAGE = "password authentication failed for postgresql://kw_owner:npg_hunter2@db.example.test/neondb";
-const REDACTED_LINE = "Error [28P01]: password authentication failed for postgresql://[redacted]@db.example.test/neondb";
-const leakyError = () =>
-  Object.assign(new Error(LEAKY_MESSAGE), { code: "28P01", detail: "Key (refresh_token)=(detail-secret)" });
 
 // Every dependency answers normally except `name`, which rejects with leakyError() a macrotask later.
 // checkPanelRunAllowed records "check" in calls.order when it settles.
@@ -301,11 +296,6 @@ test("a rejection after the response has gone out is logged and nothing more is 
 // The real pages/api/admin/instagram/sync.js, loaded through tests/helpers/resolve-extensionless.mjs, with no
 // injected deps, no auth configuration and no database.
 const route = await import("../pages/api/admin/instagram/sync.js");
-const NO_STORE = "private, no-store, max-age=0, must-revalidate";
-const NO_AUTH_ENV = {
-  VERCEL_ENV: undefined, NODE_ENV: undefined, DATABASE_URL: undefined,
-  BETTER_AUTH_URL: undefined, BETTER_AUTH_SECRET: undefined, GITHUB_CLIENT_ID: undefined, GITHUB_CLIENT_SECRET: undefined,
-};
 
 test("the sync route turns the body parser off and sets the 300 s ceiling", () => {
   assert.deepEqual(route.config, { maxDuration: 300, api: { bodyParser: false } });

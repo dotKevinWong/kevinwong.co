@@ -81,10 +81,8 @@ describe("undoing 005 and 006 (sql/undo)", { skip: db.skip }, () => {
     await seed({ spotify: true });
     const migrated = await schema();
 
-    await assert.rejects(apply(UNDO), {
-      code: "23502",
-      message: /^column "access_token" of relation "integration_tokens" contains null values$/,
-    });
+    // Postgres's error code and fields, not its message, which depends on the server's lc_messages and version.
+    await assert.rejects(apply(UNDO), { code: "23502", table: "integration_tokens", column: "access_token" });
 
     assert.deepEqual(await tables(), { sync_runs: "sync_runs", admin_audit_log: "admin_audit_log" });
     const unchanged = await schema();
