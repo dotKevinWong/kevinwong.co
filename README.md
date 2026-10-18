@@ -83,15 +83,39 @@ To apply one:
 1. **Back up production first.** Local development uses the production database too, so there is no other
    copy. Either make a Neon branch (Neon Console → the project → **Branches** → **New branch**, name it
    `before-<file number>`, parent: the production branch, data up to now → **Create**), or take a dump from the
-   project root. Docker's `postgres:18` image can dump any server up to 18. The direct (non-pooler) URL is
-   worked out from `.env` and handed to Docker by name, so it is never typed, and it stays out of your shell
-   history and your Mac's process list. The dump holds the live Instagram token, so `umask 077` makes it
-   readable by you alone; the parentheses keep that umask from outlasting the command:
+   project root. Docker's `postgres:18` image can dump any server up to 18. Node splits `.env`'s
+   `DATABASE_URL` into the `PG*` variables that `pg_dump` reads, switched to the direct (non-pooler) host, and
+   Docker passes each to the container by name. So the URL and password are never typed and never appear on a
+   command line, on your Mac or in the container. The postgres image has no CA bundle, so macOS's is mounted
+   for `verify-full`. The dump holds the live tokens, so `umask 077` and the file's own mode make it readable
+   by you alone, and the parentheses keep that umask from outlasting the command:
    ````sh
-   ( umask 077 && mkdir -p ~/Backups &&
-     PGURL="$(node --env-file=.env -p 'const u = new URL(process.env.DATABASE_URL); u.hostname = u.hostname.replace(/^([^.]+)-pooler\./, "$1."); u.href')" \
-       docker run --rm -e PGURL postgres:18 sh -c 'pg_dump --format=custom --no-owner "$PGURL"' > ~/Backups/kevinwong-before-005.dump )
+   ( umask 077 && mkdir -p ~/Backups && node --env-file=.env --input-type=module -e '
+   import { spawnSync } from "node:child_process";
+   import fs from "node:fs";
+   const file = process.argv[1];
+   let pgEnv;
+   try {
+     const u = new URL(process.env.DATABASE_URL);
+     pgEnv = { PGHOST: u.hostname.replace(/^([^.]+)-pooler\./, "$1."), PGPORT: u.port || "5432", PGUSER: decodeURIComponent(u.username), PGPASSWORD: decodeURIComponent(u.password), PGDATABASE: decodeURIComponent(u.pathname.slice(1)) };
+   } catch { console.error("DATABASE_URL in .env is missing or not a valid URL."); process.exit(1); }
+   const env = { ...process.env, ...pgEnv, PGSSLMODE: "verify-full", PGSSLROOTCERT: "/etc/ssl/certs/host-ca.pem" };
+   delete env.DATABASE_URL;
+   let out;
+   try { out = fs.openSync(file, "wx", 0o600); } catch (e) { console.error(e.code === "EEXIST" ? `${file} already exists: rename it, then run this block again.` : `Could not create ${file} (${e.code}).`); process.exit(1); }
+   const r = spawnSync("docker", ["run", "--rm", "-v", "/etc/ssl/cert.pem:/etc/ssl/certs/host-ca.pem:ro", "-e", "PGHOST", "-e", "PGPORT", "-e", "PGUSER", "-e", "PGPASSWORD", "-e", "PGDATABASE", "-e", "PGSSLMODE", "-e", "PGSSLROOTCERT", "postgres:18", "pg_dump", "--format=custom", "--no-owner"], { env, stdio: ["ignore", out, "inherit"] });
+   if (r.error) console.error(`Could not run docker (${r.error.code}).`);
+   process.exit(r.status ?? 1);' ~/Backups/kevinwong-before-005.dump ); echo "exit=$?"
    ````
+   Expected: `exit=0` and nothing else. If it says the file already exists, a dump with that name is in
+   `~/Backups` and was left as it was: rename the old one and run the block again. Then count what it holds:
+   ````sh
+   docker run --rm -i postgres:18 pg_restore --list < ~/Backups/kevinwong-before-005.dump | grep -c "TABLE DATA"
+   ````
+   It prints one line per table, so 4 or more (`integration_tokens`, `job_locks`, `instagram_posts` and
+   `instagram_media`, plus `sync_runs` and `admin_audit_log` once `006` is on). **If the dump block printed
+   an error or `exit=1`, or the count is lower, the dump failed: don't apply anything.** A failed dump leaves
+   an empty or partial file behind, so delete it before trying again. Or make the Neon branch instead.
 2. Rehearse on the local test database (see *Local test database* below), which loads production's schema
    and then every migration:
    ````sh
