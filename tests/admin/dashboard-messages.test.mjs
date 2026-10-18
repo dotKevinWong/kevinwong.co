@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { activityLabel, checkResultMessage, detailsSummary, flashFromQuery, importConfirmText, importResultMessage,
-  panelAvailability, runStatusBadge, spotifyBadge, spotifyFlashMessage, syncErrorMessage } from "../../lib/admin/messages.js";
+import { INSTAGRAM_TOKEN_REMEDY, activityLabel, checkNotice, checkResultMessage, detailsSummary, flashFromQuery,
+  importConfirmText, importNotice, importResultMessage, panelAvailability, runStatusBadge, spotifyBadge, spotifyFlashMessage,
+  syncErrorMessage } from "../../lib/admin/messages.js";
 
 const limits = { panelCeiling: 1000, cronCeiling: 1800, monthlyLimit: 2000, storageLimitBytes: 1_000_000_000 };
 const post = (shortcode, mediaCount) => ({ shortcode, postedAt: "2026-10-15T18:00:00.000Z", mediaCount });
@@ -17,7 +18,8 @@ test("flashFromQuery reads only the two reconnect results", () => {
 
 test("spotifyFlashMessage explains each reconnect result", () => {
   assert.deepEqual(spotifyFlashMessage({ spotify: "connected", spotifyError: null }),
-    { status: "success", title: "Spotify reconnected", description: "The new token takes effect everywhere within a minute." });
+    { status: "success", title: "Spotify reconnected",
+      description: "The new token is saved. This server uses it now, and every other one within an hour, or within a minute if the old token had stopped working." });
   const cases = {
     denied: "Spotify approval was cancelled. Nothing changed.",
     state_mismatch: "The reconnect expired or started in another tab. Nothing changed. Press Reconnect again.",
@@ -59,24 +61,28 @@ test("syncErrorMessage turns refusals into a reason and a retry time", () => {
   assert.equal(syncErrorMessage(failed(429, { error: "upload_ceiling" })),
     "Uploads in the last 30 days reached the panel's limit of 1,000.");
   assert.equal(syncErrorMessage(failed(503, { error: "instagram_reauth_required" })),
-    "Instagram rejected the token, so nothing ran. Issue a new token as the README's Instagram section describes.");
+    "Instagram rejected the token, so nothing ran. Generate a new token and seed it with npm run instagram:token, as the README's Instagram sync section describes.");
   assert.equal(syncErrorMessage(failed(403, { error: "bad_origin" })),
     "The server refused this page's origin. Reload the page and try again.");
   assert.equal(syncErrorMessage(failed(0, null)), "Couldn't reach the server. Check the connection and try again.");
-  assert.equal(syncErrorMessage(failed(500, null)), "The run failed (HTTP 500). The runs table has the details.");
+  assert.equal(syncErrorMessage(failed(500, null)), "The request failed (HTTP 500). Try again; Vercel's logs have the details.");
 });
 
-// Controller note 3: the sync route can also answer 500 { error: "server_error" } (requireAdmin's owner-check
-// failure), and a proxy or platform can answer any other 5xx. All of them get the generic message, and a body the
-// panel doesn't know is never echoed.
-test("syncErrorMessage gives the generic message for server_error, sync_failed and any unknown 5xx", () => {
-  const generic = (status) => `The run failed (HTTP ${status}). The runs table has the details.`;
-  assert.equal(syncErrorMessage(failed(500, { error: "server_error" })), generic(500));
-  assert.equal(syncErrorMessage(failed(500, { error: "sync_failed" })), generic(500));
-  assert.equal(syncErrorMessage(failed(502, null)), generic(502));
-  assert.equal(syncErrorMessage(failed(504, { error: "gateway_timeout" })), generic(504));
-  assert.equal(syncErrorMessage(failed(500, { error: "<b>boom</b>", detail: "secret" })), generic(500));
-  assert.equal(syncErrorMessage(failed(429, { error: "something_new", retryAfterSeconds: 60 })), generic(429));
+// Only 500 sync_failed comes from a run that wrote a sync_runs row. The sync route's other answers (400 bad_request,
+// 405, 500 server_error when the owner check, the limits read or the slot claim failed) and a proxy's 5xx wrote
+// none, so they point at Vercel's logs instead. A body the panel doesn't know is never echoed.
+test("syncErrorMessage points at the runs table only for sync_failed", () => {
+  assert.equal(syncErrorMessage(failed(500, { error: "sync_failed" })), "The run failed (HTTP 500). The runs table has the details.");
+  const request = (status) => `The request failed (HTTP ${status}). Try again; Vercel's logs have the details.`;
+  assert.equal(syncErrorMessage(failed(500, { error: "server_error" })), request(500));
+  assert.equal(syncErrorMessage(failed(400, { error: "bad_request" })), request(400));
+  assert.equal(syncErrorMessage(failed(404, { error: "not_found" })), request(404));
+  assert.equal(syncErrorMessage(failed(405, { error: "method_not_allowed" })), request(405));
+  assert.equal(syncErrorMessage(failed(502, null)), request(502));
+  assert.equal(syncErrorMessage(failed(504, { error: "gateway_timeout" })), request(504));
+  assert.equal(syncErrorMessage(failed(502, { error: "sync_failed" })), request(502));
+  assert.equal(syncErrorMessage(failed(500, { error: "<b>boom</b>", detail: "secret" })), request(500));
+  assert.equal(syncErrorMessage(failed(429, { error: "something_new", retryAfterSeconds: 60 })), request(429));
 });
 
 test("checkResultMessage and importResultMessage summarise a run", () => {
@@ -89,7 +95,54 @@ test("checkResultMessage and importResultMessage summarise a run", () => {
   assert.equal(importResultMessage(sync({ status: "partial", posts: [post("A1", 3)], uploads: 3, errorCount: 2 })),
     "Imported 1 post (3 file uploads). 2 errors; see the runs table.");
   assert.equal(importResultMessage(sync({ status: "skipped" })),
-    "Nothing was imported: another sync held the lease, or the 30-day upload ceiling was reached. The runs table has the details.");
+    "Nothing was imported: another sync held the lease, the 30-day upload ceiling was reached, or the run couldn't be recorded. The runs table has the details, or Vercel's logs if the run wasn't recorded.");
+});
+
+test("an import whose every new post failed says so, never \"No new posts\"", () => {
+  assert.equal(importResultMessage(sync({ status: "partial", errorCount: 3 })),
+    "Nothing was imported: 3 posts failed. The runs table has the errors.");
+  assert.equal(importResultMessage(sync({ status: "partial", errorCount: 1, deferred: 2 })),
+    "Nothing was imported: 1 post failed. The runs table has the errors. 2 more posts wait for a later run.");
+});
+
+test("importNotice: success for an ok import, error when every post failed, warning otherwise", () => {
+  assert.deepEqual(importNotice(sync({ posts: [post("A1", 3)], uploads: 3 })), { status: "success", text: "Imported 1 post (3 file uploads)." });
+  assert.deepEqual(importNotice(sync({})), { status: "success", text: "No new posts. Nothing was imported." });
+  assert.equal(importNotice(sync({ status: "partial", errorCount: 3 })).status, "error");
+  assert.equal(importNotice(sync({ status: "partial", posts: [post("A1", 3)], uploads: 3, errorCount: 2 })).status, "warning");
+  assert.equal(importNotice(sync({ status: "skipped" })).status, "warning");
+});
+
+// The dry run's store and resizer checks are "ok …" (or, with nothing stored yet, "configured, nothing stored yet
+// to check against") when they pass, and an error's "name: message" when they don't.
+test("checkNotice: a Check whose Blob or sharp check failed is an error that blocks Import", () => {
+  const found = { posts: [post("A1", 3)], uploads: 3 };
+  const healthy = [
+    { blob: "ok", resize: "ok (sharp 0.35.4, libvips 8.17.2)" },
+    { blob: "configured, nothing stored yet to check against", resize: "ok (sharp 0.35.4, libvips 8.17.2)" },
+  ];
+  for (const checks of healthy) {
+    assert.deepEqual(checkNotice(sync({ ...found, ...checks })),
+      { status: "info", text: "Found 1 new post with 3 files to upload.", importAllowed: true }, checks.blob);
+  }
+  assert.deepEqual(checkNotice(sync({ ...found, blob: "BlobAccessError: Access denied", resize: "ok (sharp 0.35.4, libvips 8.17.2)" })), {
+    status: "error",
+    text: "Blob failed its check, so an import would fail. See the Blob line below. Found 1 new post with 3 files to upload.",
+    importAllowed: false,
+  });
+  assert.deepEqual(checkNotice(sync({ ...found, blob: "ok", resize: "Error: Could not load the \"sharp\" module" })), {
+    status: "error",
+    text: "Resizing failed its check, so an import would fail. See the Resize line below. Found 1 new post with 3 files to upload.",
+    importAllowed: false,
+  });
+  assert.equal(checkNotice(sync({ ...found, blob: "not configured (no BLOB_READ_WRITE_TOKEN or BLOB_STORE_ID)", resize: "Error: x" })).text,
+    "Blob and resizing failed their checks, so an import would fail. See the Blob and Resize lines below. Found 1 new post with 3 files to upload.");
+});
+
+test("both Instagram token remedies use the same wording", () => {
+  assert.equal(INSTAGRAM_TOKEN_REMEDY,
+    "Generate a new token and seed it with npm run instagram:token, as the README's Instagram sync section describes.");
+  assert.ok(syncErrorMessage(failed(503, { error: "instagram_reauth_required" })).endsWith(INSTAGRAM_TOKEN_REMEDY));
 });
 
 test("importConfirmText states the post and upload counts", () => {
@@ -137,7 +190,7 @@ test("lookups ignore inherited property names", () => {
     assert.deepEqual(runStatusBadge(key), { label: key, colorPalette: "gray" });
     assert.equal(activityLabel(key), key);
     assert.equal(syncErrorMessage(failed(429, { error: key, retryAfterSeconds: 60 })),
-      "The run failed (HTTP 429). The runs table has the details.");
+      "The request failed (HTTP 429). Try again; Vercel's logs have the details.");
   }
 });
 

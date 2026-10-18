@@ -4,6 +4,7 @@ import useSWR from "swr";
 import { Alert, Avatar, Box, Button, CloseButton, Flex, Heading, HStack, Spinner, Text } from "@chakra-ui/react";
 import { FiLogOut } from "react-icons/fi";
 import fetcher from "../../lib/fetcher";
+import { isSignedOutError, statusBanner } from "../../lib/admin/client";
 import { formatTimestamp } from "../../lib/admin/format";
 import { spotifyFlashMessage } from "../../lib/admin/messages";
 import { signOut } from "./api";
@@ -23,8 +24,9 @@ export const AdminPage = ({ owner, initialStatus, flash }: AdminPageProps) => {
         refreshInterval: 30_000,
         // A status that rendered on the server isn't fetched again at once; a failed one is.
         revalidateOnMount: initialStatus === null,
-        onError: (err) => { if (err.status === 401) goToSignIn(); },
+        onError: (err) => { if (isSignedOutError(err)) goToSignIn(); },
     });
+    const banner = statusBanner({ hasData: data !== undefined, error });
 
     const [signingOut, setSigningOut] = useState(false);
     const [signOutFailed, setSignOutFailed] = useState(false);
@@ -67,10 +69,10 @@ export const AdminPage = ({ owner, initialStatus, flash }: AdminPageProps) => {
                     </Button>
                 </HStack>
             </Flex>
-            {signOutFailed && <Text color="red.500" mb="4">Sign-out failed. Try again.</Text>}
+            {signOutFailed && <Text role="alert" color="red.500" mb="4">Sign-out failed. Try again.</Text>}
 
             {flashMessage && !flashDismissed && (
-                <Alert.Root status={flashMessage.status} mb="4">
+                <Alert.Root status={flashMessage.status} role={flashMessage.status === "error" ? "alert" : "status"} mb="4">
                     <Alert.Indicator />
                     <Alert.Content>
                         <Alert.Title>{flashMessage.title}</Alert.Title>
@@ -80,8 +82,8 @@ export const AdminPage = ({ owner, initialStatus, flash }: AdminPageProps) => {
                 </Alert.Root>
             )}
 
-            {!data && error && (
-                <Alert.Root status="error" mb="4">
+            {banner === "load_failed" && (
+                <Alert.Root status="error" role="alert" mb="4">
                     <Alert.Indicator />
                     <Alert.Content>
                         <Alert.Title>Couldn&apos;t load the status</Alert.Title>
@@ -90,11 +92,11 @@ export const AdminPage = ({ owner, initialStatus, flash }: AdminPageProps) => {
                     <Button size="sm" onClick={() => void mutate()}>Try again</Button>
                 </Alert.Root>
             )}
-            {!data && !error && (
-                <Flex align="center" gap={3}><Spinner size="sm" /><Text>Loading status...</Text></Flex>
+            {banner === "loading" && (
+                <Flex align="center" gap={3} role="status"><Spinner size="sm" /><Text>Loading status…</Text></Flex>
             )}
-            {data && error && error.status !== 401 && (
-                <Alert.Root status="warning" mb="4">
+            {banner === "refresh_failed" && data && (
+                <Alert.Root status="warning" role="status" mb="4">
                     <Alert.Indicator />
                     <Alert.Content>
                         <Alert.Title>Couldn&apos;t refresh the status</Alert.Title>

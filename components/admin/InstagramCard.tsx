@@ -1,9 +1,9 @@
-import { useState } from "react";
-import { Alert, Badge, Button, CloseButton, Dialog, Flex, Heading, Link, List, Portal, Progress, Text, VStack }
+import { useEffect, useRef, useState } from "react";
+import { Alert, Badge, Box, Button, CloseButton, Dialog, Flex, Heading, Link, List, Portal, Progress, Text, VStack }
     from "@chakra-ui/react";
 import { daysLeftLabel, formatBytes, formatCount, formatDate, formatTimestamp, percentOf } from "../../lib/admin/format";
-import { checkResultMessage, importConfirmText, importResultMessage, panelAvailability, runStatusBadge, syncErrorMessage }
-    from "../../lib/admin/messages";
+import { INSTAGRAM_TOKEN_REMEDY, checkNotice, importConfirmText, importNotice, panelAvailability, runStatusBadge,
+    syncErrorMessage } from "../../lib/admin/messages";
 import { runInstagramSync } from "./api";
 import { AdminCard } from "./AdminCard";
 import type { AdminStatus, SyncResult } from "./types";
@@ -25,6 +25,17 @@ export const InstagramCard = ({ instagram, generatedAt, onChanged, onSignedOut }
     const [checkResult, setCheckResult] = useState<SyncResult | null>(null);
     const [notice, setNotice] = useState<Notice | null>(null);
     const [confirmOpen, setConfirmOpen] = useState(false);
+    // A successful import unmounts the dialog and the button that opened it, so focus moves to the result instead
+    // of falling back to the page.
+    const noticeRef = useRef<HTMLDivElement>(null);
+    const focusNotice = useRef(false);
+    useEffect(() => {
+        if (!focusNotice.current || !notice) return;
+        focusNotice.current = false;
+        noticeRef.current?.focus();
+    }, [notice]);
+    // A Check whose Blob or resizer check failed doesn't offer Import: the import would fail on it.
+    const checkAllowsImport = checkResult ? checkNotice(checkResult).importAllowed : false;
 
     const uploadsPalette = instagram.uploads30d >= limits.cronCeiling ? "red"
         : instagram.uploads30d >= limits.panelCeiling ? "orange" : "green";
@@ -39,10 +50,13 @@ export const InstagramCard = ({ instagram, generatedAt, onChanged, onSignedOut }
         setBusy(null);
         if (result.signedOut) return onSignedOut();
         if (result.ok && result.body) {
-            if (dryRun) { setCheckResult(result.body); setNotice({ status: "info", text: checkResultMessage(result.body) }); }
-            else {
+            if (dryRun) {
+                const { status, text } = checkNotice(result.body);
+                setCheckResult(result.body); setNotice({ status, text });
+            } else {
+                focusNotice.current = true;
                 setCheckResult(null); setConfirmOpen(false);
-                setNotice({ status: result.body.status === "ok" ? "success" : "warning", text: importResultMessage(result.body) });
+                setNotice(importNotice(result.body));
             }
         } else {
             if (!dryRun) setConfirmOpen(false);
@@ -66,7 +80,7 @@ export const InstagramCard = ({ instagram, generatedAt, onChanged, onSignedOut }
                                 <Alert.Content>
                                     <Alert.Title>Instagram rejected the token</Alert.Title>
                                     <Alert.Description>
-                                        {`Reason: ${token.deadReason}. The sync has stopped. Generate a new token and seed it with npm run instagram:token, as the README's Instagram sync section describes.`}
+                                        {`Reason: ${token.deadReason}. The sync has stopped. ${INSTAGRAM_TOKEN_REMEDY}`}
                                     </Alert.Description>
                                 </Alert.Content>
                             </Alert.Root>
@@ -130,7 +144,9 @@ export const InstagramCard = ({ instagram, generatedAt, onChanged, onSignedOut }
                 </VStack>
 
                 {notice && (
-                    <Alert.Root status={notice.status}>
+                    // An error is announced at once; any other result politely.
+                    <Alert.Root status={notice.status} role={notice.status === "error" ? "alert" : "status"}
+                        ref={noticeRef} tabIndex={-1}>
                         <Alert.Indicator />
                         <Alert.Description>{notice.text}</Alert.Description>
                     </Alert.Root>
@@ -155,19 +171,20 @@ export const InstagramCard = ({ instagram, generatedAt, onChanged, onSignedOut }
                                 )}
                             </List.Root>
                         )}
-                        {/* Every dry run reports both, with or without posts: Task 18 Step 14 reads them as the proof
-                            that Blob and sharp work in the deployed function. */}
+                        {/* Every dry run reports both, with or without posts: Step 14 of the Deploy B runbook reads them as
+                            the proof that Blob and sharp work in the deployed function. */}
                         {checkResult.blob && <Text color="fg.muted" fontSize="sm">{`Blob: ${checkResult.blob}`}</Text>}
                         {checkResult.resize && <Text color="fg.muted" fontSize="sm">{`Resize: ${checkResult.resize}`}</Text>}
 
                         {checkResult.posts.length > 0 && (
                             <>
                                 <Button colorPalette="blue" alignSelf="flex-start" onClick={() => setConfirmOpen(true)}
-                                    disabled={!a.canImport || busy !== null}>
+                                    disabled={!a.canImport || !checkAllowsImport || busy !== null}>
                                     Import {postsLabel(checkResult.posts.length)}
                                 </Button>
                                 <Dialog.Root role="alertdialog" open={confirmOpen} onOpenChange={(e) => setConfirmOpen(e.open)}
-                                    closeOnInteractOutside={busy !== "import"} closeOnEscape={busy !== "import"}>
+                                    closeOnInteractOutside={busy !== "import"} closeOnEscape={busy !== "import"}
+                                    finalFocusEl={() => (focusNotice.current ? noticeRef.current : null)}>
                                     <Portal>
                                         <Dialog.Backdrop />
                                         <Dialog.Positioner>
@@ -176,10 +193,15 @@ export const InstagramCard = ({ instagram, generatedAt, onChanged, onSignedOut }
                                                     <Dialog.Title>Import {postsLabel(checkResult.posts.length)}?</Dialog.Title>
                                                 </Dialog.Header>
                                                 <Dialog.Body>
-                                                    <Text>{importConfirmText(checkResult, instagram)}</Text>
-                                                    <Text mt="2">
-                                                        Posts that appeared since the check are included, within the same 25-upload cap.
-                                                    </Text>
+                                                    {/* The dialog's aria-describedby points here. */}
+                                                    <Dialog.Description asChild>
+                                                        <Box>
+                                                            <Text>{importConfirmText(checkResult, instagram)}</Text>
+                                                            <Text mt="2">
+                                                                Posts that appeared since the check are included, within the same 25-upload cap.
+                                                            </Text>
+                                                        </Box>
+                                                    </Dialog.Description>
                                                 </Dialog.Body>
                                                 <Dialog.Footer>
                                                     <Dialog.ActionTrigger asChild>

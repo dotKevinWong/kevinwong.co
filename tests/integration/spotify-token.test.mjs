@@ -99,9 +99,8 @@ describe("lib/spotify-token.js against the test database", { skip: db.skip }, ()
     const status = await readSpotifyStatusRow(db.pool);
     assert.equal("refreshToken" in status, false);
     assert.equal("accessToken" in status, false);
-    assert.deepEqual(Object.keys(status).sort(), ["accountId", "authorizedAt", "deadReason", "expiresAt", "scopes", "updatedAt"]);
+    assert.deepEqual(Object.keys(status).sort(), ["accountId", "authorizedAt", "deadReason", "expiresAt", "scopes"]);
     assert.deepEqual(status.scopes, [...SPOTIFY_SCOPES]);
-    assert.ok(status.updatedAt instanceof Date);
     assert.ok(!JSON.stringify(status).includes("rt-A"));
   });
 

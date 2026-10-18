@@ -43,7 +43,7 @@ export const SignInPage = ({ error }: { error: string | null }) => {
                 <VStack align="stretch" gap="4">
                     <Text>Only the site owner&apos;s GitHub account can sign in.</Text>
                     {message && (
-                        <Alert.Root status="error">
+                        <Alert.Root status="error" role="alert">
                             <Alert.Indicator />
                             <Alert.Title>{message}</Alert.Title>
                         </Alert.Root>

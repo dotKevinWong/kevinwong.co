@@ -5,7 +5,7 @@ import { buildAuthOptions } from "../lib/auth.js";
 import { OWNER_SESSION, PROD_ENV, fakeAuth, fakeDb, fakeReq, fakeRes, withEnv } from "./helpers/admin-fakes.mjs";
 
 const NO_STORE = "private, no-store, max-age=0, must-revalidate";
-const OWNER = { userId: "user-1", name: "Kevin Wong", image: "https://avatars.githubusercontent.com/u/1741711?v=4", expiresAt: new Date("2026-10-17T12:00:00.000Z") };
+const OWNER = { name: "Kevin Wong", image: "https://avatars.githubusercontent.com/u/1741711?v=4" };
 
 // A database outage as pg reports it: a credential in the message and a `detail`, neither of which may be logged.
 const dbDownError = () => Object.assign(new Error("connect ECONNREFUSED for postgres://kevin:hunter2@db.example/neondb"), {
@@ -86,7 +86,7 @@ test("getOwnerSession returns null without a session and never queries the datab
   assert.equal(db.calls.length, 0);
 });
 
-test("getOwnerSession checks the session user's GitHub 1741711 account and returns four fields", async () => {
+test("getOwnerSession checks the session user's GitHub 1741711 account and returns only the name and image", async () => {
   const auth = fakeAuth();
   const db = fakeDb(1);
   const owner = await getOwnerSession(fakeReq({ cookie: "__Secure-better-auth.session_token=abc" }), { auth, db });

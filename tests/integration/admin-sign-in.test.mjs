@@ -99,8 +99,9 @@ describe("GitHub sign-in through Better Auth", { skip: db.skip }, () => {
     assert.equal(accounts[0].accountId, "1741711");
     assert.notEqual(accounts[0].accessToken, "gho_test", "OAuth tokens are stored encrypted");
     const owner = await getOwnerSession({ headers: { cookie: sessionCookie.split(";")[0] } });
-    assert.equal(owner.name, "Kevin Wong");
-    assert.ok(Math.abs(owner.expiresAt.getTime() - (Date.now() + 86_400_000)) < 60_000);
+    assert.deepEqual(owner, { name: "Kevin Wong", image: OWNER_PROFILE.avatar_url });
+    const { rows: [session] } = await db.pool.query(`select "expiresAt" from auth_session`);
+    assert.ok(Math.abs(session.expiresAt.getTime() - (Date.now() + 86_400_000)) < 60_000);
     await eventually(async () => assert.equal(
       (await db.pool.query("select count(*)::int as n from admin_audit_log where event = 'sign_in' and actor = 'github:1741711'")).rows[0].n, 1));
   });

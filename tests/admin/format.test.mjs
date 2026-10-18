@@ -28,7 +28,7 @@ test("formatTimestamp and formatDate render UTC whatever the machine's zone", ()
   assert.equal(formatTimestamp("2026-10-16T08:27:45.123Z"), "Oct 16, 2026, 08:27 UTC");
   assert.equal(formatTimestamp("2026-01-05T00:03:00.000Z"), "Jan 5, 2026, 00:03 UTC");
   assert.equal(formatTimestamp(null), "Never");
-  assert.equal(formatDate("2026-10-16T23:59:59.000Z"), "Oct 16, 2026");
+  assert.equal(formatDate("2026-10-16T23:59:59.000Z"), "Oct 16, 2026 UTC");
   assert.equal(formatDate(null), "Unknown");
 });
 

@@ -70,7 +70,8 @@ export const SpotifyCard = ({ spotify }: { spotify: AdminStatus["spotify"] }) =>
                     </>
                 )}
 
-                {/* A form POST sends Origin, which Task 13's check needs, and passes lint (an <a> to /api/... doesn't). */}
+                {/* A form POST sends Origin, which the authorize route's same-origin check (lib/admin/spotify-reconnect.js)
+                    needs, and passes lint (an <a> to /api/... doesn't). */}
                 <form method="post" action="/api/admin/spotify/authorize">
                     <Button type="submit" variant={spotify.state === "connected" ? "outline" : "solid"}
                         colorPalette={spotify.state === "connected" ? "gray" : "green"}>Reconnect</Button>

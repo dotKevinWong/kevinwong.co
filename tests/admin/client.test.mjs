@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { githubAuthorizeUrl, postJson } from "../../lib/admin/client.js";
+import { githubAuthorizeUrl, isSignedOutError, postJson, statusBanner } from "../../lib/admin/client.js";
 
 const jsonResponse = (status, body) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -58,4 +58,24 @@ test("githubAuthorizeUrl accepts only GitHub's authorize endpoint", () => {
   assert.equal(githubAuthorizeUrl({ url: "/admin" }), null);
   assert.equal(githubAuthorizeUrl({ url: 42 }), null);
   assert.equal(githubAuthorizeUrl(null), null);
+});
+
+// The status poll's rules in components/admin/AdminPage.tsx: SWR's onError sends a 401 to sign-in, and the banner
+// says whether the status failed to load, is loading, or is stale. lib/fetcher.js puts the status on the error.
+test("isSignedOutError is true only for a 401", () => {
+  assert.equal(isSignedOutError(Object.assign(new Error("x"), { status: 401 })), true);
+  for (const status of [403, 404, 500, 0, undefined]) {
+    assert.equal(isSignedOutError(Object.assign(new Error("x"), { status })), false, String(status));
+  }
+  assert.equal(isSignedOutError(undefined), false);
+});
+
+test("statusBanner: failed with no status yet, loading, stale after a failed refresh, and nothing for a 401", () => {
+  const error = (status) => Object.assign(new Error("x"), { status });
+  assert.equal(statusBanner({ hasData: false, error: error(500) }), "load_failed");
+  assert.equal(statusBanner({ hasData: false, error: undefined }), "loading");
+  assert.equal(statusBanner({ hasData: true, error: error(500) }), "refresh_failed");
+  assert.equal(statusBanner({ hasData: true, error: error(0) }), "refresh_failed");
+  assert.equal(statusBanner({ hasData: true, error: error(401) }), null, "a 401 goes to sign-in instead");
+  assert.equal(statusBanner({ hasData: true, error: undefined }), null);
 });

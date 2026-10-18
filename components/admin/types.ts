@@ -15,7 +15,7 @@ export type AdminStatus = {
         state: SpotifyState; authorizedAt: string | null; expiresAt: string | null;
         daysLeft: number | null; // floored whole days; negative once past expiresAt
         accountMatches: boolean | null;
-        scopes: string[] | null; missingScopes: string[] | null; // null when there is no spotify row (Task 15)
+        scopes: string[] | null; missingScopes: string[] | null; // null when there is no spotify row (lib/admin/status.js)
         deadReason: string | null;
     };
     instagram: {
