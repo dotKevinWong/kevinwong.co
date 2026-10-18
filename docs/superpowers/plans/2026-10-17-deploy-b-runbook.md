@@ -37,9 +37,9 @@ session fills in your account id in one commit, `Fill in the owner's Spotify acc
 branch `claude/admin-panel-deploy-b` on it. Check that branch, not your main checkout:
 
 ```sh
-cd /Users/Kevin/Git/kevinwong.co
-git log -1 --format=%s claude/admin-panel-deploy-b
-git diff --name-only claude/admin-panel-deploy-b~1 claude/admin-panel-deploy-b
+cd /Users/Kevin/Git/kevinwong.co &&
+git log -1 --format=%s claude/admin-panel-deploy-b &&
+git diff --name-only claude/admin-panel-deploy-b~1 claude/admin-panel-deploy-b &&
 git rev-parse --short claude/admin-panel-deploy-b
 ```
 
@@ -60,8 +60,9 @@ git worktree add --detach /tmp/kw-deploy-b-gate claude/admin-panel-deploy-b && c
 Expected: git's two lines, `Preparing worktree (detached HEAD <the id>)` and
 `HEAD is now at <the id> Fill in the owner's Spotify account id`, then `v24.21.0` (the version in `.nvmrc`), then
 npm's `added … packages`. `npm ci` takes a minute. Two things in its output are harmless: an
-`npm warn install-scripts` about `unrs-resolver`, and its audit summary, `N vulnerabilities (…)`, which counts the
-known advisories listed under *What the session checked*.
+`npm warn install-scripts` about `unrs-resolver`, and its audit summary, `N vulnerabilities (…)`, which counts every
+known advisory in the whole dependency tree, dev tools included. *What the session checked* lists the production
+ones.
 - If git says the folder `already exists`, or that it `is a missing but already registered worktree`, an earlier gate
   run left it behind. Run the removal block at the end of this section, then this line again. If git still says
   `already exists`, the folder isn't a git checkout: stop and tell the session.
@@ -232,14 +233,14 @@ A `DATABASE_URL` exported in this shell would win over `.env`, so the block unse
 target it reads before dumping. The parentheses keep the `unset` and the umask from outlasting the command:
 
 ```sh
-cd /Users/Kevin/Git/kevinwong.co
-( unset DATABASE_URL && umask 077 && mkdir -p ~/Backups && node --env-file=.env --input-type=module -e '
+cd /Users/Kevin/Git/kevinwong.co && ( unset DATABASE_URL && umask 077 && mkdir -p ~/Backups && node --env-file=.env --input-type=module -e '
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 const file = process.argv[1];
 let pgEnv, target;
 try {
   const u = new URL(process.env.DATABASE_URL);
+  if (u.username === "" || u.password === "") throw 0;
   pgEnv = { PGHOST: u.hostname.replace(/^([^.]+)-pooler\./, "$1."), PGPORT: u.port || "5432", PGUSER: decodeURIComponent(u.username), PGPASSWORD: decodeURIComponent(u.password), PGDATABASE: decodeURIComponent(u.pathname.slice(1)) };
   target = `${pgEnv.PGHOST}${u.port ? ":" + u.port : ""}/${pgEnv.PGDATABASE}`;
 } catch { console.error("DATABASE_URL in .env is missing or not a valid URL."); process.exit(1); }
@@ -247,23 +248,23 @@ console.log(`Target: ${target}`);
 const env = { ...process.env, ...pgEnv, PGSSLMODE: "verify-full", PGSSLROOTCERT: "/etc/ssl/certs/host-ca.pem" };
 delete env.DATABASE_URL;
 let out;
-try { out = fs.openSync(file, "wx", 0o600); } catch (e) { console.error(e.code === "EEXIST" ? `${file} already exists, so nothing was written: rename an earlier backup, or delete the empty file of a failed run, then run this block again.` : `Could not create ${file} (${e.code}).`); process.exit(1); }
+try { out = fs.openSync(file, "wx", 0o600); } catch (e) { console.error(e.code === "EEXIST" ? `${file} already exists, so nothing was written: rename an earlier backup, or delete the empty or partial file of a failed run, then run this block again.` : `Could not create ${file} (${e.code}).`); process.exit(1); }
 let r;
 try { r = spawnSync("docker", ["run", "--rm", "-v", "/etc/ssl/cert.pem:/etc/ssl/certs/host-ca.pem:ro", "-e", "PGHOST", "-e", "PGPORT", "-e", "PGUSER", "-e", "PGPASSWORD", "-e", "PGDATABASE", "-e", "PGSSLMODE", "-e", "PGSSLROOTCERT", "postgres:18", "pg_dump", "--format=custom", "--no-owner"], { env, stdio: ["ignore", out, "inherit"] }); }
-catch (e) { console.error(`docker could not start (${e.code ?? "unknown error"}); nothing from .env was printed.`); process.exit(1); }
+catch (e) { console.error(`docker could not start (${e.code ?? "unknown error"}); no user or password was printed.`); process.exit(1); }
 if (r.error) console.error(`Could not run docker (${r.error.code}).`);
 process.exit(r.status ?? 1);' ~/Backups/kevinwong-before-admin-007.dump ); echo "exit=$?"
 ```
 
-Expected: `Target: ep-<id>.<region>.aws.neon.tech/<db>`, the Neon host with no `-pooler`, then `exit=0` and nothing
-else. The target never shows the user or the password.
-- **If `Target:` names any other host, the dump read the wrong database:** delete
-  `~/Backups/kevinwong-before-admin-007.dump`, and stop and tell the session.
+Expected: `Target: ep-<id>.c-4.us-east-1.aws.neon.tech/<db>`, the Neon host with no `-pooler` that Deploy A's
+`db:apply` printed, then `exit=0` and nothing else. The target never shows the user or the password.
+- **If `Target:` names any other host, the dump read the wrong database:** delete the file this block wrote, and
+  stop and tell the session.
 - If it says the file already exists, nothing was written, and the file there was left as it was. If that file is
   an earlier backup, rename it. If it is the empty or partial file of a failed run of this block (`ls -l ~/Backups`
   shows its size), delete it. Then run the block again.
-- If it says `docker could not start`, a value from `.env` can't be passed to Docker, and nothing from `.env` was
-  printed: stop and tell the session.
+- If it says `docker could not start`, a value from `.env` can't be passed to Docker, and no user or password was
+  printed. It also left an empty file: delete the file this block wrote, then stop and tell the session.
 
 Then count what it holds:
 
@@ -273,9 +274,8 @@ docker run --rm -i postgres:18 pg_restore --list < ~/Backups/kevinwong-before-ad
 
 It prints 6 or more (`integration_tokens`, `job_locks`, `instagram_posts`, `instagram_media`, and Deploy A's
 `sync_runs` and `admin_audit_log`). **If the dump block printed an error or `exit=1`, or the count is under 6, the
-dump failed: don't start Step 9.** A failed dump leaves an empty or partial
-`~/Backups/kevinwong-before-admin-007.dump` behind, so delete that file before trying again. Or make the Neon branch
-instead.
+dump failed: don't start Step 9.** A failed dump leaves an empty or partial file behind: delete the file this block
+wrote before trying again. Or make the Neon branch instead.
 
 ## Step 9: merge, apply `007`, check the schema, deploy
 
@@ -286,17 +286,13 @@ secret is typed or pasted. Nothing is deployed until item 7's push.
    the pinned `auth` CLI that runs it.
 
    ```sh
-   cd /Users/Kevin/Git/kevinwong.co
-   nvm use --silent
-   node -v
-   git switch main
-   git branch --show-current
-   git status --short
+   cd /Users/Kevin/Git/kevinwong.co && nvm use --silent && node -v && git switch main && git branch --show-current && git status --short
    ```
 
-   Expected:
-   - `node -v` prints `v24.21.0`. If not, check `cat .nvmrc` first: if it prints anything other than `v24.21.0`,
-     stop and tell the session. Otherwise run `nvm install`, then this block again.
+   It stops at the first command that fails. Expected:
+   - `node -v` prints `v24.21.0`. If it prints another version, or nothing prints at all (`nvm use` failed), check
+     `cat .nvmrc` first: if it prints anything other than `v24.21.0`, stop and tell the session. Otherwise run
+     `nvm install`, then this block again.
    - `git switch` says `Switched to branch 'main'` or `Already on 'main'`, and `git branch --show-current` prints
      `main`. If it prints anything else (for example because `main` is checked out in another worktree), stop and
      tell the session.
@@ -353,8 +349,9 @@ secret is typed or pasted. Nothing is deployed until item 7's push.
    npm ci
    ```
 
-   Its `N vulnerabilities (…)` audit summary is harmless here: it counts the known advisories listed under *What the
-   session checked*. If `npm ci` fails, stop and tell the session.
+   Its `N vulnerabilities (…)` audit summary is harmless here: it counts every known advisory in the whole dependency
+   tree, dev tools included, and *What the session checked* lists the production ones. If `npm ci` fails, stop and
+   tell the session.
 
 2. **Look at the target.** Without `--yes`, `db:apply` only prints it:
 
@@ -389,7 +386,7 @@ secret is typed or pasted. Nothing is deployed until item 7's push.
    and database that `prodsql` reads, in the same form as `Target:`, and the two must be the same:
 
    ```sh
-   node --env-file=.env -p 'try { const u = new URL(process.env.DATABASE_URL); u.host.replace(/^([^.]+)-pooler\./, "$1.") + u.pathname } catch { "DATABASE_URL in .env is missing or not a valid URL." }'
+   node --env-file=.env -p 'try { const u = new URL(process.env.DATABASE_URL); if (u.username === "" || u.password === "") throw 0; u.host.replace(/^([^.]+)-pooler\./, "$1.") + u.pathname } catch { "DATABASE_URL in .env is missing or not a valid URL." }'
    ```
 
    If they differ, `.env.local` names another database: stop and tell the session. If it prints
@@ -408,7 +405,8 @@ secret is typed or pasted. Nothing is deployed until item 7's push.
    - `schemas` is `{pg_catalog,public}`, `can_create` is `true`, and `auth_tables` is `0`. The one exception: `4` if
      you are redoing Step 9 after item 6's way back and the session didn't have you undo `007`.
    - **If any differ, stop and tell the session before applying.** An empty owner means Deploy A's `006` is missing.
-     `auth_tables` above `0` means an earlier attempt left tables behind, and `007` would keep them as they are.
+     `auth_tables` above `0` means an earlier attempt left tables behind, and `007` would keep them as they are
+     (other than the redo case above).
    - If your `DATABASE_URL` still says `sslmode=require`, pg prints a SECURITY WARNING, here and below. It is
      harmless: the connection still verifies the certificate.
 
@@ -465,7 +463,7 @@ secret is typed or pasted. Nothing is deployed until item 7's push.
 
         Expected: git's `Already on 'main'` and `Your branch is ahead of 'origin/main' …` lines, then nothing
         from `git log`. `--keep` refuses, and changes nothing, if a file has uncommitted changes; item 1 checked
-        there were none. **If `git reset` prints an error, or `git log` lists any commit, stop and tell the
+        there were none. **If any command prints an error, or `git log` lists a commit, stop and tell the
         session.** Otherwise reinstall Deploy A's dependencies:
 
         ```sh
@@ -497,8 +495,9 @@ secret is typed or pasted. Nothing is deployed until item 7's push.
    git push origin main
    ```
 
-   Expected: git's `main -> main` line. **If it prints `rejected` or `error:`, nothing was pushed or deployed**, for
-   example because `origin/main` moved after item 1: stop and tell the session.
+   Expected: a line `<old>..<new>  main -> main`, with two commit ids and no `!` before it. **If it prints
+   `rejected`, `error:` or `fatal:`, or no such line, nothing was pushed or deployed**, for example because
+   `origin/main` moved after item 1 or the remote couldn't be reached: stop and tell the session.
 
    Then Vercel → **Deployments** → wait until the new **Production** deployment for that commit is **Ready**. If it
    ends **Error** instead, stop and tell the session, with the last error lines of its build log. Production keeps
@@ -800,8 +799,9 @@ Use a browser where you are signed in to Vercel, because Deployment Protection a
 - **The schema normally stays.** Removing `007` is not part of a rollback. If you do want it gone:
   1. Roll the code back first, because Deploy B's Better Auth fails every request without its tables.
   2. Back up as in Step 8, but name the Neon branch `before-undo-007` (or change the dump's file name to
-     `~/Backups/kevinwong-before-undo-007.dump`, in the dump block and in its count). Step 8's `before-admin-007` is
-     the one you keep for a month.
+     `~/Backups/kevinwong-before-undo-007.dump`, in the dump block and in its count). Step 8's notes on deleting or
+     renaming "the file this block wrote" then mean that undo file. Step 8's `before-admin-007` is the one you keep
+     for a month.
   3. In the main checkout:
 
      ```sh

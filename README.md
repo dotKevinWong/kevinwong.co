@@ -99,6 +99,7 @@ To apply one:
    let pgEnv, target;
    try {
      const u = new URL(process.env.DATABASE_URL);
+     if (u.username === "" || u.password === "") throw 0;
      pgEnv = { PGHOST: u.hostname.replace(/^([^.]+)-pooler\./, "$1."), PGPORT: u.port || "5432", PGUSER: decodeURIComponent(u.username), PGPASSWORD: decodeURIComponent(u.password), PGDATABASE: decodeURIComponent(u.pathname.slice(1)) };
      target = `${pgEnv.PGHOST}${u.port ? ":" + u.port : ""}/${pgEnv.PGDATABASE}`;
    } catch { console.error("DATABASE_URL in .env is missing or not a valid URL."); process.exit(1); }
@@ -106,10 +107,10 @@ To apply one:
    const env = { ...process.env, ...pgEnv, PGSSLMODE: "verify-full", PGSSLROOTCERT: "/etc/ssl/certs/host-ca.pem" };
    delete env.DATABASE_URL;
    let out;
-   try { out = fs.openSync(file, "wx", 0o600); } catch (e) { console.error(e.code === "EEXIST" ? `${file} already exists, so nothing was written: rename an earlier backup, or delete the empty file of a failed run, then run this block again.` : `Could not create ${file} (${e.code}).`); process.exit(1); }
+   try { out = fs.openSync(file, "wx", 0o600); } catch (e) { console.error(e.code === "EEXIST" ? `${file} already exists, so nothing was written: rename an earlier backup, or delete the empty or partial file of a failed run, then run this block again.` : `Could not create ${file} (${e.code}).`); process.exit(1); }
    let r;
    try { r = spawnSync("docker", ["run", "--rm", "-v", "/etc/ssl/cert.pem:/etc/ssl/certs/host-ca.pem:ro", "-e", "PGHOST", "-e", "PGPORT", "-e", "PGUSER", "-e", "PGPASSWORD", "-e", "PGDATABASE", "-e", "PGSSLMODE", "-e", "PGSSLROOTCERT", "postgres:18", "pg_dump", "--format=custom", "--no-owner"], { env, stdio: ["ignore", out, "inherit"] }); }
-   catch (e) { console.error(`docker could not start (${e.code ?? "unknown error"}); nothing from .env was printed.`); process.exit(1); }
+   catch (e) { console.error(`docker could not start (${e.code ?? "unknown error"}); no user or password was printed.`); process.exit(1); }
    if (r.error) console.error(`Could not run docker (${r.error.code}).`);
    process.exit(r.status ?? 1);' ~/Backups/kevinwong-before-005.dump ); echo "exit=$?"
    ````
@@ -120,8 +121,9 @@ To apply one:
    - If it says the file already exists, nothing was written, and the file there was left as it was. If that
      file is an earlier backup, rename it. If it is the empty or partial file of a failed run of this block
      (`ls -l ~/Backups` shows its size), delete it. Then run the block again.
-   - If it says `docker could not start`, a value from `.env` can't be passed to Docker, and nothing from
-     `.env` was printed. Fix `.env` before trying again.
+   - If it says `docker could not start`, a value from `.env` can't be passed to Docker, and no user or
+     password was printed. It also left an empty file: delete the file this block wrote, and fix `.env`
+     before trying again.
 
    Then count what it holds:
    ````sh

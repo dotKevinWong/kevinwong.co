@@ -195,7 +195,7 @@ describe("undoing 007 (sql/undo/undo-007.sql)", { skip: db.skip }, () => {
   //
   // What stops an undo without a working lock_timeout from hanging the run: RELEASE_AFTER_MS after the lock is
   // taken, the holder rolls back, which frees the lock. Such an undo then succeeds, and assert.rejects fails the
-  // test. The test's timeout option is only a backstop.
+  // test. The test's timeout option only marks the test cancelled; it can't free the lock.
   const RELEASE_AFTER_MS = 10_000;
   const LOCK_CASES = [
     { locked: "auth_user", outcome: "at its first drop, it times out and changes nothing" },
