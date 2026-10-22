@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import useSWR from "swr";
-import { Alert, Avatar, Box, Button, CloseButton, Flex, Heading, HStack, Spinner, Text } from "@chakra-ui/react";
+import { Alert, Avatar, Box, Button, CloseButton, Flex, Grid, Heading, HStack, Spinner, Text } from "@chakra-ui/react";
 import { FiLogOut } from "react-icons/fi";
 import fetcher from "../../lib/fetcher";
 import { isSignedOutError, statusBanner } from "../../lib/admin/client";
@@ -107,11 +107,12 @@ export const AdminPage = ({ owner, initialStatus, flash }: AdminPageProps) => {
 
             {data && (
                 <>
-                    <Flex wrap="wrap" rowGap={4} columnGap={4} mb="4">
+                    {/* One column until both cards fit side by side, so each card is as wide as the tables below. */}
+                    <Grid templateColumns={{ base: "minmax(0, 1fr)", xl: "repeat(2, minmax(0, 1fr))" }} gap="4" mb="4">
                         <SpotifyCard spotify={data.spotify} />
                         <InstagramCard instagram={data.instagram} generatedAt={data.generatedAt}
                             onChanged={() => void mutate()} onSignedOut={goToSignIn} />
-                    </Flex>
+                    </Grid>
                     <RunsTable runs={data.runs} />
                     <ActivityLog activity={data.activity} refusedSignIns={data.refusedSignIns} />
                     <Text color="fg.muted" fontSize="sm" mt="4">

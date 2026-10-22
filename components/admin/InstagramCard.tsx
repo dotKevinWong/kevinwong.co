@@ -66,7 +66,7 @@ export const InstagramCard = ({ instagram, generatedAt, onChanged, onSignedOut }
     }
 
     return (
-        <AdminCard maxW="520px">
+        <AdminCard>
             <VStack align="stretch" gap="3">
                 <Heading>Instagram</Heading>
 

@@ -15,7 +15,7 @@ export const SpotifyCard = ({ spotify }: { spotify: AdminStatus["spotify"] }) =>
     const palette = daysLeft === null || daysLeft <= 14 ? "red" : daysLeft <= 30 ? "orange" : "green";
 
     return (
-        <AdminCard maxW="420px">
+        <AdminCard>
             <VStack align="stretch" gap="3">
                 <HStack gap="3">
                     <Heading>Spotify</Heading>
