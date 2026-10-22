@@ -2,7 +2,7 @@ import { describe, test, before, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { testDb } from "../helpers/db.mjs";
-import { INTRUDER_PROFILE, OWNER_PROFILE, stubGitHub } from "../helpers/github-stub.mjs";
+import { GITHUB_AUTHORIZE_URL, INTRUDER_PROFILE, OWNER_PROFILE, stubGitHub } from "../helpers/github-stub.mjs";
 import { LEAKY_MESSAGE, REDACTED_LINE } from "../helpers/admin-fakes.mjs";
 import { getAuth } from "../../lib/auth.js";
 import { getDbPool } from "../../lib/db.js";
@@ -38,7 +38,7 @@ async function signIn(profile) {
   }));
   assert.equal(start.status, 200);
   const authorize = new URL((await start.json()).url);
-  assert.equal(`${authorize.origin}${authorize.pathname}`, "https://github.com/login/oauth/authorize");
+  assert.equal(`${authorize.origin}${authorize.pathname}`, GITHUB_AUTHORIZE_URL);
   assert.equal(authorize.searchParams.get("scope"), null, "no GitHub scopes requested");
   assert.equal(authorize.searchParams.get("redirect_uri"), `${ORIGIN}/api/auth/callback/github`);
   const cookie = start.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
@@ -185,7 +185,7 @@ describe("GitHub sign-in through Better Auth", { skip: db.skip }, () => {
       "the session cookie isn't cleared");
     const signInAgain = await post("/sign-in/social", "https://evil.example", { provider: "github", callbackURL: "/admin" });
     assert.equal(signInAgain.status, 403);
-    assert.ok(!(await signInAgain.text()).includes("github.com"));
+    assert.ok(!(await signInAgain.text()).includes(GITHUB_AUTHORIZE_URL));
     assert.equal(await count("auth_session"), 1);
     assert.notEqual(await getOwnerSession({ headers: { cookie } }), null);
 

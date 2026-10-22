@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { betterAuth } from "better-auth";
 import { testDb } from "../helpers/db.mjs";
-import { INTRUDER_PROFILE, OWNER_PROFILE, stubGitHub } from "../helpers/github-stub.mjs";
+import { GITHUB_AUTHORIZE_URL, INTRUDER_PROFILE, OWNER_PROFILE, stubGitHub } from "../helpers/github-stub.mjs";
 import { buildAuthOptions } from "../../lib/auth.js";
 import { getDbPool } from "../../lib/db.js";
 
@@ -75,7 +75,7 @@ describe("the Better Auth handler's request checks", { skip: db.skip }, () => {
     const res = await signIn({ provider: "github", callbackURL: "/admin" });
     assert.equal(res.status, 200);
     const authorize = new URL((await res.json()).url);
-    assert.equal(`${authorize.origin}${authorize.pathname}`, "https://github.com/login/oauth/authorize");
+    assert.equal(`${authorize.origin}${authorize.pathname}`, GITHUB_AUTHORIZE_URL);
     assert.equal(authorize.searchParams.get("scope"), null, "no GitHub scopes requested");
     assert.ok(res.headers.getSetCookie().some((c) => c.startsWith("__Secure-better-auth.oauth_state=")));
   });
@@ -94,7 +94,7 @@ describe("the Better Auth handler's request checks", { skip: db.skip }, () => {
       const res = await signIn(body);
       assert.equal(res.status, 400);
       assert.equal(res.headers.get("location"), null);
-      assert.ok(!(await res.text()).includes("github.com"));
+      assert.ok(!(await res.text()).includes(GITHUB_AUTHORIZE_URL));
       assert.ok(!res.headers.getSetCookie().some((c) => c.includes("oauth_state")), "no state cookie");
     });
   }
@@ -104,7 +104,7 @@ describe("the Better Auth handler's request checks", { skip: db.skip }, () => {
       const consoleError = t.mock.method(console, "error", () => {});
       const res = await signIn({ provider: "github", callbackURL: "/admin", [key]: "https://evil.example/x" });
       assert.equal(res.status, 403);
-      assert.ok(!(await res.text()).includes("github.com"));
+      assert.ok(!(await res.text()).includes(GITHUB_AUTHORIZE_URL));
       assert.ok(!res.headers.getSetCookie().some((c) => c.includes("oauth_state")), "no state cookie");
       assertOnlyStrings(consoleError);
     });

@@ -8,6 +8,9 @@ export const OWNER_PROFILE = Object.freeze({
 export const INTRUDER_PROFILE = Object.freeze({
   id: 999, login: "intruder", name: null, email: null, avatar_url: "https://avatars.githubusercontent.com/u/999?v=4",
 });
+// Where a sign-in goes to GitHub: /sign-in/social answers with this URL and its query string. The refusal tests
+// check for this whole URL, not the bare host, which CodeQL flags as an incomplete URL check.
+export const GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize";
 
 /**
  * Stubs GitHub's three endpoints for one callback: the code exchange, the profile, and the emails list, which

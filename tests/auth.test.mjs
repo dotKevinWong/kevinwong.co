@@ -4,6 +4,7 @@ import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { buildAuthOptions, githubProfileToUser, validateOwner } from "../lib/auth.js";
 import { withEnv } from "./helpers/admin-fakes.mjs";
+import { GITHUB_AUTHORIZE_URL } from "./helpers/github-stub.mjs";
 
 const NOT_OWNER = { error: "not_owner", errorDescription: "This GitHub account can't sign in here." };
 const quiet = { logRejected: async () => {}, schedule: () => {} };
@@ -252,10 +253,12 @@ for (const TEST of [undefined, "1", "true"]) {
       for (const [label, path, body, headers] of CROSS_SITE_REQUESTS) {
         const res = await post(path, body, headers);
         assert.equal(res.status, 403, label);
-        assert.ok(!(await res.text()).includes("github.com"), label);
+        assert.ok(!(await res.text()).includes(GITHUB_AUTHORIZE_URL), label);
       }
       // The sign-in page's own request still gets GitHub's URL.
-      assert.equal((await post("/sign-in/social", { provider: "github", callbackURL: "/admin" }, {})).status, 200);
+      const signIn = await post("/sign-in/social", { provider: "github", callbackURL: "/admin" }, {});
+      assert.equal(signIn.status, 200);
+      assert.ok((await signIn.json()).url.startsWith(`${GITHUB_AUTHORIZE_URL}?`));
     }));
 }
 
