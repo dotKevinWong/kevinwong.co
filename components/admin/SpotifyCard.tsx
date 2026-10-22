@@ -33,17 +33,6 @@ export const SpotifyCard = ({ spotify }: { spotify: AdminStatus["spotify"] }) =>
                         </Alert.Content>
                     </Alert.Root>
                 )}
-                {spotify.state === "env" && (
-                    <Alert.Root status="info">
-                        <Alert.Indicator />
-                        <Alert.Content>
-                            <Alert.Title>Using the env var token</Alert.Title>
-                            <Alert.Description>
-                                The token still comes from the refresh_token env var. Reconnect once to move it into the database.
-                            </Alert.Description>
-                        </Alert.Content>
-                    </Alert.Root>
-                )}
                 {spotify.state === "missing" && <Text>No Spotify token is stored. Reconnect to connect the account.</Text>}
 
                 {spotify.authorizedAt && spotify.expiresAt && (

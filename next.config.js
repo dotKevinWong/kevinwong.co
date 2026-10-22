@@ -12,9 +12,9 @@ const ADMIN_HEADERS = [
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  // The Spotify credentials (client_id, client_secret, refresh_token) are read from
-  // process.env at runtime by lib/spotify.js. Don't list them under `env` here: that
-  // inlines their values into the compiled output, client bundles included.
+  // The Spotify credentials (SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET) are read from
+  // process.env at runtime. Don't list them under `env` here: that inlines their
+  // values into the compiled output, client bundles included.
   async headers() {
     return [
       {

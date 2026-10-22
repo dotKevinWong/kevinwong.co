@@ -40,7 +40,6 @@ test("spotifyFlashMessage explains each reconnect result", () => {
 test("spotifyBadge labels each state", () => {
   assert.deepEqual(spotifyBadge("connected"), { label: "Connected", colorPalette: "green" });
   assert.deepEqual(spotifyBadge("dead"), { label: "Needs reconnect", colorPalette: "red" });
-  assert.deepEqual(spotifyBadge("env"), { label: "Using env var", colorPalette: "orange" });
   assert.deepEqual(spotifyBadge("missing"), { label: "Not connected", colorPalette: "gray" });
 });
 

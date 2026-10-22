@@ -137,22 +137,15 @@ test("(e3) a stored token Spotify rejected is never re-sent, even when markSpoti
   assert.equal(s.calls.token.length, 1);
 });
 
-test("(f) with no row the env refresh_token is used; once rejected it is never sent again", async (t) => {
-  t.mock.method(console, "error", () => {});
-  const s = setup({ row: null, env: { ...ENV, refresh_token: "env-rt" }, token: [tokenOk("AT1"), tokenError(400, "invalid_grant")], apiResponses: [api()] });
-  await s.client.getNowPlaying();
-  assert.equal(s.calls.token[0].form.get("refresh_token"), "env-rt");
-  s.at(3_540_000);
+test("(f) with no row the client is dead, even with env.refresh_token set, and Spotify is never called", async () => {
+  const s = setup({ row: null, env: { ...ENV, refresh_token: "env-rt" } }); // nothing queued: a token call fails the test
   await assert.rejects(s.client.getNowPlaying(), SpotifyReauthRequiredError);
-  assert.deepEqual(s.calls.dead, []); // an env token has no row to mark
-  s.at(3_600_000);
+  await assert.rejects(s.client.getNowPlaying(), SpotifyReauthRequiredError); // latched: no second read within 60 s
+  assert.equal(s.calls.reads, 1);
+  s.at(60_000);
   await assert.rejects(s.client.getNowPlaying(), SpotifyReauthRequiredError);
-  assert.equal(s.calls.reads, 3);
-  assert.equal(s.calls.token.length, 2);
-
-  const neither = setup({ row: null, env: ENV });
-  await assert.rejects(neither.client.getNowPlaying(), SpotifyReauthRequiredError);
-  assert.equal(neither.calls.token.length, 0);
+  assert.equal(s.calls.reads, 2);
+  assert.equal(s.calls.token.length, 0);
 });
 
 test("(f2) a row with no refresh token, or one another instance marked dead, sends nothing: no env fallback, no dead token", async () => {
@@ -247,13 +240,7 @@ test("(h2) a failed rotation write is logged without the token, and the request 
   assert.ok(!/rt-A|rt-B/.test(errors.mock.calls[0].arguments.join(" ")));
 });
 
-test("(h3) no rotation write for an env token or for the same token echoed back", async (t) => {
-  const warn = t.mock.method(console, "warn", () => {});
-  const fromEnv = setup({ row: null, env: { ...ENV, refresh_token: "env-rt" }, token: [tokenOk("AT1", { refresh_token: "env-rt-2" })], apiResponses: [api()] });
-  await fromEnv.client.getNowPlaying();
-  assert.deepEqual(fromEnv.calls.rotated, []);
-  assert.equal(warn.mock.callCount(), 1);
-  assert.ok(!warn.mock.calls[0].arguments.join(" ").includes("env-rt-2"));
+test("(h3) no rotation write for the same token echoed back", async () => {
   const echoed = setup({ row: live("rt-A"), token: [tokenOk("AT1", { refresh_token: "rt-A" })], apiResponses: [api()] });
   await echoed.client.getNowPlaying();
   assert.deepEqual(echoed.calls.rotated, []);
@@ -301,16 +288,15 @@ test("(j) other token errors throw a plain Error, are not latched, and mark noth
   }
 });
 
-test("(k) SPOTIFY_CLIENT_ID/SECRET win over client_id/client_secret in the Basic header", async () => {
+test("(k) only SPOTIFY_CLIENT_ID/SECRET reach the Basic header; the lowercase names are ignored", async () => {
   const both = setup({ row: live("rt-A"), env: { SPOTIFY_CLIENT_ID: "new-id", SPOTIFY_CLIENT_SECRET: "new-secret", client_id: "old-id", client_secret: "old-secret" }, token: [tokenOk("AT1")], apiResponses: [api()] });
   await both.client.getNowPlaying();
   assert.equal(both.calls.token[0].init.headers.Authorization, basic("new-id", "new-secret"));
-  const legacy = setup({ row: live("rt-A"), env: { client_id: "old-id", client_secret: "old-secret" }, token: [tokenOk("AT1")], apiResponses: [api()] });
-  await legacy.client.getNowPlaying();
-  assert.equal(legacy.calls.token[0].init.headers.Authorization, basic("old-id", "old-secret"));
-  const none = setup({ row: live("rt-A"), env: {} });
-  await assert.rejects(none.client.getNowPlaying(), { message: "Spotify client credentials are not set" });
-  assert.deepEqual([none.calls.reads, none.calls.token.length], [0, 0]);
+  for (const env of [{ client_id: "old-id", client_secret: "old-secret" }, {}]) {
+    const s = setup({ row: live("rt-A"), env });
+    await assert.rejects(s.client.getNowPlaying(), { message: "Spotify client credentials are not set" });
+    assert.deepEqual([s.calls.reads, s.calls.token.length], [0, 0]);
+  }
 });
 
 test("(l) reset() during a refresh: the stale result neither latches nor caches", async (t) => {

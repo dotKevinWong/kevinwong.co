@@ -1,4 +1,4 @@
-export type SpotifyState = "connected" | "dead" | "env" | "missing";
+export type SpotifyState = "connected" | "dead" | "missing";
 export type RunStatus = "running" | "ok" | "partial" | "skipped" | "failed" | "reauth_required" | "abandoned";
 export type Run = {
     id: number; trigger: "cron" | "panel" | "cli"; dryRun: boolean; status: RunStatus;

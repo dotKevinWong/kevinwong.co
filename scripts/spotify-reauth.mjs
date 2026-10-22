@@ -6,7 +6,7 @@
  *   npm run spotify:reauth                # approve in the browser, print the new token
  *   npm run spotify:reauth -- --save      # approve, check the scopes and the account,
  *                                         # then store it in integration_tokens
- *   npm run spotify:reauth -- --whoami    # print the current token's account; no browser
+ *   npm run spotify:reauth -- --whoami    # print the stored token's account; no browser
  *
  * Options go after the `--`. Without it npm keeps --save or --whoami for itself,
  * and the script runs as if it had no option: it opens the browser and prints
@@ -19,9 +19,11 @@
  *
  * --save stores the token only when Spotify granted every scope and the
  * approving account is the site owner's (lib/admin/owner.js); it never prints
- * the token. --whoami reads the database row first, else the refresh_token env
- * var. It writes nothing, except a rotated refresh token, which it stores by
- * compare-and-swap.
+ * the token. --whoami reads the stored row only. It writes nothing, except a
+ * rotated refresh token, which it stores by compare-and-swap.
+ *
+ * Every mode needs SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET, and --save and
+ * --whoami also need DATABASE_URL, from the environment, .env or .env.local.
  *
  * The browser modes require `http://127.0.0.1:8888/callback` in the app's
  * Redirect URIs at https://developer.spotify.com/dashboard (Spotify rejects
@@ -69,8 +71,7 @@ Usage: npm run spotify:reauth -- [option]
   (no option)  Approve in the browser and print the new refresh token
   --save       Approve in the browser, check the scopes and the account,
                then store the token in Postgres (integration_tokens)
-  --whoami     Print which Spotify account the current token belongs to
-               (database row first, else the refresh_token env var); no browser
+  --whoami     Print which Spotify account the stored token belongs to; no browser
   --help       Show this message
 `;
 
@@ -100,7 +101,7 @@ try {
 	({ clientId, clientSecret } = spotifyCredentials(process.env));
 } catch {
 	console.error(
-		"Missing SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET (or the older client_id / client_secret). " +
+		"Missing SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET. " +
 			`Set them in ${ENV_FILES.join(" or ")} (looked in ${process.cwd()}) or in the environment.`
 	);
 	process.exit(1);
@@ -165,61 +166,46 @@ const refreshAccessToken = async (refreshToken, { clientId, clientSecret }) => {
 	return { accessToken: body.access_token, refreshToken: body.refresh_token };
 };
 
-// --whoami: no server, no browser.
-//
-// Which token to check: the database row when DATABASE_URL is set and the row
-// has one, else the refresh_token env var. Production lacks sql/005 until the
-// rollout applies it, and until then the read fails with 42703 (undefined
-// column); that one error falls back to the env var, and any other fails.
+// --whoami: no server, no browser. It checks the token in the database row.
 const runWhoami = async () => {
-	let source; // { token, from: "database" | "env" }
-	if (process.env.DATABASE_URL) {
-		usedDb = true;
-		try {
-			const row = await readSpotifyRow();
-			if (row?.deadReason) {
-				await fail(
-					`The stored Spotify token was marked dead (${row.deadReason}). ` +
-						"Run `npm run spotify:reauth -- --save` or reconnect from /admin."
-				);
-			}
-			if (row?.refreshToken) source = { token: row.refreshToken, from: "database" };
-		} catch (error) {
-			if (error?.code !== "42703") await fail(`Could not read the Spotify row: ${redact(error?.message)}`);
-			console.log(
-				"integration_tokens has no Spotify columns yet (sql/005 is not applied); using the refresh_token env var."
-			);
-		}
-	} else {
-		console.log("DATABASE_URL is not set; using the refresh_token env var.");
+	requireEnv("DATABASE_URL", fileEnv);
+	usedDb = true;
+	let row;
+	try {
+		row = await readSpotifyRow();
+	} catch (error) {
+		await fail(`Could not read the Spotify row: ${redact(error?.message)}`);
 	}
-	source ??= process.env.refresh_token ? { token: process.env.refresh_token, from: "env" } : null;
-	if (!source) await fail("No Spotify row and no refresh_token env var: nothing to check.");
+	if (row?.deadReason) {
+		await fail(
+			`The stored Spotify token was marked dead (${row.deadReason}). ` +
+				"Run `npm run spotify:reauth -- --save` or reconnect from /admin."
+		);
+	}
+	if (!row?.refreshToken) {
+		await fail("No Spotify row: nothing to check. Reconnect from /admin or run `npm run spotify:reauth -- --save`.");
+	}
 
 	let refreshed;
 	try {
-		refreshed = await refreshAccessToken(source.token, { clientId, clientSecret });
+		refreshed = await refreshAccessToken(row.refreshToken, { clientId, clientSecret });
 	} catch (error) {
 		await fail(error.message);
 	}
 
 	// Spotify rotates the refresh token on some grants. The stored one is
 	// swapped only while the row still holds the token this check sent.
-	if (refreshed.refreshToken && refreshed.refreshToken !== source.token) {
-		if (source.from === "database") {
-			try {
-				const stored = await storeRotatedRefreshToken(source.token, refreshed.refreshToken);
-				console.log(
-					stored
-						? "Spotify rotated the refresh token; stored the new one."
-						: "Spotify rotated the refresh token, but the stored one had already changed."
-				);
-			} catch (error) {
-				console.error(`Spotify rotated the refresh token, but storing the new one failed: ${redact(error?.message)}`);
-				process.exitCode = 1;
-			}
-		} else {
-			console.log("Spotify rotated the refresh token held in the env var; the env copy may now be stale.");
+	if (refreshed.refreshToken && refreshed.refreshToken !== row.refreshToken) {
+		try {
+			const stored = await storeRotatedRefreshToken(row.refreshToken, refreshed.refreshToken);
+			console.log(
+				stored
+					? "Spotify rotated the refresh token; stored the new one."
+					: "Spotify rotated the refresh token, but the stored one had already changed."
+			);
+		} catch (error) {
+			console.error(`Spotify rotated the refresh token, but storing the new one failed: ${redact(error?.message)}`);
+			process.exitCode = 1;
 		}
 	}
 
@@ -230,7 +216,6 @@ const runWhoami = async () => {
 		await fail(`Could not read the Spotify account: ${error.message}`);
 	}
 
-	console.log(`Token source:       ${source.from === "database" ? "database row" : "refresh_token env var"}`);
 	console.log(`Spotify account id: ${profile.id}`);
 	console.log(`Display name:       ${profile.displayName ?? "(none)"}`);
 
@@ -267,9 +252,7 @@ const printToken = (tokens, missing) => {
 	console.log(`\nGranted scopes: ${tokens.scopes.join(" ")}`);
 	if (missing.length > 0) console.log(`Missing scopes: ${missing.join(" ")}`);
 	console.log(`Expires around: ${isoDate(expiry)} (estimated: ${AUTHORIZATION_LIFETIME_DAYS} days)\n`);
-	console.log(`Store it with \`npm run spotify:reauth -- --save\` next time, or reconnect at ${SITE_ORIGIN}/admin.`);
-	console.log("Until the database has a Spotify row, the site reads the `refresh_token` env var: set it in .env");
-	console.log("(and .env.local, which overrides .env) and in the Vercel project's env vars, then redeploy.\n");
+	console.log(`Store it with \`npm run spotify:reauth -- --save\` next time, or reconnect at ${SITE_ORIGIN}/admin.\n`);
 };
 
 // --save: the token is never printed, and nothing is written unless every

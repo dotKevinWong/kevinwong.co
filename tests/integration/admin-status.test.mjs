@@ -78,9 +78,9 @@ describe("buildAdminStatus", { skip: db.skip }, () => {
     assert.equal(s.state, "dead");
     assert.equal(s.deadReason, "invalid_grant");
   });
-  test("spotify: env when there is no row but env.refresh_token is set", async () => {
+  test("spotify: missing when there is no row, even with env.refresh_token set", async () => {
     assert.deepEqual((await status({ env: { refresh_token: SECRETS.envRefresh } })).spotify, {
-      state: "env", authorizedAt: null, expiresAt: null, daysLeft: null, accountMatches: null,
+      state: "missing", authorizedAt: null, expiresAt: null, daysLeft: null, accountMatches: null,
       scopes: null, missingScopes: null, deadReason: null });
   });
   test("spotify: missing when there is neither", async () => {
@@ -269,7 +269,7 @@ describe("buildAdminStatus", { skip: db.skip }, () => {
     const withRow = JSON.stringify(await buildAdminStatus({ db: spy, env, now: NOW }));
     await db.pool.query(`delete from integration_tokens where provider = 'spotify'`);
     const envState = JSON.stringify(await buildAdminStatus({ db: spy, env, now: NOW }));
-    assert.match(envState, /"state":"env"/);
+    assert.match(envState, /"state":"missing"/);
     for (const secret of Object.values(SECRETS)) {
       assert.ok(!withRow.includes(secret) && !envState.includes(secret), `leaked ${secret}`);
     }

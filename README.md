@@ -42,8 +42,7 @@ both, `.env.local` wins. Both files are git-ignored.
 
 | Variable | What it's for |
 | --- | --- |
-| `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | Spotify app credentials (now playing, top tracks), read on the server at runtime. Until the cleanup a week after the first reconnect (see [TODO.md](TODO.md)), the old lowercase `client_id` / `client_secret` still work as a fallback |
-| `refresh_token` | Spotify's refresh token, **only until Spotify is reconnected**: after that the token lives in Postgres and this is ignored (see *Spotify token*). Removed in the same cleanup |
+| `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | Spotify app credentials (now playing, top tracks), read on the server at runtime |
 | `GOODREADS_RSS_URL` | The Goodreads shelf feed behind /bookshelf. Optional: without it the page says the feed isn't configured. `GOODREADS_MAX_BOOKS` sets how many it returns by default (8) |
 | `DATABASE_URL` | Postgres (the pooled Neon URL): /snapshots, the Instagram sync and its run history, the Spotify token, and /admin's sign-in, sessions and activity log. Without it the Spotify widgets show their empty states |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob when running locally. In production the connected store supplies credentials |
@@ -53,7 +52,7 @@ both, `.env.local` wins. Both files are git-ignored.
 | `BETTER_AUTH_URL` | Production only (Vercel). Exactly `https://www.kevinwong.co`, with no trailing slash |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | Production only (Vercel). The GitHub OAuth App behind /admin's sign-in |
 
-The Instagram access token, and the Spotify refresh token once Spotify has been reconnected,
+The Instagram access token and the Spotify refresh token
 are deliberately not env vars. They live in Postgres in `integration_tokens`
 ([`sql/001`](sql/001_integration_tokens.sql), [`sql/005`](sql/005_integration_tokens_spotify.sql)),
 where the app can refresh, rotate or replace them without a redeploy.
@@ -259,16 +258,13 @@ access token does **not** extend that window. So Spotify has to be reconnected r
 **Where the token lives.** In Postgres, in the `spotify` row of `integration_tokens`
 ([`sql/005`](sql/005_integration_tokens_spotify.sql)), with the account it belongs to, the granted scopes and
 when it was approved. `expires_at` is the approval date plus 180 days, an estimate, because Spotify doesn't
-say. Until Spotify is reconnected for the first time there is no row, and [`lib/spotify.js`](lib/spotify.js)
-uses the `refresh_token` env var exactly as before. It falls back only when the row is missing: if the
-database can't be reached, the Spotify widgets show their empty states instead.
+say. With no row, or if the database can't be reached, the Spotify widgets show their empty states.
 
 **How the app uses it.** Each server instance caches the short-lived access token until a minute before it
 expires, and concurrent requests share one refresh. When the refresh token dies, Spotify answers
-`400 invalid_grant`, and the app stops calling Spotify and, once a `spotify` row exists, marks it dead
-(until the first reconnect, a failed env token has no row to mark). Instances look at the row again at most
-once a minute, so once the old token has died, a reconnect takes effect everywhere within a minute, with no
-redeploy (see *Reconnecting* for when it still works). If Spotify hands back
+`400 invalid_grant`, and the app stops calling Spotify and marks the row dead. Instances look at the row again
+at most once a minute, so once the old token has died, a reconnect takes effect everywhere within a minute,
+with no redeploy (see *Reconnecting* for when it still works). If Spotify hands back
 a new refresh token, it replaces the stored one only if the row still holds the token that instance used, so a
 slow instance can't overwrite a newer one.
 
@@ -289,13 +285,11 @@ keeps working throughout. The fallback is the script:
    It checks that all three scopes were granted and that the account is the site owner's, then writes the
    token to the database in `DATABASE_URL`. There is no env var to change and nothing to redeploy.
 
-`npm run spotify:reauth -- --whoami` prints which Spotify account the current token belongs to (the database
-row first, else the `refresh_token` env var), with no browser. It saves nothing, except a rotated refresh
-token, which it stores by compare-and-swap. With no option, the script prints the new refresh token instead of
-saving it, for the `refresh_token` fallback. Options go after `--`; npm keeps any that come before it. The
-script reads `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` from the environment, `.env` or `.env.local`,
-and falls back to `client_id` / `client_secret` until the cleanup a week after the first reconnect (see
-[TODO.md](TODO.md)).
+`npm run spotify:reauth -- --whoami` prints which Spotify account the stored token belongs to, with no
+browser. It saves nothing, except a rotated refresh token, which it stores by compare-and-swap. With no
+option, the script prints the new refresh token instead of saving it. Options go after `--`; npm keeps any
+that come before it. The script reads `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` from the environment,
+`.env` or `.env.local`.
 
 [spotify-blog]: https://developer.spotify.com/blog/2026-06-18-refresh-token-expiration
 

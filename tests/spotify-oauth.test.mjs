@@ -25,10 +25,11 @@ test("the admin redirect URI is the www callback", () => {
   assert.equal(SPOTIFY_ADMIN_REDIRECT_URI, "https://www.kevinwong.co/api/admin/spotify/callback");
 });
 
-test("spotifyCredentials prefers SPOTIFY_* and falls back to the lowercase names", () => {
+test("spotifyCredentials reads only SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET", () => {
   assert.deepEqual(spotifyCredentials({ SPOTIFY_CLIENT_ID: "new-id", SPOTIFY_CLIENT_SECRET: "new-secret", client_id: "old-id", client_secret: "old-secret" }), { clientId: "new-id", clientSecret: "new-secret" });
-  assert.deepEqual(spotifyCredentials({ client_id: "old-id", client_secret: "old-secret" }), { clientId: "old-id", clientSecret: "old-secret" });
-  assert.deepEqual(spotifyCredentials({ SPOTIFY_CLIENT_ID: "new-id", client_secret: "old-secret" }), { clientId: "new-id", clientSecret: "old-secret" });
+  for (const env of [{ client_id: "old-id", client_secret: "old-secret" }, { SPOTIFY_CLIENT_ID: "new-id", client_secret: "old-secret" }]) {
+    assert.throws(() => spotifyCredentials(env), { message: "Spotify client credentials are not set" });
+  }
 });
 
 test("spotifyCredentials throws when either is missing", () => {
