@@ -81,18 +81,6 @@ README's *Spotify token* section has the details). The current token was approve
 - [ ] **Update this section's dates** from the panel's new estimate, and set a reminder for about 5 months
   after the reconnect.
 
-### 🧹 Remove the Spotify env fallback (not before 2026-10-29)
-
-Spotify was reconnected from /admin on 2026-10-22, so its token now lives in Postgres. The code still
-falls back to the old `refresh_token` env var when there is no `spotify` row, and still accepts the
-lowercase `client_id` / `client_secret`. After a week with no trouble:
-
-- [ ] **Check the week went well.** /admin shows Spotify **Connected** with no dead reason, and Now Playing
-  works.
-- [ ] **Remove the fallbacks in code and deploy** (Task 19 of [the admin panel plan](docs/superpowers/plans/2026-10-16-admin-panel.md)).
-- [ ] **Delete `refresh_token`, `client_id` and `client_secret`** from the Vercel project (every
-  environment) and from `.env`, then redeploy, since a deployment keeps the env vars it was built with.
-
 ## 👀 Only if something happens
 
 - [ ] **Captions stop working.** *If every Instagram sync starts failing with error code
