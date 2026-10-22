@@ -186,14 +186,21 @@ All unused or oversized, found in the audit. Everything is in git history if nee
 - [ ] **TypeScript 7.** Next 16.3.6 builds with it, but `typescript-eslint` (via
   `eslint-config-next`) only supports `<6.1.0` (typescript-eslint#10940). Held at 6.0.3; once
   that's fixed, bumping `typescript` is the only change needed.
-- [ ] **sharp 0.35.5.** An RC is out; move to the stable release when it lands. Keep the
-  `^0.35.4` floor: 0.35.4 bundles libheif 1.23.2, which fixes a heap overflow on crafted
-  AVIF/HEIF files, and the Instagram sync runs sharp on downloaded images.
+- [ ] **braces and sprintf-js.** No release fixes GHSA-vfj7-8cjw-p6xm (braces, high) or
+  GHSA-hp3w-g68c-fv3c (sprintf-js, moderate), so `npm audit` still lists both. braces comes in
+  only through `eslint-config-next`, a dev tool. sprintf-js comes through `gray-matter` →
+  `js-yaml` 3 → `argparse` 1, which js-yaml loads only for its command-line tool, never from the
+  site, so `npm run audit:prod` passes. Update both once patched versions ship.
 - [ ] **Node 26.** Production runs Node 24 (`engines`, `.nvmrc`, `@types/node` all say 24).
   Move all three together once Node 26 is LTS and Vercel offers it.
 
 ### Code follow-ups
 
+- [ ] **Move `eslint-config-next` to 16.4.** It brings `eslint-plugin-react-hooks` 7.1, whose
+  `set-state-in-effect` rule flags the effects that reset state when props change in
+  [`components/NowPlaying.tsx`](components/NowPlaying.tsx) (the progress bar) and
+  [`components/PhotoPost.tsx`](components/PhotoPost.tsx) (the carousel). Held at 16.3.6, which
+  fixes no advisory either way, until those two effects are rewritten.
 - [ ] **Add a baseline migration for the /snapshots tables.** Nothing in `sql/` creates
   `instagram_posts`, `instagram_media` or the `media_kind` enum, and `003_asset_columns.sql`
   only alters `instagram_media`, so the README's "apply `sql/` in filename order" fails on an
