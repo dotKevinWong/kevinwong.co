@@ -5,7 +5,7 @@ import { testDb } from "../helpers/db.mjs";
 
 const db = testDb();
 const applySql = (file) => db.pool.query(readFileSync(new URL(`../../${file}`, import.meta.url), "utf8"));
-// [column, data_type, is_nullable] in table order, as Better Auth 1.7.10 defines them
+// [column, data_type, is_nullable] in table order, as Better Auth 1.7.12 defines them
 // (@better-auth/core getAuthTables: string -> text, boolean -> boolean, date -> timestamptz; required -> NOT NULL).
 const TEXT = "text";
 const BOOL = "boolean";
@@ -40,7 +40,7 @@ describe("sql/007_auth.sql", { skip: db.skip }, () => {
     await applySql("sql/007_auth.sql");
   });
 
-  test("007 creates exactly the columns Better Auth 1.7.10 reads and writes, with their types and nullability", async () => {
+  test("007 creates exactly the columns Better Auth 1.7.12 reads and writes, with their types and nullability", async () => {
     for (const [table, columns] of Object.entries(EXPECTED)) {
       const { rows } = await db.pool.query(
         `select column_name, data_type, is_nullable from information_schema.columns
