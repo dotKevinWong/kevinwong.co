@@ -41,6 +41,8 @@ test("spotifyBadge labels each state", () => {
   assert.deepEqual(spotifyBadge("connected"), { label: "Connected", colorPalette: "green" });
   assert.deepEqual(spotifyBadge("dead"), { label: "Needs reconnect", colorPalette: "red" });
   assert.deepEqual(spotifyBadge("missing"), { label: "Not connected", colorPalette: "gray" });
+  // The env state is gone, so it gets the unknown-state default (as runStatusBadge("mystery") does in the next test).
+  assert.deepEqual(spotifyBadge("env"), { label: "env", colorPalette: "gray" });
 });
 
 test("runStatusBadge colors every sync_runs status", () => {

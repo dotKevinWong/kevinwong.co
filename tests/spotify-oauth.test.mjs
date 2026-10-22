@@ -27,13 +27,15 @@ test("the admin redirect URI is the www callback", () => {
 
 test("spotifyCredentials reads only SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET", () => {
   assert.deepEqual(spotifyCredentials({ SPOTIFY_CLIENT_ID: "new-id", SPOTIFY_CLIENT_SECRET: "new-secret", client_id: "old-id", client_secret: "old-secret" }), { clientId: "new-id", clientSecret: "new-secret" });
-  for (const env of [{ client_id: "old-id", client_secret: "old-secret" }, { SPOTIFY_CLIENT_ID: "new-id", client_secret: "old-secret" }]) {
+  for (const env of [{ client_id: "old-id", client_secret: "old-secret" }, { SPOTIFY_CLIENT_ID: "new-id", client_secret: "old-secret" },
+    { client_id: "old-id", SPOTIFY_CLIENT_SECRET: "new-secret" }]) {
     assert.throws(() => spotifyCredentials(env), { message: "Spotify client credentials are not set" });
   }
 });
 
 test("spotifyCredentials throws when either is missing", () => {
-  for (const env of [{}, { SPOTIFY_CLIENT_ID: "id" }, { client_secret: "secret" }]) {
+  for (const env of [{}, { SPOTIFY_CLIENT_ID: "id" }, { client_secret: "secret" },
+    { SPOTIFY_CLIENT_ID: "", SPOTIFY_CLIENT_SECRET: "secret" }, { SPOTIFY_CLIENT_ID: "id", SPOTIFY_CLIENT_SECRET: "" }]) {
     assert.throws(() => spotifyCredentials(env), { message: "Spotify client credentials are not set" });
   }
 });
