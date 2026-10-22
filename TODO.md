@@ -167,16 +167,18 @@ All unused or oversized, found in the audit. Everything is in git history if nee
 
 ### Upgrades waiting on upstream
 
-- [ ] **ESLint 10.** `eslint-config-next` 16.3.6 still depends on `eslint-plugin-react` 7.x,
+- [ ] **ESLint 10.** `eslint-config-next` 16.4.2 still depends on `eslint-plugin-react` 7.x,
   which crashes on ESLint 10 (`contextOrFilename.getFilename is not a function`). Tracked in
   jsx-eslint/eslint-plugin-react#4018 and vercel/next.js#89764. Held at 9.39.5 until a
   compatible `eslint-config-next` ships.
 - [ ] **TypeScript 7.** Next 16.3.6 builds with it, but `typescript-eslint` (via
   `eslint-config-next`) only supports `<6.1.0` (typescript-eslint#10940). Held at 6.0.3; once
   that's fixed, bumping `typescript` is the only change needed.
-- [ ] **sharp 0.35.5.** An RC is out; move to the stable release when it lands. Keep the
-  `^0.35.4` floor: 0.35.4 bundles libheif 1.23.2, which fixes a heap overflow on crafted
-  AVIF/HEIF files, and the Instagram sync runs sharp on downloaded images.
+- [ ] **braces and sprintf-js.** No release fixes GHSA-vfj7-8cjw-p6xm (braces, high) or
+  GHSA-hp3w-g68c-fv3c (sprintf-js, moderate), so `npm audit` still lists both. braces comes in
+  only through `eslint-config-next`, a dev tool. sprintf-js comes through `gray-matter` →
+  `js-yaml` 3 → `argparse` 1, which js-yaml loads only for its command-line tool, never from the
+  site, so `npm run audit:prod` passes. Update both once patched versions ship.
 - [ ] **Node 26.** Production runs Node 24 (`engines`, `.nvmrc`, `@types/node` all say 24).
   Move all three together once Node 26 is LTS and Vercel offers it.
 

@@ -332,10 +332,11 @@ A refused run answers 429 with the wait in seconds, and the activity log records
 - **The per-request owner check.** Every admin page and API request reads the session, then checks that its
   user holds the GitHub account `1741711` in `auth_account`, so a session on its own isn't enough.
 
-Better Auth is pinned to exactly `1.7.10`, and so is its CLI, the `auth@1.7.10` devDependency. Upgrade the two
-together, and check the disabled paths in [`lib/auth.js`](lib/auth.js) against the new version's routes. Don't
-add Better Auth's organization plugin: advisory GHSA-fmh4-wcc4-5jm3 applies only with it. GitHub's Dependabot
-alerts are meant to flag new advisories in it; turning them on is in [TODO.md](TODO.md).
+Better Auth is pinned to exactly `1.7.12`, and so is its CLI, the `auth@1.7.12` devDependency. Upgrade the two
+together, and check the disabled paths in [`lib/auth.js`](lib/auth.js) against the new version's routes:
+`npm run test:integration` fails on any router endpoint that is neither served nor disabled. Don't add Better
+Auth's organization plugin: advisory GHSA-fmh4-wcc4-5jm3 applies only with it. GitHub's Dependabot alerts are
+meant to flag new advisories in it; turning them on is in [TODO.md](TODO.md).
 
 **One-time setup.**
 

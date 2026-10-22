@@ -143,6 +143,19 @@ describe("GitHub sign-in through Better Auth", { skip: db.skip }, () => {
     assert.equal(res.status, 404);
   });
 
+  // The README's upgrade check for the Better Auth pin: a new or renamed endpoint fails here until it is
+  // added to disabledPaths in lib/auth.js.
+  test("every router endpoint is served by the route's allowlist or disabled, and every listed path exists", () => {
+    const { api, options } = getAuth();
+    const routed = Object.values(api).filter((ep) => ep.path && !ep.options?.metadata?.SERVER_ONLY).map((ep) => ep.path);
+    const served = ["/sign-in/social", "/callback/:id", "/sign-out"];
+    // disabledPaths matches exactly, so it can't list a path with a parameter. This one needs an
+    // auth_verification row, which this configuration never writes.
+    const unlistable = ["/reset-password/:token"];
+    assert.deepEqual(routed.filter((p) => !served.includes(p) && !unlistable.includes(p) && !options.disabledPaths.includes(p)), []);
+    assert.deepEqual([...served, ...unlistable, ...options.disabledPaths].filter((p) => !routed.includes(p)), []);
+  });
+
   // D2: a session lasts 24 hours from sign-in, and reading it never extends it.
   test("an expired session is refused", async () => {
     const cookie = await ownerCookie();
