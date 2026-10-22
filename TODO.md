@@ -174,11 +174,14 @@ All unused or oversized, found in the audit. Everything is in git history if nee
 - [ ] **TypeScript 7.** Next 16.3.6 builds with it, but `typescript-eslint` (via
   `eslint-config-next`) only supports `<6.1.0` (typescript-eslint#10940). Held at 6.0.3; once
   that's fixed, bumping `typescript` is the only change needed.
-- [ ] **braces and sprintf-js.** No release fixes GHSA-vfj7-8cjw-p6xm (braces, high) or
-  GHSA-hp3w-g68c-fv3c (sprintf-js, moderate), so `npm audit` still lists both. braces comes in
-  only through `eslint-config-next`, a dev tool. sprintf-js comes through `gray-matter` →
-  `js-yaml` 3 → `argparse` 1, which js-yaml loads only for its command-line tool, never from the
-  site, so `npm run audit:prod` passes. Update both once patched versions ship.
+- [ ] **braces.** No release fixes GHSA-vfj7-8cjw-p6xm (high), so `npm audit` still lists it.
+  It comes in only through `eslint-config-next`, a dev tool, so `npm run audit:prod` passes.
+  Update it once a patched version ships.
+- [ ] **The `argparse` override.** No release fixes GHSA-hp3w-g68c-fv3c (sprintf-js, moderate),
+  which came in through `gray-matter` → `js-yaml` 3 → `argparse` 1. The `overrides` entry in
+  `package.json` gives that `js-yaml` `argparse` 2.0.1 instead, which has no dependencies. js-yaml
+  3 loads `argparse` only for its command-line tool, which nothing here runs. Remove the override
+  if `gray-matter` moves to `js-yaml` 4, or is replaced.
 - [ ] **Node 26.** Production runs Node 24 (`engines`, `.nvmrc`, `@types/node` all say 24).
   Move all three together once Node 26 is LTS and Vercel offers it.
 

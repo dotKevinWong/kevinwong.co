@@ -51,5 +51,12 @@
     "eslint": "9.39.5",
     "eslint-config-next": "16.4.2",
     "typescript": "6.0.3"
+  },
+  "overrides": {
+    "gray-matter": {
+      "js-yaml": {
+        "argparse": "2.0.1"
+      }
+    }
   }
 }
