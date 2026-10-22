@@ -179,7 +179,7 @@ All unused or oversized, found in the audit. Everything is in git history if nee
 
 ### Upgrades waiting on upstream
 
-- [ ] **ESLint 10.** `eslint-config-next` 16.3.6 still depends on `eslint-plugin-react` 7.x,
+- [ ] **ESLint 10.** `eslint-config-next` 16.4.2 still depends on `eslint-plugin-react` 7.x,
   which crashes on ESLint 10 (`contextOrFilename.getFilename is not a function`). Tracked in
   jsx-eslint/eslint-plugin-react#4018 and vercel/next.js#89764. Held at 9.39.5 until a
   compatible `eslint-config-next` ships.
@@ -196,11 +196,6 @@ All unused or oversized, found in the audit. Everything is in git history if nee
 
 ### Code follow-ups
 
-- [ ] **Move `eslint-config-next` to 16.4.** It brings `eslint-plugin-react-hooks` 7.1, whose
-  `set-state-in-effect` rule flags the effects that reset state when props change in
-  [`components/NowPlaying.tsx`](components/NowPlaying.tsx) (the progress bar) and
-  [`components/PhotoPost.tsx`](components/PhotoPost.tsx) (the carousel). Held at 16.3.6, which
-  fixes no advisory either way, until those two effects are rewritten.
 - [ ] **Add a baseline migration for the /snapshots tables.** Nothing in `sql/` creates
   `instagram_posts`, `instagram_media` or the `media_kind` enum, and `003_asset_columns.sql`
   only alters `instagram_media`, so the README's "apply `sql/` in filename order" fails on an

@@ -93,6 +93,9 @@ const formatDuration = (ms: number) => {
   return `${minutes}:${seconds}`;
 };
 
+const progressFrom = (data?: NowPlayingResponse) =>
+  data?.songUrl ? Math.max(0, data.currentDuration ?? 0) : 0;
+
 export const NowPlaying = ({ collapsed = false }: { collapsed?: boolean }) => {
   const { data: response, error } = useSWR<NowPlayingResponse>("/api/nowplaying", fetcher, {
     refreshInterval: 15000,
@@ -103,16 +106,23 @@ export const NowPlaying = ({ collapsed = false }: { collapsed?: boolean }) => {
   // SWR keeps the last good response when a poll fails. Showing it would leave
   // an old song "playing", progress bar ticking, so a failed poll reads as Not Playing.
   const data = error ? undefined : response;
-  const [displayProgressMs, setDisplayProgressMs] = React.useState(0);
+  const [displayProgressMs, setDisplayProgressMs] = React.useState(() => progressFrom(data));
 
-  React.useEffect(() => {
-    if (!data?.songUrl) {
-      setDisplayProgressMs(0);
-      return;
-    }
-
-    setDisplayProgressMs(Math.max(0, data.currentDuration ?? 0));
-  }, [data?.songUrl, data?.currentDuration, data?.title]);
+  // The poll the bar last synced to. A new song or position resets the bar here,
+  // during render, so it never shows the old value for a frame first.
+  const [syncedPoll, setSyncedPoll] = React.useState({
+    songUrl: data?.songUrl,
+    currentDuration: data?.currentDuration,
+    title: data?.title,
+  });
+  if (
+    syncedPoll.songUrl !== data?.songUrl ||
+    syncedPoll.currentDuration !== data?.currentDuration ||
+    syncedPoll.title !== data?.title
+  ) {
+    setSyncedPoll({ songUrl: data?.songUrl, currentDuration: data?.currentDuration, title: data?.title });
+    setDisplayProgressMs(progressFrom(data));
+  }
 
   React.useEffect(() => {
     if (!data?.songUrl || !data?.isPlaying) {

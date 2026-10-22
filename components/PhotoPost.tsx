@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import { AspectRatio, Badge, Box, Flex, IconButton, Image, Link, Spinner, Text, chakra } from "@chakra-ui/react"
 import { FiChevronLeft, FiChevronRight, FiExternalLink, FiInstagram } from "react-icons/fi"
 
@@ -52,12 +52,15 @@ export const PhotoPost = (props: PhotoPostProps) => {
     const [isLoadingMedia, setIsLoadingMedia] = useState(false)
     const pendingPositionsRef = useRef<Set<number>>(new Set())
 
-    useEffect(() => {
+    // Snapshots keys each card by post id, so a different post remounts it. This
+    // starts the carousel over when the same post is handed a new media array.
+    const [shownMedia, setShownMedia] = useState(props.media)
+    if (shownMedia !== props.media) {
+        setShownMedia(props.media)
         setMediaIndex(0)
         setMediaByPosition(buildMediaByPosition(props.media))
-        pendingPositionsRef.current.clear()
         setIsLoadingMedia(false)
-    }, [props.postId, props.media])
+    }
 
     const mediaCount = Math.max(props.mediaCount, props.media.length)
     const normalizedIndex = normalizeIndex(mediaIndex, mediaCount)
