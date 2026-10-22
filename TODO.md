@@ -69,22 +69,29 @@ string (the non-pooler Neon host), not the pooled `DATABASE_URL`.
   - Delete the *Moving from Cloudinary* and *Retiring Cloudinary* notes from the README, and
     the pointers to them in `sql/003_asset_columns.sql` and `lib/instagram-sync.js`.
 
-### 🎧 Reconnect Spotify (by ~2026-12-30)
+### 🎧 Reconnect Spotify (by ~2027-03-21)
 
 Spotify refresh tokens die six months after they're approved, and refreshing doesn't extend that (the
-README's *Spotify token* section has the details). The current token is assumed to have been minted on
-**2026-07-30**, alongside commit `8940403` ("Handle Spotify's six-month refresh token expiry"), so it dies
-around **2027-01-29**. It is still the `refresh_token` env var: Postgres has no `spotify` row until the first
-reconnect.
+README's *Spotify token* section has the details). The current token was approved from /admin on
+**2026-10-22**, so it dies around **2027-04-20**. The panel's Spotify card counts down to it.
 
-- [ ] **Reconnect from the admin panel** as soon as it ships: sign in at https://www.kevinwong.co/admin, then
-  Spotify card → **Reconnect** → approve on Spotify. That also moves the token into Postgres, and it takes
-  effect within a minute, with no redeploy. If the panel isn't live by ~2026-12-30, run
-  `npm run spotify:reauth -- --save` instead (README, *Spotify token*). Check that it worked:
-  `curl -s https://www.kevinwong.co/api/toptracks` should list tracks, not `{"is_working":false}`.
-- [ ] **Re-date this item, and date the env cleanup.** The panel shows the estimated expiry (approval + 180
-  days): set this heading's date to a month before it, and set a reminder. Add a *Remove the Spotify env
-  fallback* item dated a week after the reconnect (Task 19 of [the admin panel plan](docs/superpowers/plans/2026-10-16-admin-panel.md)).
+- [ ] **Reconnect from the admin panel:** https://www.kevinwong.co/admin → Spotify card → **Reconnect** →
+  approve on Spotify. It takes effect within a minute, with no redeploy. Fallback:
+  `npm run spotify:reauth -- --save` (README, *Spotify token*).
+- [ ] **Update this section's dates** from the panel's new estimate, and set a reminder for about 5 months
+  after the reconnect.
+
+### 🧹 Remove the Spotify env fallback (not before 2026-10-29)
+
+Spotify was reconnected from /admin on 2026-10-22, so its token now lives in Postgres. The code still
+falls back to the old `refresh_token` env var when there is no `spotify` row, and still accepts the
+lowercase `client_id` / `client_secret`. After a week with no trouble:
+
+- [ ] **Check the week went well.** /admin shows Spotify **Connected** with no dead reason, and Now Playing
+  works.
+- [ ] **Remove the fallbacks in code and deploy** (Task 19 of [the admin panel plan](docs/superpowers/plans/2026-10-16-admin-panel.md)).
+- [ ] **Delete `refresh_token`, `client_id` and `client_secret`** from the Vercel project (every
+  environment) and from `.env`, then redeploy, since a deployment keeps the env vars it was built with.
 
 ## 👀 Only if something happens
 
