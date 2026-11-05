@@ -282,7 +282,7 @@ keeps working throughout. The fallback is the script:
    ````sh
    npm run spotify:reauth -- --save
    ````
-   It checks that all three scopes were granted and that the account is the site owner's, then writes the
+   It checks that every required scope (`SPOTIFY_SCOPES` in `lib/spotify-token.js`) was granted and that the account is the site owner's, then writes the
    token to the database in `DATABASE_URL`. There is no env var to change and nothing to redeploy.
 
 `npm run spotify:reauth -- --whoami` prints which Spotify account the stored token belongs to, with no
@@ -483,21 +483,14 @@ npm run instagram:sync -- --probe-caption
    ````
    Don't keep `INSTAGRAM_ACCESS_TOKEN` in a `.env` file: the token lives in Postgres, and the
    script only reads it from the command line's environment.
-6. Reconcile the posts that came from the old data-export import. This is only needed for
-   rows imported from an Instagram "Download Your Information" ZIP, and it's already done here. The first
-   command is a dry run; the second applies it:
-   ````sh
-   npm run instagram:repair
-   npm run instagram:repair -- --apply
-   ````
-7. Dry-run the sync, then let it run for real:
+6. Dry-run the sync, then let it run for real:
    ````sh
    npm run instagram:sync -- --dry-run
    npm run instagram:sync
    ````
    The script rejects arguments it doesn't know. If the `--` is forgotten
    (`npm run instagram:sync --dry-run`), it still does a dry run and says so.
-8. After deploying, check the deployed function from outside. A dry run uploads nothing to
+7. After deploying, check the deployed function from outside. A dry run uploads nothing to
    Blob and writes nothing to the posts tables. Like every run, though, it refreshes the
    stored Instagram token when one is due, or marks it dead on a confirmed error `190`.
    Look for `"blob":"ok"` and `"resize":"ok (sharp …, libvips …)"`. `printf` is a shell builtin and curl
@@ -553,14 +546,17 @@ The media used to be mirrored to Cloudinary. On 2026-09-26:
   `-- --verify` passed: every object is present, sizes match, and videos serve 206.
 - The switch deploy made the read path prefer `asset_*`, falling back to `cloudinary_*`.
 
-New posts go straight to Blob. They are also mirrored into `cloudinary_*` until those columns
-are dropped, so an Instant Rollback to the pre-switch code still renders them.
+New posts go straight to Blob. Until 2026-11-05 they were also mirrored into `cloudinary_*`, so
+an Instant Rollback to the pre-switch code still rendered them. The copy script
+(`scripts/snapshots-blob-backfill.mjs`) was removed then and is still in git history.
 
 #### Retiring Cloudinary
 
-This is still to do, not before 2026-10-27. The ordered steps and their SQL are in
-[TODO.md](TODO.md). The column drop is deliberately **not** a file in `sql/`. Setup applies
-that folder in order, and running it early would break the old code.
+In progress. On 2026-11-05 production's `asset_*` columns became NOT NULL and `cloudinary_*`
+nullable (step 1), and the code stopped writing and reading `cloudinary_*` (step 2). The
+remaining steps and their SQL are in [TODO.md](TODO.md). The column drop is deliberately
+**not** a file in `sql/`. Setup applies that folder in order, and running it early would break
+older code.
 
 #### How duplicates are prevented
 
@@ -568,8 +564,8 @@ Posts are keyed by `source_key = ig:<shortcode>`, where the shortcode comes from
 permalink, so a post already in the table is recognised and skipped.
 
 The first 21 posts came from an Instagram "Download Your Information" ZIP. They were keyed
-by paths *inside that archive*, which the API can never match. `npm run instagram:repair`
-converted them to the same `ig:` form:
+by paths *inside that archive*, which the API can never match. A one-off script (`instagram-repair-source-keys.mjs`, removed
+in November 2026 and still in git history) converted them to the same `ig:` form:
 
 - Posts with a permalink used it directly.
 - The 18 without one were matched to their real post by timestamp (to within 5 seconds,
@@ -620,13 +616,16 @@ Every run, from the cron, `npm run instagram:sync` or the panel, adds a row to `
 `imported` and `uploads` are what the run would have done. Errors and the stored summary are redacted
 first. A row still `running` after 15 minutes, once the sync's lease has expired,
 belongs to a run that was killed; the next run marks it `abandoned`, keeping the uploads it recorded.
+A run renews its lease before each post, and only while the lease still holds its own value. If another run took
+the lease meanwhile (one post ran past the 10-minute lease), the first run stops at that point and is recorded
+`failed`, instead of taking the lease back, so two runs never upload at once.
 
 Real runs stop importing once the last 30 days of runs have uploaded 1,800 files, which leaves room under
 Blob's 2,000-a-month hard stop, and each run caps its uploads to what is left. The ceiling is slightly soft:
 the oldest missing post is always processed whole, so one carousel can take a run up to 19 past it. Each
 upload is added to its run's row as soon as it lands, so a run killed partway still counts what it uploaded,
 and a real run that can't write its row stands down without importing. Dry runs don't count, and neither do
-uploads by `npm run blog:image` or `npm run snapshots:blob`. The count is of uploads that completed. Blob also
+uploads by `npm run blog:image`. The count is of uploads that completed. Blob also
 meters the SDK's retries and puts cut off by a timeout, which is what the 200-file margin absorbs.
 
 When the ceiling stops `npm run instagram:sync`, its headline reads

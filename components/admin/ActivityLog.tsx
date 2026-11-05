@@ -24,7 +24,7 @@ export const ActivityLog = ({ activity, refusedSignIns }: {
         )}
         {activity.length === 0 ? <Text color="fg.muted">No activity yet.</Text> : (
             <Stack gap="3">
-                {activity.slice(0, 20).map((row) => (
+                {activity.map((row) => (
                     <Stack key={row.id} direction={{ base: "column", md: "row" }} gap={{ base: 0, md: 3 }}>
                         <Text color="fg.muted">{formatTimestamp(row.at)}</Text>
                         <Text fontWeight="medium">{activityLabel(row.event)}</Text>

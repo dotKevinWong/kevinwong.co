@@ -18,6 +18,7 @@
  */
 
 import pg from "pg";
+import { API_VERSION, GRAPH_HOST, STORE_TOKEN_SQL } from "../lib/instagram.js";
 import { loadEnvFiles, requireEnv } from "./load-env.mjs";
 
 const fileEnv = loadEnvFiles();
@@ -48,6 +49,9 @@ if (argToken && !process.env.INSTAGRAM_ACCESS_TOKEN) {
 const DATABASE_URL = requireEnv("DATABASE_URL", fileEnv);
 const SIXTY_DAYS_SECONDS = 60 * 24 * 60 * 60;
 
+// Its own pool rather than lib/db.js's getDbPool(): one connection, TLS verified
+// for every host (loopback included), and DATABASE_URL read from the env files
+// as well as the environment. Only the SQL and the Graph version are shared.
 const pool = new pg.Pool({
   connectionString: DATABASE_URL,
   ssl: { rejectUnauthorized: true },
@@ -62,7 +66,7 @@ const fail = async (message) => {
 
 async function validate(accessToken) {
   const res = await fetch(
-    `https://graph.instagram.com/v25.0/me?fields=id,username&access_token=${encodeURIComponent(accessToken)}`
+    `${GRAPH_HOST}/${API_VERSION}/me?fields=id,username&access_token=${encodeURIComponent(accessToken)}`
   );
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -77,7 +81,7 @@ async function validate(accessToken) {
 async function exchangeForLongLived(shortLived) {
   const clientSecret = requireEnv("INSTAGRAM_CLIENT_SECRET", fileEnv);
   const url =
-    "https://graph.instagram.com/access_token" +
+    `${GRAPH_HOST}/access_token` +
     `?grant_type=ig_exchange_token&client_secret=${encodeURIComponent(clientSecret)}` +
     `&access_token=${encodeURIComponent(shortLived)}`;
 
@@ -147,19 +151,7 @@ try {
     console.log(`Token is valid for @${me.username} (id ${me.id}).`);
 
     const expiresAt = new Date(Date.now() + expiresIn * 1000);
-    await pool.query(
-      `insert into integration_tokens
-         (provider, access_token, expires_at, refreshed_at, dead_reason, expires_at_is_assumed)
-       values ('instagram', $1, $2, now(), null, $3)
-       on conflict (provider) do update
-         set access_token          = excluded.access_token,
-             expires_at            = excluded.expires_at,
-             refreshed_at          = now(),
-             dead_reason           = null,
-             expires_at_is_assumed = excluded.expires_at_is_assumed,
-             updated_at            = now()`,
-      [accessToken, expiresAt, assumedExpiry]
-    );
+    await pool.query(STORE_TOKEN_SQL, ["instagram", accessToken, expiresAt, assumedExpiry]);
 
     console.log(`Stored. Expires ${expiresAt.toISOString()}.`);
     if (assumedExpiry) {

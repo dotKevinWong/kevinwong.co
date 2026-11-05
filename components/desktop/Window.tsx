@@ -1,5 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from "react";
 import styles from "./Desktop.module.css";
+import { toneClass } from "./apps";
 import { dockDropRect } from "./Dock";
 import { CloseGlyph, MinimizeGlyph, ZoomGlyph } from "./icons";
 import {
@@ -12,17 +13,16 @@ import {
   type Win,
   type WMAction,
 } from "./windowManager";
+import { cx } from "./util";
 
 type ResizeDir = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 const RESIZE_DIRS: ResizeDir[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
-
-const cx = (...classes: (string | false | undefined)[]) => classes.filter(Boolean).join(" ");
 
 /** A transform that maps `from` (the window's own rect) onto `to`, with a 0 0 origin. */
 const rectTransform = (from: DOMRect, to: RectLike) =>
   `translate(${to.left - from.left}px, ${to.top - from.top}px) scale(${to.width / from.width}, ${to.height / from.height})`;
 
-export const TrafficLights = ({
+const TrafficLights = ({
   title,
   floating,
   onClose,
@@ -63,7 +63,6 @@ export const Window = ({
   dispatch,
   animate,
   variant = "plain",
-  tone,
   minSize = { w: 360, h: 220 },
   children,
 }: {
@@ -85,7 +84,6 @@ export const Window = ({
    * marks its own draggable areas with `data-drag-region`.
    */
   variant?: "plain" | "unified" | "untitled";
-  tone?: "terminal" | "spotify";
   minSize?: { w: number; h: number };
   children: React.ReactNode;
 }) => {
@@ -238,8 +236,7 @@ export const Window = ({
         variant === "unified" && styles.windowVibrant,
         win.animateFrame && !live && styles.windowZooming,
         win.minimized && styles.windowHidden,
-        tone === "terminal" && styles.toneTerminal,
-        tone === "spotify" && styles.toneSpotify,
+        toneClass(win.app),
       )}
       style={{ left: frame.x, top: frame.y, width: frame.w, height: frame.h, zIndex }}
       onPointerDownCapture={() => {

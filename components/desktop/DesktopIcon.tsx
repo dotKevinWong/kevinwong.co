@@ -2,13 +2,12 @@ import React, { useRef, useState } from "react";
 import type { Project } from "../projects/data";
 import styles from "./Desktop.module.css";
 import { FolderGlyph } from "./icons";
+import { clamp } from "./util";
 
 const DRAG_THRESHOLD = 4;
 const DOUBLE_TAP_MS = 450;
-const ICON_W = 92; // .icon width
+const ICON_W = 92; // mirrors `.icon` width in Desktop.module.css
 const ICON_H = 100; // roughly .icon height with a one-line label
-
-const clampTo = (v: number, min: number, max: number) => Math.min(Math.max(v, min), Math.max(min, max));
 
 /**
  * A draggable folder on the desktop. Clicks and taps are recognised on pointer
@@ -65,8 +64,8 @@ export const DesktopIcon = ({
         onSelect();
       }
       setDropped({
-        x: clampTo(origin.x + dx, 0, (layer?.width ?? Infinity) - own.width),
-        y: clampTo(origin.y + dy, 0, (layer?.height ?? Infinity) - own.height),
+        x: clamp(origin.x + dx, 0, (layer?.width ?? Infinity) - own.width),
+        y: clamp(origin.y + dy, 0, (layer?.height ?? Infinity) - own.height),
       });
     };
     const end = (ev: PointerEvent) => {

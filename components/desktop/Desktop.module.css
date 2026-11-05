@@ -9,7 +9,7 @@
 .theme {
   --mac-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", Roboto, sans-serif;
   --mac-mono: "SF Mono", SFMono-Regular, ui-monospace, Menlo, Consolas, monospace;
-  --mac-menubar-h: 24px;
+  --mac-menubar-h: 24px; /* Mirrored by MENUBAR_H in windowManager.ts: change both together. */
 
   --mac-accent: #007aff;
   --mac-focus: rgba(0, 122, 255, 0.5);
@@ -196,6 +196,7 @@
   pointer-events: none;
 }
 
+/* width is mirrored by ICON_W in DesktopIcon.tsx: change both together. */
 .icon {
   position: absolute;
   width: 92px;
@@ -1022,6 +1023,8 @@
 /* ─── Dock ─────────────────────────────────────────────────── */
 
 .dock {
+  /* Mirrored in Dock.tsx: ICON = 50, SLOT = ICON + 4 (the 2px side margins of
+     .dockItem), PADDING = 5 (the side padding below). Change both together. */
   --dock-icon: 50px;
 
   position: absolute;

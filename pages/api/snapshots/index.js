@@ -1,13 +1,5 @@
 import { getDbPool } from "../../../lib/db";
-import { UUID_REGEX, clampInt, normalizeMedia } from "../../../lib/snapshots";
-import { rateLimit } from "../../../lib/rate-limit";
-
-// Kept short because the daily Instagram cron writes to these tables. At the
-// previous 30-day s-maxage the edge kept serving a pre-sync body until the next
-// production deploy, so new posts were invisible however often the cron ran.
-// stale-while-revalidate keeps responses instant while the edge refreshes.
-const CACHE_HEADER =
-  "public, s-maxage=300, stale-while-revalidate=86400";
+import { SNAPSHOTS_CACHE_HEADER, UUID_REGEX, clampInt, rejectUnlessGet, toSnapshotPost } from "../../../lib/snapshots";
 
 function encodeCursor(cursor) {
   return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
@@ -48,14 +40,7 @@ function decodeCursor(rawCursor) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== "GET") {
-    res.setHeader("Allow", ["GET"]);
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
-  if (rateLimit(req)) {
-    return res.status(429).json({ error: "Too many requests" });
-  }
+  if (rejectUnlessGet(req, res)) return;
 
   const limit = clampInt(req.query.limit, { min: 3, max: 12, fallback: 6 });
   const cursor = decodeCursor(req.query.cursor);
@@ -98,17 +83,15 @@ export default async function handler(req, res) {
                   'id', m.id,
                   'position', m.position,
                   'kind', m.kind,
-                  -- asset_* is the Vercel Blob copy; cloudinary_* is the
-                  -- fallback while rows are still being moved across.
-                  'url', coalesce(m.asset_url, m.cloudinary_url),
-                  'publicId', coalesce(m.asset_pathname, m.cloudinary_public_id),
-                  'width', coalesce(m.asset_width, m.cloudinary_width),
-                  'height', coalesce(m.asset_height, m.cloudinary_height)
+                  'url', m.asset_url,
+                  'publicId', m.asset_pathname,
+                  'width', m.asset_width,
+                  'height', m.asset_height
                 )
                 order by m.position asc
-              ) filter (where m.position = 0),
+              ),
               '[]'::json
-            ) as media
+            ) as slides
           from instagram_media m
           where m.post_id = any($1::uuid[])
           group by m.post_id
@@ -117,32 +100,21 @@ export default async function handler(req, res) {
       );
 
       mediaResult.rows.forEach((row) => {
-        mediaByPostId.set(row.postId, {
-          mediaCount: Number(row.mediaCount || 0),
-          media: normalizeMedia(row.media),
-        });
+        mediaByPostId.set(row.postId, row);
       });
     }
 
-    const posts = pageRows.map((row) => {
-      const mediaPayload = mediaByPostId.get(row.id) || { mediaCount: 0, media: [] };
-
-      return {
-        id: row.id,
-        caption: row.caption || "",
-        instagramUrl: row.instagramUrl,
-        postedAt: row.postedAt ? new Date(row.postedAt).toISOString() : null,
-        mediaCount: mediaPayload.mediaCount,
-        media: mediaPayload.media,
-      };
-    });
+    // Every slide comes with the list, so the carousel never waits on
+    // [postId]/media. "media" stays slide 0 only, as before, for bundles that
+    // were built against that shape.
+    const posts = pageRows.map((row) => toSnapshotPost(row, mediaByPostId.get(row.id)));
 
     const lastPost = posts[posts.length - 1];
     const nextCursor = hasMore && lastPost
       ? encodeCursor({ id: lastPost.id, postedAt: lastPost.postedAt })
       : null;
 
-    res.setHeader("Cache-Control", CACHE_HEADER);
+    res.setHeader("Cache-Control", SNAPSHOTS_CACHE_HEADER);
     return res.status(200).json({
       posts,
       pagination: {

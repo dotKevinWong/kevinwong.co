@@ -1,23 +1,8 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import useSWR from "swr";
-import fetcher from "../../lib/fetcher";
-
-/** Matches a media query. Reports `serverValue` during SSR and hydration. */
-export const useMediaQuery = (query: string, serverValue = false) => {
-  const subscribe = useCallback(
-    (onChange: () => void) => {
-      const mql = window.matchMedia(query);
-      mql.addEventListener("change", onChange);
-      return () => mql.removeEventListener("change", onChange);
-    },
-    [query],
-  );
-  return useSyncExternalStore(
-    subscribe,
-    () => window.matchMedia(query).matches,
-    () => serverValue,
-  );
-};
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
+import { useRouter } from "next/router";
+import { useMediaQuery } from "../hooks";
+import { APP_IDS, type AppId } from "./apps";
+import { isVisible, type WMState } from "./windowManager";
 
 export const useReducedMotion = () => useMediaQuery("(prefers-reduced-motion: reduce)");
 
@@ -47,60 +32,103 @@ export const useMinuteClock = () => {
   return minute === null ? null : new Date(minute * 60_000);
 };
 
-export type NowPlayingData = {
-  album?: string;
-  /** null when the track has no album art. */
-  albumImageUrl?: string | null;
-  albumUrl?: string;
-  artist?: string;
-  artistUrl?: string;
-  isPlaying?: boolean;
-  songUrl?: string;
-  title?: string;
-  currentDuration?: number;
-  totalDuration?: number;
+const TIP_KEY = "projects:tip-dismissed";
+
+const readTipDismissed = () => {
+  try {
+    return localStorage.getItem(TIP_KEY) === "1";
+  } catch {
+    return false;
+  }
 };
 
-export const formatDuration = (ms: number) => {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+/** Tip banner: shown once a moment after load until it's dismissed or a folder is opened. */
+export const useTipBanner = () => {
+  const [tip, setTip] = useState<"hidden" | "shown" | "done">("hidden");
+
+  useEffect(() => {
+    const show = setTimeout(() => setTip(readTipDismissed() ? "done" : "shown"), 800);
+    const hide = setTimeout(() => setTip((t) => (t === "shown" ? "done" : t)), 15000);
+    return () => {
+      clearTimeout(show);
+      clearTimeout(hide);
+    };
+  }, []);
+
+  const dismissTip = useCallback(() => {
+    setTip("done");
+    try {
+      localStorage.setItem(TIP_KEY, "1");
+    } catch {
+      // Private mode or blocked storage: the tip just shows again next visit.
+    }
+  }, []);
+
+  return { tip, dismissTip };
 };
 
 /**
- * Spotify now-playing state with a progress value that ticks between polls.
- * `poll` says whether this caller refetches every 15s; either way SWR still
- * fetches on mount and when the tab regains focus.
+ * The full-screen app on small screens. It lives in the URL (?app=terminal) so
+ * the browser's back button closes it.
  */
-export const useNowPlaying = ({ poll }: { poll: boolean }) => {
-  // Same key and fetcher as the sidebar's NowPlaying, so they share one cache
-  // entry. SWR runs a timer for every hook that sets refreshInterval, so only one
-  // caller polls at a time. The Spotify window is only on screen from 64em up,
-  // where the sidebar's widget already polls, so it passes false (and stays quiet
-  // while parked below 64em). The full-screen app only mounts below 64em, where
-  // the Sidebar holds its requests while PageShell hides it, so it passes true.
-  const { data: response, error } = useSWR<NowPlayingData>("/api/nowplaying", fetcher, {
-    refreshInterval: poll ? 15000 : 0,
-    dedupingInterval: 1000,
-  });
-  // As in the sidebar: SWR keeps the last good response when a poll fails, so a
-  // failed poll reads as Not Playing rather than an old song still ticking along.
-  const data = error ? undefined : response;
-  const hasTrack = !!data?.songUrl;
-  const isPlaying = hasTrack && !!data?.isPlaying;
+export const useAppScreenRoute = (windowed: boolean) => {
+  const router = useRouter();
+  const queryApp = router.query.app;
+  const screenApp = !windowed && APP_IDS.includes(queryApp as AppId) ? (queryApp as AppId) : null;
+  const pushedScreen = useRef(false);
 
-  // Time elapsed since `data` last changed; reset whenever a new response lands.
-  const [clock, setClock] = useState({ data, elapsed: 0 });
-  if (clock.data !== data) setClock({ data, elapsed: 0 });
+  const openScreen = (app: AppId) => {
+    pushedScreen.current = true;
+    router.push({ pathname: router.pathname, query: { app } }, undefined, { shallow: true, scroll: false });
+  };
 
+  const closeScreen = () => {
+    if (pushedScreen.current) router.back();
+    else router.replace({ pathname: router.pathname }, undefined, { shallow: true, scroll: false });
+  };
+
+  return { screenApp, openScreen, closeScreen };
+};
+
+/**
+ * Focuses a window (or the desktop) that isn't otherwise focusable, only until
+ * focus moves on or the pointer goes down inside it. Left focusable, a click on
+ * its content would focus the whole window, and the keyboard would scroll from
+ * there instead of the list under the pointer (and ring the window).
+ */
+const handOffFocus = (el: HTMLElement) => {
+  const release = () => {
+    el.removeEventListener("blur", release);
+    el.removeEventListener("pointerdown", release, true);
+    el.removeAttribute("tabindex");
+    delete el.dataset.focusHandoff;
+  };
+  el.tabIndex = -1;
+  el.dataset.focusHandoff = "";
+  el.focus({ preventScroll: true });
+  if (document.activeElement !== el) return release();
+  el.addEventListener("blur", release);
+  el.addEventListener("pointerdown", release, true);
+};
+
+/**
+ * When the key window changes because the focused control went away (its
+ * window closed or minimized, or its Dock preview was restored), focus moves
+ * to the window now in front, or to the desktop, instead of dropping to <body>.
+ */
+export const useKeyWindowFocus = (wm: WMState, rootRef: RefObject<HTMLElement | null>) => {
+  const lastActive = useRef(wm.active);
   useEffect(() => {
-    if (!isPlaying) return;
-    const id = setInterval(() => setClock((c) => ({ ...c, elapsed: c.elapsed + 1000 })), 1000);
-    return () => clearInterval(id);
-  }, [isPlaying]);
-
-  const total = Math.max(0, data?.totalDuration ?? 0);
-  const raw = Math.max(0, data?.currentDuration ?? 0) + (isPlaying ? clock.elapsed : 0);
-  const current = total > 0 ? Math.min(raw, total) : raw;
-
-  return { data, hasTrack, isPlaying, current, total, pct: total > 0 ? (current / total) * 100 : 0 };
+    const prev = lastActive.current;
+    lastActive.current = wm.active;
+    if (prev === wm.active) return;
+    const focused = document.activeElement;
+    const holder = focused?.closest<HTMLElement>("[data-window-id]")?.dataset.windowId;
+    const stranded =
+      !focused || focused === document.body || (holder !== undefined && !wm.wins.some((w) => w.id === holder && isVisible(w)));
+    if (!stranded) return;
+    const next = wm.active ? rootRef.current?.querySelector<HTMLElement>(`[data-window-id="${CSS.escape(wm.active)}"]`) : null;
+    const target = next ?? rootRef.current;
+    if (target) handOffFocus(target);
+  }, [wm.active, wm.wins, rootRef]);
 };

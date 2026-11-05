@@ -1,10 +1,14 @@
 import type { ProjectId } from "../projects/data";
+import type { AppId } from "./apps";
+import { clamp } from "./util";
 
+export type { AppId };
+
+/** Mirrors `--mac-menubar-h` in Desktop.module.css; change both together. */
 export const MENUBAR_H = 24;
 /** Space kept clear above the bottom edge for the Dock when zooming windows. */
-export const DOCK_RESERVE = 78;
+const DOCK_RESERVE = 78;
 
-export type AppId = "finder" | "spotify" | "terminal";
 export type FinderLocation = "root" | ProjectId;
 export type WindowPhase = "opening" | "open" | "minimizing" | "restoring" | "closing";
 
@@ -71,7 +75,6 @@ export type WMAction =
 
 export const initialWMState: WMState = { wins: [], order: [], active: null, seq: 1 };
 
-const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, min), Math.max(min, max));
 
 /** Keep at least part of the title bar reachable: below the menu bar and on screen. */
 export const clampFrame = (f: Frame, b: Bounds): Frame => {

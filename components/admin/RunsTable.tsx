@@ -19,7 +19,7 @@ export const RunsTable = ({ runs }: { runs: Run[] }) => (
                         </Table.Row>
                     </Table.Header>
                     <Table.Body>
-                        {runs.slice(0, 20).map((run) => {
+                        {runs.map((run) => {
                             const badge = runStatusBadge(run.status);
                             return (
                                 <Table.Row key={run.id} css={inherit}>

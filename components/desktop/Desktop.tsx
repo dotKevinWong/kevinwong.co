@@ -1,13 +1,15 @@
 import { useRouter } from "next/router";
-import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
+import { useLayoutEffect, useReducer, useRef, useState } from "react";
 import type { MacOSRelease } from "../../lib/macos";
 import { PROJECTS, getProject, type ProjectId } from "../projects/data";
 import { AppScreen } from "./AppScreen";
+import { APPS, type AppId } from "./apps";
 import styles from "./Desktop.module.css";
 import { DesktopIcon } from "./DesktopIcon";
-import { APP_ICONS, Dock, dockPreviewRect, type DockThumb } from "./Dock";
+import { Dock, dockPreviewRect, type DockThumb } from "./Dock";
 import { FinderApp, locationTitle } from "./FinderApp";
-import { useMediaQuery, useReducedMotion } from "./hooks";
+import { useMediaQuery } from "../hooks";
+import { useAppScreenRoute, useKeyWindowFocus, useReducedMotion, useTipBanner } from "./hooks";
 import { MenuBar } from "./MenuBar";
 import { Notice } from "./Notice";
 import { SpotifyApp } from "./SpotifyApp";
@@ -19,46 +21,13 @@ import {
   isVisible,
   wmReducer,
   zoomFrame,
-  type AppId,
   type Bounds,
   type RectLike,
   type Win,
 } from "./windowManager";
 
-const TIP_KEY = "projects:tip-dismissed";
-const APP_IDS: AppId[] = ["finder", "spotify", "terminal"];
-
-const readTipDismissed = () => {
-  try {
-    return localStorage.getItem(TIP_KEY) === "1";
-  } catch {
-    return false;
-  }
-};
-
 const windowTitle = (win: Win) =>
-  win.app === "finder" ? locationTitle(win.history[win.index]) : win.app === "terminal" ? TERMINAL_TITLE : "Spotify";
-
-/**
- * Focuses a window (or the desktop) that isn't otherwise focusable, only until
- * focus moves on or the pointer goes down inside it. Left focusable, a click on
- * its content would focus the whole window, and the keyboard would scroll from
- * there instead of the list under the pointer (and ring the window).
- */
-const handOffFocus = (el: HTMLElement) => {
-  const release = () => {
-    el.removeEventListener("blur", release);
-    el.removeEventListener("pointerdown", release, true);
-    el.removeAttribute("tabindex");
-    delete el.dataset.focusHandoff;
-  };
-  el.tabIndex = -1;
-  el.dataset.focusHandoff = "";
-  el.focus({ preventScroll: true });
-  if (document.activeElement !== el) return release();
-  el.addEventListener("blur", release);
-  el.addEventListener("pointerdown", release, true);
-};
+  win.app === "finder" ? locationTitle(win.history[win.index]) : win.app === "terminal" ? TERMINAL_TITLE : APPS.spotify.name;
 
 /**
  * The Projects page as a macOS desktop. On large screens folders open in
@@ -76,7 +45,6 @@ export const Desktop = ({ macos }: { macos: MacOSRelease }) => {
   const [wm, dispatch] = useReducer(wmReducer, initialWMState);
   const [selected, setSelected] = useState<ProjectId | null>(null);
   const [bouncing, setBouncing] = useState<AppId | null>(null);
-  const [tip, setTip] = useState<"hidden" | "shown" | "done">("hidden");
 
   // Track the desktop's size (it changes with the window and the sidebar) and
   // pull windows back into view when it shrinks.
@@ -92,46 +60,13 @@ export const Desktop = ({ macos }: { macos: MacOSRelease }) => {
     return () => observer.disconnect();
   }, []);
 
-  // Tip banner: shown once a moment after load until it's dismissed or a folder is opened.
-  useEffect(() => {
-    const show = setTimeout(() => setTip(readTipDismissed() ? "done" : "shown"), 800);
-    const hide = setTimeout(() => setTip((t) => (t === "shown" ? "done" : t)), 15000);
-    return () => {
-      clearTimeout(show);
-      clearTimeout(hide);
-    };
-  }, []);
-
-  const dismissTip = useCallback(() => {
-    setTip("done");
-    try {
-      localStorage.setItem(TIP_KEY, "1");
-    } catch {
-      // Private mode or blocked storage: the tip just shows again next visit.
-    }
-  }, []);
+  const { tip, dismissTip } = useTipBanner();
 
   /* ─── Windows (large screens) ─── */
 
   const ordered = wm.order.map((id) => wm.wins.find((w) => w.id === id)!);
 
-  // When the key window changes because the focused control went away (its
-  // window closed or minimized, or its Dock preview was restored), focus moves
-  // to the window now in front, or to the desktop, instead of dropping to <body>.
-  const lastActive = useRef(wm.active);
-  useEffect(() => {
-    const prev = lastActive.current;
-    lastActive.current = wm.active;
-    if (prev === wm.active) return;
-    const focused = document.activeElement;
-    const holder = focused?.closest<HTMLElement>("[data-window-id]")?.dataset.windowId;
-    const stranded =
-      !focused || focused === document.body || (holder !== undefined && !wm.wins.some((w) => w.id === holder && isVisible(w)));
-    if (!stranded) return;
-    const next = wm.active ? rootRef.current?.querySelector<HTMLElement>(`[data-window-id="${CSS.escape(wm.active)}"]`) : null;
-    const target = next ?? rootRef.current;
-    if (target) handOffFocus(target);
-  }, [wm.active, wm.wins]);
+  useKeyWindowFocus(wm, rootRef);
 
   const openWindow = (app: AppId, location?: ProjectId) => {
     if (!bounds) return;
@@ -168,20 +103,7 @@ export const Desktop = ({ macos }: { macos: MacOSRelease }) => {
 
   /* ─── Full-screen apps (small screens) ─── */
 
-  // The open app lives in the URL (?app=terminal) so the browser's back button closes it.
-  const queryApp = router.query.app;
-  const screenApp = !windowed && APP_IDS.includes(queryApp as AppId) ? (queryApp as AppId) : null;
-  const pushedScreen = useRef(false);
-
-  const openScreen = (app: AppId) => {
-    pushedScreen.current = true;
-    router.push({ pathname: router.pathname, query: { app } }, undefined, { shallow: true, scroll: false });
-  };
-
-  const closeScreen = () => {
-    if (pushedScreen.current) router.back();
-    else router.replace({ pathname: router.pathname }, undefined, { shallow: true, scroll: false });
-  };
+  const { screenApp, openScreen, closeScreen } = useAppScreenRoute(windowed);
 
   /* ─── Render ─── */
 
@@ -257,13 +179,13 @@ export const Desktop = ({ macos }: { macos: MacOSRelease }) => {
             }
             if (win.app === "spotify") {
               return (
-                <Window key={win.id} {...common} variant="untitled" tone="spotify" minSize={{ w: 380, h: 300 }}>
+                <Window key={win.id} {...common} variant="untitled" minSize={{ w: 380, h: 300 }}>
                   <SpotifyApp paused={win.minimized || !windowed} />
                 </Window>
               );
             }
             return (
-              <Window key={win.id} {...common} tone="terminal">
+              <Window key={win.id} {...common}>
                 <TerminalApp macos={macos} />
               </Window>
             );
@@ -284,7 +206,7 @@ export const Desktop = ({ macos }: { macos: MacOSRelease }) => {
       {tip === "shown" && (
         <Notice
           title="Finder"
-          icon={APP_ICONS.finder.icon}
+          icon={APPS.finder.icon}
           body={windowed ? "Double-click a folder to open a project." : "Tap a folder to open a project."}
           onDismiss={dismissTip}
         />

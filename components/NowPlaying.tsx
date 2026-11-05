@@ -9,10 +9,9 @@ import {
   Image,
 } from "@chakra-ui/react";
 import * as React from 'react'
-import useSWR from "swr";
-import fetcher from "../lib/fetcher";
 import { FiExternalLink, FiMusic } from "react-icons/fi";
 import { Tooltip } from "./ui/tooltip";
+import { formatDuration, useNowPlaying } from "./hooks";
 
 const marqueeStyleId = "marquee-keyframes";
 const ensureMarqueeStyle = () => {
@@ -30,7 +29,9 @@ const ensureMarqueeStyle = () => {
   document.head.appendChild(style);
 };
 
-const MarqueeText = ({ children, href }: { children: React.ReactNode; href?: string }) => {
+// measureKey: a stable value to re-measure on. The title passes a fresh children array on every
+// render (text + icon), so without it the marquee would re-measure on every 1 s progress tick.
+const MarqueeText = ({ children, href, measureKey }: { children: React.ReactNode; href?: string; measureKey?: string }) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [shouldScroll, setShouldScroll] = React.useState(false);
   const [offset, setOffset] = React.useState(0);
@@ -39,6 +40,7 @@ const MarqueeText = ({ children, href }: { children: React.ReactNode; href?: str
     ensureMarqueeStyle();
   }, []);
 
+  const measureDep = measureKey ?? children;
   React.useEffect(() => {
     const check = () => {
       if (containerRef.current) {
@@ -51,7 +53,7 @@ const MarqueeText = ({ children, href }: { children: React.ReactNode; href?: str
     const timer = setTimeout(check, 100);
     window.addEventListener("resize", check);
     return () => { clearTimeout(timer); window.removeEventListener("resize", check); };
-  }, [children]);
+  }, [measureDep]);
 
   return (
     <div ref={containerRef} style={{ overflow: "hidden", whiteSpace: "nowrap", maxWidth: "100%" }}>
@@ -72,80 +74,14 @@ const MarqueeText = ({ children, href }: { children: React.ReactNode; href?: str
   );
 };
 
-type NowPlayingResponse = {
-  album?: string;
-  albumImageUrl?: string | null;
-  artist?: string;
-  artistUrl?: string;
-  isPlaying?: boolean;
-  songUrl?: string;
-  albumUrl?: string;
-  title?: string;
-  currentDuration?: number;
-  totalDuration?: number;
-};
-
-const formatDuration = (ms: number) => {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = String(totalSeconds % 60).padStart(2, "0");
-
-  return `${minutes}:${seconds}`;
-};
-
-const progressFrom = (data?: NowPlayingResponse) =>
-  data?.songUrl ? Math.max(0, data.currentDuration ?? 0) : 0;
-
 export const NowPlaying = ({ collapsed = false }: { collapsed?: boolean }) => {
-  const { data: response, error } = useSWR<NowPlayingResponse>("/api/nowplaying", fetcher, {
-    refreshInterval: 15000,
-    revalidateOnFocus: true,
-    revalidateOnReconnect: true,
-    dedupingInterval: 1000,
+  // The bar restarts only when the song, its position or its title changes, not
+  // on every poll, so a poll that returns the same state doesn't make it jump.
+  const { data, current: currentDuration, total: totalDuration, pct } = useNowPlaying({
+    poll: true,
+    resetOnChangeOf: "track",
   });
-  // SWR keeps the last good response when a poll fails. Showing it would leave
-  // an old song "playing", progress bar ticking, so a failed poll reads as Not Playing.
-  const data = error ? undefined : response;
-  const [displayProgressMs, setDisplayProgressMs] = React.useState(() => progressFrom(data));
-
-  // The poll the bar last synced to. A new song or position resets the bar here,
-  // during render, so it never shows the old value for a frame first.
-  const [syncedPoll, setSyncedPoll] = React.useState({
-    songUrl: data?.songUrl,
-    currentDuration: data?.currentDuration,
-    title: data?.title,
-  });
-  if (
-    syncedPoll.songUrl !== data?.songUrl ||
-    syncedPoll.currentDuration !== data?.currentDuration ||
-    syncedPoll.title !== data?.title
-  ) {
-    setSyncedPoll({ songUrl: data?.songUrl, currentDuration: data?.currentDuration, title: data?.title });
-    setDisplayProgressMs(progressFrom(data));
-  }
-
-  React.useEffect(() => {
-    if (!data?.songUrl || !data?.isPlaying) {
-      return;
-    }
-
-    const totalDuration = Math.max(0, data.totalDuration ?? 0);
-    const intervalId = window.setInterval(() => {
-      setDisplayProgressMs((previous) => {
-        if (totalDuration <= 0) {
-          return previous + 1000;
-        }
-
-        return Math.min(previous + 1000, totalDuration);
-      });
-    }, 1000);
-
-    return () => window.clearInterval(intervalId);
-  }, [data?.songUrl, data?.isPlaying, data?.totalDuration]);
-
-  const totalDuration = Math.max(0, data?.totalDuration ?? 0);
-  const currentDuration = totalDuration > 0 ? Math.min(displayProgressMs, totalDuration) : displayProgressMs;
-  const progressWidth = totalDuration > 0 ? `${(currentDuration / totalDuration) * 100}%` : "0%";
+  const progressWidth = `${pct}%`;
 
   const tooltipLabel = data?.songUrl
     ? `${data.title} by ${data.artist}`
@@ -198,7 +134,7 @@ export const NowPlaying = ({ collapsed = false }: { collapsed?: boolean }) => {
           <VStack align="left" gap={1} overflow="hidden" maxW="calc(100% - 80px)">
             {data?.songUrl ? (
               <>
-                <MarqueeText href={data?.songUrl}>{data.title} <FiExternalLink style={{ display: "inline", verticalAlign: "middle" }} /></MarqueeText>
+                <MarqueeText href={data?.songUrl} measureKey={data.title}>{data.title} <FiExternalLink style={{ display: "inline", verticalAlign: "middle" }} /></MarqueeText>
                 <MarqueeText href={data?.artistUrl}>{data.artist}</MarqueeText>
                 <MarqueeText href={data?.albumUrl}>{data.album}</MarqueeText>
               </>

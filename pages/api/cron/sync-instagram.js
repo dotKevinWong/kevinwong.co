@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import { describeError, syncInstagram } from "../../../lib/instagram-sync";
+import { syncInstagram } from "../../../lib/instagram-sync";
+import { describeError } from "../../../lib/redact";
 import { InstagramReauthRequiredError } from "../../../lib/instagram";
 
 export const config = {

@@ -25,7 +25,7 @@ test("spotifyFlashMessage explains each reconnect result", () => {
     state_mismatch: "The reconnect expired or started in another tab. Nothing changed. Press Reconnect again.",
     not_configured: "The server has no Spotify client credentials. Nothing changed. Set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in Vercel, redeploy, then reconnect.",
     exchange_failed: "Spotify didn't accept the approval. Nothing changed. Try again.",
-    missing_scopes: "Spotify didn't grant all three permissions. Nothing changed. Reconnect and approve every permission.",
+    missing_scopes: "Spotify didn't grant every permission. Nothing changed. Reconnect and approve every permission.",
     account_lookup_failed: "Couldn't read the Spotify account. Nothing changed. Try again.",
     wrong_account: "That isn't the site's Spotify account. Nothing changed. Sign in to Spotify as the right account, then reconnect.",
     save_failed: "Spotify approved, but saving the new token failed. Nothing changed. Try again.",

@@ -16,14 +16,11 @@
  * what keeps the token alive, so no run skips it (see syncInstagram).
  */
 
-import { loadEnvFiles } from "./load-env.mjs";
+import { applyEnvFiles } from "./load-env.mjs";
 
 // lib/blob-store.js reads process.env at import time, so the env files have to
 // be applied before any lib module is loaded — hence the dynamic imports below.
-const fileEnv = loadEnvFiles();
-for (const [key, value] of Object.entries(fileEnv)) {
-  if (process.env[key] === undefined) process.env[key] = value;
-}
+applyEnvFiles();
 
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(`--${name}`);

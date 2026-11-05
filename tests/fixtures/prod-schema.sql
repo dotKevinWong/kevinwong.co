@@ -53,23 +53,23 @@ CREATE TABLE public.instagram_media (
     post_id uuid NOT NULL,
     "position" integer NOT NULL,
     kind public.media_kind NOT NULL,
-    cloudinary_public_id text NOT NULL,
-    cloudinary_url text NOT NULL,
+    cloudinary_public_id text,
+    cloudinary_url text,
     cloudinary_version integer,
     cloudinary_resource_type text,
     cloudinary_format text,
     cloudinary_width integer,
     cloudinary_height integer,
     cloudinary_duration numeric,
-    cloudinary_folder text NOT NULL,
+    cloudinary_folder text,
     file_ext text NOT NULL,
     source_uri text NOT NULL,
     source_created_at timestamp with time zone NOT NULL,
     raw_media_json jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    asset_url text,
-    asset_pathname text,
+    asset_url text NOT NULL,
+    asset_pathname text NOT NULL,
     asset_content_type text,
     asset_bytes bigint,
     asset_width integer,
@@ -174,13 +174,6 @@ ALTER TABLE ONLY public.job_locks
 --
 
 CREATE INDEX instagram_media_cloudinary_public_id_idx ON public.instagram_media USING btree (cloudinary_public_id);
-
-
---
--- Name: instagram_media_post_id_position_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX instagram_media_post_id_position_idx ON public.instagram_media USING btree (post_id, "position");
 
 
 --

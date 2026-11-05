@@ -22,11 +22,7 @@
   "include": [
     "next-env.d.ts",
     "**/*.ts",
-    "**/*.tsx",
-    "lib/mdx.js",
-    "lib/formatter.js",
-    "lib/spotify.js",
-    "lib/fetcher.js"
+    "**/*.tsx"
   ],
   "exclude": [
     "node_modules"

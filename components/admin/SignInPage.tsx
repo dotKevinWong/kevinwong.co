@@ -37,7 +37,7 @@ export const SignInPage = ({ error }: { error: string | null }) => {
     const message = startError ?? signInErrorMessage(error);
 
     return (
-        <Box as="section" flex="1" p="6" overflow="auto">
+        <Box as="section" p="6" overflow="auto">
             <Heading as="h1" size="2xl" mb="4">Admin</Heading>
             <AdminCard maxW="420px">
                 <VStack align="stretch" gap="4">

@@ -2,13 +2,7 @@ import { LuSearch, LuWifi } from "react-icons/lu";
 import styles from "./Desktop.module.css";
 import { useMinuteClock } from "./hooks";
 import { AppleLogo, ControlCenterIcon } from "./icons";
-import type { AppId } from "./windowManager";
-
-const MENUS: Record<AppId, { name: string; menus: string[] }> = {
-  finder: { name: "Finder", menus: ["File", "Edit", "View", "Go", "Window", "Help"] },
-  spotify: { name: "Spotify", menus: ["File", "Edit", "View", "Playback", "Window", "Help"] },
-  terminal: { name: "Terminal", menus: ["Shell", "Edit", "View", "Window", "Help"] },
-};
+import { APPS, type AppId } from "./apps";
 
 const formatClock = (d: Date) => {
   const day = d.toLocaleDateString("en-US", { weekday: "short" });
@@ -20,7 +14,7 @@ const formatClock = (d: Date) => {
 /** Decorative, like the rest of the chrome: it names the frontmost app and shows the time. */
 export const MenuBar = ({ app }: { app: AppId }) => {
   const now = useMinuteClock();
-  const { name, menus } = MENUS[app];
+  const { name, menus } = APPS[app];
 
   return (
     <div className={styles.menubar} aria-hidden>

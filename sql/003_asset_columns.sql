@@ -6,9 +6,9 @@
 -- and friends by name. Nullable, so this is safe to apply at any time: existing
 -- rows are untouched and the deployed read path never sees these columns.
 --
--- During the transition the sync writes both sets (see insertPost in
--- lib/instagram-sync.js) and the read path prefers asset_*. Dropping cloudinary_*
--- is a later, separate step — see "Retiring Cloudinary" in the README.
+-- During the transition the sync wrote both sets and the read path preferred
+-- asset_*. Since 2026-11-05 (step 2 of "Retiring Cloudinary" in the README) the
+-- code writes and reads asset_* only. Dropping cloudinary_* is a later, separate step.
 
 -- Fail fast rather than queue behind a long-running transaction: the ALTER needs
 -- an ACCESS EXCLUSIVE lock, and while it waits every live SELECT on the table

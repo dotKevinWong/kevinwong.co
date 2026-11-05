@@ -16,6 +16,7 @@ export type AdminStatus = {
         daysLeft: number | null; // floored whole days; negative once past expiresAt
         accountMatches: boolean | null;
         scopes: string[] | null; missingScopes: string[] | null; // null when there is no spotify row (lib/admin/status.js)
+        requiredScopeCount: number; // SPOTIFY_SCOPES.length, sent so the client needn't import lib/spotify-token.js (it pulls in pg)
         deadReason: string | null;
     };
     instagram: {

@@ -5,7 +5,7 @@ import { loadTestEnv, queryOverride, resetTestDatabase } from "../../scripts/tes
 // The test database is the kw-test-pg container on 127.0.0.1:55432. Kevin's other projects run Postgres on the
 // loopback too, on these ports, and a test must never write to them.
 const TEST_DB_PORT = 55432;
-const OTHER_PROJECT_PORTS = "ports 5432, 5433, 5434 and 54329 belong to other projects";
+export const OTHER_PROJECT_PORTS = "ports 5432, 5433, 5434 and 54329 belong to other projects";
 
 /** Why a connection string can't be the test database, or null when it is a loopback host on port 55432. */
 function notTheTestDatabase(connectionString) {

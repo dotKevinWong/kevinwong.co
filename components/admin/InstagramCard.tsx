@@ -11,7 +11,7 @@ import type { AdminStatus, SyncResult } from "./types";
 type Notice = { status: "info" | "success" | "warning" | "error"; text: string };
 
 const LISTED_POSTS = 10;
-const postsLabel = (n: number) => `${n} ${n === 1 ? "post" : "posts"}`;
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 export const InstagramCard = ({ instagram, generatedAt, onChanged, onSignedOut }: {
     instagram: AdminStatus["instagram"];
@@ -160,7 +160,7 @@ export const InstagramCard = ({ instagram, generatedAt, onChanged, onSignedOut }
                                     <List.Item key={p.shortcode}>
                                         <Flex gap="2" wrap="wrap" align="baseline">
                                             <Text>{formatDate(p.postedAt)}</Text>
-                                            <Text color="fg.muted">{`${p.mediaCount} ${p.mediaCount === 1 ? "file" : "files"}`}</Text>
+                                            <Text color="fg.muted">{plural(p.mediaCount, "file", "files")}</Text>
                                             <Link href={`https://www.instagram.com/p/${p.shortcode}/`} target="_blank"
                                                 rel="noopener noreferrer">{p.shortcode}</Link>
                                         </Flex>
@@ -180,7 +180,7 @@ export const InstagramCard = ({ instagram, generatedAt, onChanged, onSignedOut }
                             <>
                                 <Button colorPalette="blue" alignSelf="flex-start" onClick={() => setConfirmOpen(true)}
                                     disabled={!a.canImport || !checkAllowsImport || busy !== null}>
-                                    Import {postsLabel(checkResult.posts.length)}
+                                    Import {plural(checkResult.posts.length, "post", "posts")}
                                 </Button>
                                 <Dialog.Root role="alertdialog" open={confirmOpen} onOpenChange={(e) => setConfirmOpen(e.open)}
                                     closeOnInteractOutside={busy !== "import"} closeOnEscape={busy !== "import"}
@@ -190,7 +190,7 @@ export const InstagramCard = ({ instagram, generatedAt, onChanged, onSignedOut }
                                         <Dialog.Positioner>
                                             <Dialog.Content>
                                                 <Dialog.Header>
-                                                    <Dialog.Title>Import {postsLabel(checkResult.posts.length)}?</Dialog.Title>
+                                                    <Dialog.Title>Import {plural(checkResult.posts.length, "post", "posts")}?</Dialog.Title>
                                                 </Dialog.Header>
                                                 <Dialog.Body>
                                                     {/* The dialog's aria-describedby points here. */}

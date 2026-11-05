@@ -1,6 +1,5 @@
 
 import {
-    Box,
     Heading,
     VStack,
     Image,
@@ -12,6 +11,7 @@ import {
 import * as React from 'react'
 import useSWR from "swr";
 import fetcher from "../lib/fetcher";
+import { Card } from "./Card";
 import { FiExternalLink } from "react-icons/fi";
 
 export const TopTracks = () => {
@@ -24,15 +24,7 @@ export const TopTracks = () => {
 
     return (
 
-        <Box
-            maxW="420px"
-            bg={{ base: 'gray.100', _dark: '#111111' }}
-            rounded={{ sm: 'lg' }}
-            shadow={{ md: 'sm' }}
-            p={{ base: '6', md: '8' }}
-            height="auto"
-            alignSelf="flex-start"
-        >
+        <Card maxW="420px">
             <VStack align="left">
                 <Heading>Top Tracks</Heading>
                 <Text mb={4}>Curious to what I&#39;m currently listening to? Here are my current top tracks</Text>
@@ -74,6 +66,6 @@ export const TopTracks = () => {
                     </Table.Body>
                 </Table.Root>
             </VStack>
-        </Box>
+        </Card>
     );
 };

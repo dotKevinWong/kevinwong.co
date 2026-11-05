@@ -3,12 +3,12 @@ import { createPortal } from "react-dom";
 import { LuChevronLeft } from "react-icons/lu";
 import type { MacOSRelease } from "../../lib/macos";
 import styles from "./Desktop.module.css";
-import { APP_ICONS } from "./Dock";
+import { APPS, toneClass, type AppId } from "./apps";
 import { FinderList } from "./FinderApp";
 import { useReducedMotion } from "./hooks";
 import { SpotifyMobile } from "./SpotifyApp";
 import { TerminalApp } from "./TerminalApp";
-import type { AppId } from "./windowManager";
+import { cx } from "./util";
 
 /**
  * Phone-style full-screen app. Stays mounted while `app` goes back to null so
@@ -51,18 +51,10 @@ export const AppScreen = ({ app, macos, onBack }: { app: AppId | null; macos: Ma
 
   return createPortal(
     <div
-      className={[
-        styles.theme,
-        styles.appScreen,
-        closing && styles.appScreenClosing,
-        shown === "terminal" && styles.toneTerminal,
-        shown === "spotify" && styles.toneSpotify,
-      ]
-        .filter(Boolean)
-        .join(" ")}
+      className={cx(styles.theme, styles.appScreen, closing && styles.appScreenClosing, toneClass(shown))}
       role="dialog"
       aria-modal="true"
-      aria-label={APP_ICONS[shown].name}
+      aria-label={APPS[shown].name}
       onAnimationEnd={(e) => {
         if (closing && e.target === e.currentTarget) setShown(null);
       }}
@@ -72,7 +64,7 @@ export const AppScreen = ({ app, macos, onBack }: { app: AppId | null; macos: Ma
           <LuChevronLeft />
           Back
         </button>
-        <span className={styles.appScreenTitle}>{shown === "finder" ? "Projects" : APP_ICONS[shown].name}</span>
+        <span className={styles.appScreenTitle}>{shown === "finder" ? "Projects" : APPS[shown].name}</span>
       </div>
       {/* Focusable (not tabbable) so a tap on the content focuses the scroller, and
           arrow keys, Space and Page Down scroll it rather than nothing. */}

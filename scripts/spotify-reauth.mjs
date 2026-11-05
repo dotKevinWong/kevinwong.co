@@ -33,13 +33,15 @@
 import http from "node:http";
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
-import { ENV_FILES, loadEnvFiles, requireEnv } from "./load-env.mjs";
+import { ENV_FILES, applyEnvFiles, requireEnv } from "./load-env.mjs";
 import {
 	buildAuthorizeUrl,
 	exchangeCode,
 	fetchSpotifyAccountId,
 	fetchSpotifyProfile,
 	missingScopes,
+	SPOTIFY_TOKEN_ENDPOINT,
+	spotifyBasicAuth,
 	spotifyCredentials,
 } from "../lib/spotify-oauth.js";
 import {
@@ -54,16 +56,12 @@ import { redact } from "../lib/redact.js";
 
 const PORT = 8888;
 const REDIRECT_URI = `http://127.0.0.1:${PORT}/callback`;
-const TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token";
 const REQUEST_TIMEOUT_MS = 10_000;
 
 // The real environment wins. Copying the files into process.env is what lets
 // getDbPool() and spotifyCredentials() see .env and .env.local; none of the lib
 // modules above reads process.env at import time, so this can run after them.
-const fileEnv = loadEnvFiles();
-for (const [key, value] of Object.entries(fileEnv)) {
-	if (process.env[key] === undefined) process.env[key] = value;
-}
+const fileEnv = applyEnvFiles();
 
 const USAGE = `
 Usage: npm run spotify:reauth -- [option]
@@ -134,10 +132,10 @@ const isoDate = (date) => new Date(date).toISOString().split("T")[0];
 const refreshAccessToken = async (refreshToken, { clientId, clientSecret }) => {
 	let response;
 	try {
-		response = await fetch(TOKEN_ENDPOINT, {
+		response = await fetch(SPOTIFY_TOKEN_ENDPOINT, {
 			method: "POST",
 			headers: {
-				Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
+				Authorization: spotifyBasicAuth(clientId, clientSecret),
 				"Content-Type": "application/x-www-form-urlencoded",
 			},
 			body: new URLSearchParams({

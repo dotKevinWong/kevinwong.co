@@ -6,8 +6,8 @@ import { FiKey } from "react-icons/fi"
 
 export const ContactPage = () => {
     return(
-    <Container as="section" flex="1" p="6" overflow="auto" maxW="5xl">
-        <Box maxW="5xl">
+    <Container as="section" p="6" overflow="auto" maxW="5xl">
+        <Box>
             <VStack align="left" gap={6}>
                 <Heading as="h1">Contact Me</Heading>
                 <Wrap justify='center'>

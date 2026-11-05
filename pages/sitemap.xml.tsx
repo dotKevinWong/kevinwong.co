@@ -1,11 +1,11 @@
 import type { GetServerSideProps } from "next";
 import { PROJECTS } from "../components/projects/data";
-import { getPosts } from "../lib/mdx";
-
-const SITE_URL = "https://www.kevinwong.co";
+import { NAV_ITEMS } from "../components/navItems";
+import { getPostSlugs } from "../lib/mdx";
+import { SITE_ORIGIN } from "../lib/site";
 
 // The sidebar's pages, in its order.
-const PAGES = ["/", "/stats", "/bookshelf", "/snapshots", "/projects", "/blog", "/contact"];
+const PAGES = NAV_ITEMS.map((item) => item.href);
 
 // The sitemap protocol requires each <loc> to be entity-escaped.
 const escapeXml = (text: string) =>
@@ -17,19 +17,19 @@ const escapeXml = (text: string) =>
  * and the Projects desktop.
  */
 export const getServerSideProps: GetServerSideProps = async ({ res }) => {
-  const posts = await getPosts();
+  const slugs = await getPostSlugs();
   const paths = [
     ...PAGES,
     ...PROJECTS.map((project) => project.href),
     // A post's filename is its URL segment, as in pages/blog/[id].tsx.
-    ...posts.map((file) => `/blog/${encodeURIComponent(file.replace(/\.mdx$/, ""))}`),
+    ...slugs.map((slug) => `/blog/${encodeURIComponent(slug)}`),
   ];
 
   res.setHeader("Content-Type", "application/xml; charset=utf-8");
   res.setHeader("Cache-Control", "public, s-maxage=86400, stale-while-revalidate=86400");
   res.end(`<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${paths.map((path) => `  <url><loc>${escapeXml(`${SITE_URL}${path}`)}</loc></url>`).join("\n")}
+${paths.map((path) => `  <url><loc>${escapeXml(`${SITE_ORIGIN}${path}`)}</loc></url>`).join("\n")}
 </urlset>
 `);
 

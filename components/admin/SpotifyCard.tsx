@@ -4,9 +4,6 @@ import { spotifyBadge } from "../../lib/admin/messages";
 import { AdminCard } from "./AdminCard";
 import type { AdminStatus } from "./types";
 
-// Mirrors SPOTIFY_SCOPES in lib/spotify-token.js, which imports the database pool.
-const SCOPE_COUNT = 3;
-
 export const SpotifyCard = ({ spotify }: { spotify: AdminStatus["spotify"] }) => {
     const b = spotifyBadge(spotify.state);
     const hasRow = spotify.state === "connected" || spotify.state === "dead";
@@ -54,7 +51,7 @@ export const SpotifyCard = ({ spotify }: { spotify: AdminStatus["spotify"] }) =>
 
                 {hasRow && (
                     <>
-                        <Text>{`Scopes: ${SCOPE_COUNT - missing.length} of ${SCOPE_COUNT}`}</Text>
+                        <Text>{`Scopes: ${spotify.requiredScopeCount - missing.length} of ${spotify.requiredScopeCount}`}</Text>
                         {missing.length > 0 && <Text color="red.500">{`Missing: ${missing.join(", ")}`}</Text>}
                     </>
                 )}

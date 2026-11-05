@@ -21,7 +21,7 @@ import type { GetStaticPropsContext, InferGetStaticPropsType } from 'next';
 import Link from 'next/link';
 import { serialize } from 'next-mdx-remote/serialize';
 import { MDXRemote, type MDXRemoteProps } from 'next-mdx-remote';
-import { getPost, getPosts } from '../../lib/mdx';
+import { getPost, getPostSlugs } from '../../lib/mdx';
 import { shortUTCDate } from '../../lib/formatter';
 import { Meta } from '../../components/Meta';
 import { PageShell } from '../../components/PageShell';
@@ -56,14 +56,13 @@ function Post({ source, meta }: PostProps) {
     return (
         <Box
             as="section"
-            flex="1"
             overflow="auto"
             maxW="4xl"
             marginLeft={{ lg: 4 }}
         >
-            <Box as="section" flex="1" p="6" marginTop="2" overflow="auto" maxW="5xl">
+            <Box as="section" p="6" marginTop="2" overflow="auto">
                 <Button asChild colorPalette="blue" marginBottom="4">
-                    <Link href="/blog" passHref>
+                    <Link href="/blog">
                         <Emoji symbol="backhand-index-pointing-left" label="Backhand Index Pointing Left" />
                         Back
                     </Link>
@@ -108,9 +107,9 @@ export async function getStaticProps({ params }: GetStaticPropsContext<{ id: str
 }
 
 export async function getStaticPaths() {
-    const posts = await getPosts();
-    const paths = posts.map((post) => ({
-        params: { id: post.replace('.mdx', '') },
+    const slugs = await getPostSlugs();
+    const paths = slugs.map((slug) => ({
+        params: { id: slug },
     }));
 
     return { paths, fallback: false };

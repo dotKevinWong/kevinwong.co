@@ -5,7 +5,7 @@ How everything works, and how to set it up from scratch, stays in the [README](R
 
 ## 📅 Dated
 
-### ☁️ Retire Cloudinary (not before 2026-10-27)
+### ☁️ Retire Cloudinary (steps 0–1 done 2026-11-05)
 
 The /snapshots media moved to Vercel Blob on 2026-09-26. The copy was done that day, and the
 switch (commit `bf9932f`) landed on `main` the same night. Wait **at least 30 days after the
@@ -17,12 +17,12 @@ Then do the steps in this order. Each one leaves every deployment that could sti
 (including the Instant Rollback target) working. Run the SQL over the unpooled connection
 string (the non-pooler Neon host), not the pooled `DATABASE_URL`.
 
-- [ ] **0. Make sure nothing can roll back to pre-switch code.** Both the current production
+- [x] **0. Make sure nothing can roll back to pre-switch code.** Both the current production
   deployment and its Instant Rollback target (on Hobby, the deployment just before it) must
   include the switch. The code deployed from 2026-09-05 until the switch ran its own daily
   sync, which inserts `instagram_media` rows with only the `cloudinary_*` columns. Once step 1
   makes `asset_*` `not null`, those inserts would fail.
-- [ ] **1. Relax the schema.** This is safe for every deployment that includes the switch,
+- [x] **1. Relax the schema.** Done on production 2026-11-05. This is safe for every deployment that includes the switch,
   because that code already writes `asset_*` on every insert. First confirm nothing is
   missing. This must return 0:
   ````sql
@@ -40,7 +40,8 @@ string (the non-pooler Neon host), not the pooled `DATABASE_URL`.
     alter column cloudinary_folder drop not null;
   commit;
   ````
-- [ ] **2. Stop using the old columns in code.** In [`lib/instagram-sync.js`](lib/instagram-sync.js),
+- [ ] **2. Stop using the old columns in code.** The code change is made (2026-11-05); what is
+  left is the two deploys at the end of this step. In [`lib/instagram-sync.js`](lib/instagram-sync.js),
   stop `insertPost` writing `cloudinary_*` (and drop the now-unused `folder` / `folderFor`
   plumbing that only feeds them). In both `pages/api/snapshots` routes, remove the
   `coalesce(..., m.cloudinary_*)` fallbacks and select the `asset_*` columns directly. Delete
@@ -49,7 +50,10 @@ string (the non-pooler Neon host), not the pooled `DATABASE_URL`.
   Hobby, Instant Rollback can only go to the immediately previous deployment, and the extra
   deploy makes sure that target no longer reads the columns step 3 removes.
 - [ ] **3. Drop the columns.** This is deliberately **not** a file in `sql/`. Setup applies
-  that folder in order, and running this early would break the old code:
+  that folder in order, and running this early would break the old code. Older code includes
+  any local checkout or worktree not yet on step 2's commit: its `npm run instagram:sync` writes
+  `cloudinary_*`, so after this step it would upload every missing post and then fail to insert
+  it. Pull `main` everywhere you run the CLI, and delete stale worktrees, before running:
   ````sql
   begin;
   set local lock_timeout = '5s';
@@ -67,7 +71,7 @@ string (the non-pooler Neon host), not the pooled `DATABASE_URL`.
   - If `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` and `CLOUDINARY_API_SECRET` are still in
     the Vercel project or `.env`, remove them. Nothing in the code reads them.
   - Delete the *Moving from Cloudinary* and *Retiring Cloudinary* notes from the README, and
-    the pointers to them in `sql/003_asset_columns.sql` and `lib/instagram-sync.js`.
+    the pointer to them in `sql/003_asset_columns.sql`.
 
 ### 🎧 Reconnect Spotify (by ~2027-03-21)
 
@@ -78,6 +82,8 @@ README's *Spotify token* section has the details). The current token was approve
 - [ ] **Reconnect from the admin panel:** https://www.kevinwong.co/admin → Spotify card → **Reconnect** →
   approve on Spotify. It takes effect within a minute, with no redeploy. Fallback:
   `npm run spotify:reauth -- --save` (README, *Spotify token*).
+- [ ] The reconnect asks for two permissions now, not three: `user-read-recently-played` went with the
+  Listening Timeline on 2026-11-05. Until then the stored token keeps the extra one, which does no harm.
 - [ ] **Update this section's dates** from the panel's new estimate, and set a reminder for about 5 months
   after the reconnect.
 
@@ -99,8 +105,7 @@ README's *Spotify token* section has the details). The current token was approve
   store's **Usage** tab. On Hobby, going over 1 GB of storage, or over 2,000 uploads, 10,000
   simple operations or 10 GB of transfer in a month, locks Blob for up to 30 days and every
   image on /snapshots goes blank. The sync stops itself at 1,800 uploads in 30 days (README, *Run
-  history and the upload ceiling*), but `npm run blog:image` and `npm run snapshots:blob` uploads
-  aren't counted.
+  history and the upload ceiling*), but `npm run blog:image` uploads aren't counted.
 
 ## ✍️ Content
 
@@ -124,15 +129,6 @@ Found in the 2026-09-27 codebase audit. Each needs something only I know.
 - [ ] **Top Tracks skips my top 5.** The endpoint in [`lib/spotify.js`](lib/spotify.js) uses
   `offset=5`, so the card titled "my current top tracks" shows ranks 6–15. It has been that way
   since the first commit. Remove `&offset=5`, or keep it and change the card's wording.
-- [ ] **Remove the Listening Timeline?** The chart was taken off /stats in `22f5cae`, but
-  `/api/listeningtimeline` is still live and public, and `components/ListeningTimeline.tsx`,
-  `chart.js` and the `user-read-recently-played` Spotify scope only exist for it. To remove
-  it: delete the route and component, remove `getListeningTimeline` / `RECENTLY_PLAYED_ENDPOINT`
-  from `lib/spotify.js`, `npm uninstall chart.js`, drop `user-read-recently-played` from every
-  list that `grep -rn user-read-recently-played lib scripts` finds (`SPOTIFY_SCOPES` in
-  [`lib/spotify-token.js`](lib/spotify-token.js), which the reconnect checks granted scopes
-  against), and mention it in the README's env var table. The narrower scope takes effect at the
-  next Spotify re-auth.
 - [ ] **Is `public/kw.jpg` linked from anywhere?** It's a byte-identical copy of `me.jpg` and
   nothing in the repo uses it. Delete it once I've checked nothing outside the site hotlinks it.
 
@@ -151,12 +147,6 @@ Found in the 2026-09-27 codebase audit. Each needs something only I know.
 
 All unused or oversized, found in the audit. Everything is in git history if needed.
 
-- [ ] Delete unused code: `components/Footer.tsx`, `components/ui/toaster.tsx`,
-  `styles/globals.css`, `styles/Home.module.css`.
-- [ ] Retire `npm run instagram:repair`: the export-era keys were all converted (`99b8266`).
-  Delete `scripts/instagram-repair-source-keys.mjs` and its npm script, remove README setup
-  step 6, and in `scripts/snapshots-blob-backfill.mjs` reword the comment that says to run it
-  first.
 - [ ] Delete unreferenced files in `public/` (≈1.8 MB, all still publicly served):
   `finder.png`, `spotify.png`, `terminal.png` (replaced by the `*-dock.png` icons),
   `cahillclub_folder.png`, `dragonbot_folder.png`, `gray_folder.png`, `yellow_folder.png`
@@ -198,13 +188,11 @@ All unused or oversized, found in the audit. Everything is in git history if nee
   ````
   `--table` doesn't include the `media_kind` type, so add its `create type` by hand
   (`\dT+ media_kind` in psql lists the values).
-- [ ] **Fence the sync's run lease.** `renewLease` / `releaseLease` in `lib/instagram-sync.js`
-  don't check that the run still owns the lease. A local backfill where one post takes over 10
-  minutes could lose its lease to the cron, then take it back and later clear the cron's lease,
-  so two runs overlap and double-count Blob uploads. Fix: return `locked_until::text` from
-  `acquireLease`, add `and locked_until = $3::timestamptz` to renew/release, and abort the run
-  when a renew updates 0 rows. The abandoned-run sweep in `lib/sync-runs.js` trusts the lease
-  too. Test with `npm run test:integration` on the local test database, never production.
+- [ ] **Retire the per-slide media route.** Since 2026-11-05, `/api/snapshots` sends every slide of a
+  post (`slides`), and the page no longer calls `/api/snapshots/[postId]/media`. Once two deployments of that
+  change are live (so the Instant Rollback target has it too), delete `pages/api/snapshots/[postId]/media.js`
+  and the list's slide-0 `media` field (kept for pages still running an older bundle), and the page's
+  `post.slides ?? post.media` fallback in `components/pages/Snapshots.tsx`.
 - [ ] **Headings.** Blog posts and the main pages have an `<h1>` now; the 404 page and Home
   still don't, and the Sidebar/Navbar name renders as an `<h2>` above every page's `<h1>`.
 - [ ] **Trim Chakra's theme (maybe).** `components/ui/provider.tsx` ships the full
@@ -217,9 +205,6 @@ All unused or oversized, found in the audit. Everything is in git history if nee
 - [ ] **`scripts/load-env.mjs` vs Next's loader.** It parses `.env` files more simply than Next
   does (no `export` prefix, inline comments, `$VAR` expansion). Consider `@next/env`'s
   `loadEnvConfig` so the scripts see exactly what the app sees.
-- [ ] **De-duplicate the Instagram token SQL.** `scripts/instagram-token.mjs` copies
-  `storeToken`'s upsert and hard-codes the Graph API version instead of importing both from
-  `lib/instagram.js`.
 - [ ] **Rate-limit the public API routes at the edge (maybe).** `lib/rate-limit.js` is
   per-instance and runs inside the billed function. If abuse ever shows up in the logs, a
   Vercel Firewall rate-limit rule on `/api/*` stops it before it costs anything.

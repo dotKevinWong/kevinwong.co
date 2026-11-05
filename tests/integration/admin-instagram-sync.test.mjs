@@ -11,19 +11,15 @@ import { buildAdminStatus } from "../../lib/admin/status.js";
 import { syncInstagram } from "../../lib/instagram-sync.js";
 import { storeToken } from "../../lib/instagram.js";
 import { getDbPool } from "../../lib/db.js";
+// isBlobConfigured() must be true for a real run. If anything reached the real uploadToBlob, the fake token and a
+// closed local port (with no retries) would make it fail at once, without leaving the machine.
+import "../helpers/fake-blob-env.mjs";
 
 // The panel's Check and Import end to end: the real route (lib/admin/instagram-sync-route.js) with the real body
 // reader, the real D4 limits and slot claims, the real syncInstagram writing sync_runs, and the real audit log, all on
 // the test database. Only the owner check, Instagram's HTTP (stubFetch) and the Blob upload (syncInstagram's
 // `upload` seam) are fakes. The route's unit tests fake the summary; these pin the summary syncInstagram really
 // returns, and the slot and ledger rules through real SQL.
-
-// isBlobConfigured() must be true for a real run. If anything reached the real uploadToBlob, the fake token and a
-// closed local port (with no retries) would make it fail at once, without leaving the machine.
-process.env.BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_fake_for_tests";
-process.env.VERCEL_BLOB_API_URL = "http://127.0.0.1:9";
-process.env.VERCEL_BLOB_RETRIES = "0";
-delete process.env.BLOB_STORE_ID;
 
 const db = testDb();
 // syncInstagram, storeToken and the audit log use getDbPool(): point it at the test database, which

@@ -1,20 +1,25 @@
 import React, { useEffect, useRef } from "react";
 import { IoPause, IoPlay, IoPlaySkipBack, IoPlaySkipForward, IoRepeat, IoShuffle, IoVolumeHigh } from "react-icons/io5";
 import styles from "./Desktop.module.css";
-import { formatDuration, useNowPlaying, useReducedMotion } from "./hooks";
+import { formatDuration, useNowPlaying } from "../hooks";
+import { useReducedMotion } from "./hooks";
 
 /* ─── Visualizer ─────────────────────────────────────────────── */
 
 // The plasma is computed on a grid this many pixels apart and scaled up.
 const CELL = 5;
 
-const hsl = (h: number, s: number, l: number): [number, number, number] => {
+// Writes the colour straight into the pixel at `i` rather than returning an
+// array, because it runs for every cell on every frame.
+const hslInto = (data: Uint8ClampedArray, i: number, h: number, s: number, l: number) => {
   const a = s * Math.min(l, 1 - l);
   const f = (n: number) => {
     const k = (n + h / 30) % 12;
     return 255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)));
   };
-  return [f(0), f(8), f(4)];
+  data[i] = f(0);
+  data[i + 1] = f(8);
+  data[i + 2] = f(4);
 };
 
 /** A psychedelic, Windows Media Player style visualizer. Calm purple when idle. */
@@ -49,17 +54,12 @@ const Visualizer = ({ playing, paused = false }: { playing: boolean; paused?: bo
       ctx.fillRect(0, 0, W, H);
     };
 
-    const plasma = (pixel: (x: number, y: number) => [number, number, number, number]) => {
+    const plasma = (pixel: (data: Uint8ClampedArray, i: number, x: number, y: number) => void) => {
       if (!image) return;
       const { data, width, height } = image;
       for (let py = 0; py < height; py++) {
         for (let px = 0; px < width; px++) {
-          const [r, g, b, a] = pixel(px * CELL, py * CELL);
-          const i = (py * width + px) * 4;
-          data[i] = r;
-          data[i + 1] = g;
-          data[i + 2] = b;
-          data[i + 3] = a;
+          pixel(data, (py * width + px) * 4, px * CELL, py * CELL);
         }
       }
       bctx.putImageData(image, 0, 0);
@@ -71,9 +71,10 @@ const Visualizer = ({ playing, paused = false }: { playing: boolean; paused?: bo
       t += 0.005;
       ctx.fillStyle = "rgba(0,0,0,0.15)";
       ctx.fillRect(0, 0, W, H);
-      plasma((x, y) => {
+      plasma((data, i, x, y) => {
         const v = Math.sin(x * 0.02 + t) + Math.sin(y * 0.02 + t * 0.7);
-        return [...hsl(260, 0.6, ((v + 2) / 4) * 0.3), 255];
+        hslInto(data, i, 260, 0.6, ((v + 2) / 4) * 0.3);
+        data[i + 3] = 255;
       });
     };
 
@@ -84,7 +85,7 @@ const Visualizer = ({ playing, paused = false }: { playing: boolean; paused?: bo
       ctx.fillStyle = "rgba(0,0,0,0.08)";
       ctx.fillRect(0, 0, W, H);
 
-      plasma((x, y) => {
+      plasma((data, i, x, y) => {
         const dx = (x - cx) / W;
         const dy = (y - cy) / H;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -95,7 +96,8 @@ const Visualizer = ({ playing, paused = false }: { playing: boolean; paused?: bo
             Math.sin(dist * 8 - t * 2)) /
           4;
         const hue = ((v + 1) * 180 + t * 40) % 360;
-        return [...hsl(hue, 1, (40 + v * 25) / 100), 255 * (0.45 + v * 0.15)];
+        hslInto(data, i, hue, 1, (40 + v * 25) / 100);
+        data[i + 3] = 255 * (0.45 + v * 0.15);
       });
 
       // Radial waveform rings

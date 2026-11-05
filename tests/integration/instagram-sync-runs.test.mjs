@@ -10,14 +10,10 @@ import { InstagramReauthRequiredError, storeToken } from "../../lib/instagram.js
 import { getDbPool } from "../../lib/db.js";
 import { testDb } from "../helpers/db.mjs";
 import { stubFetch } from "../helpers/fetch-stub.mjs";
-
 // isBlobConfigured() must be true for a real run. Tests that reach the upload step pass their own
 // `upload`. If one ever reached the real uploadToBlob, the fake token and a closed local port (with no
 // retries) make it fail at once, without leaving the machine or touching a real store.
-process.env.BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_fake_for_tests";
-process.env.VERCEL_BLOB_API_URL = "http://127.0.0.1:9";
-process.env.VERCEL_BLOB_RETRIES = "0";
-delete process.env.BLOB_STORE_ID;
+import "../helpers/fake-blob-env.mjs";
 
 const MEDIA = "https://graph.instagram.com/v25.0/me/media";
 const REFRESH = "https://graph.instagram.com/refresh_access_token";
@@ -289,6 +285,103 @@ describe("syncInstagram records its runs (integration)", { skip: db.skip }, () =
     });
     assert.equal(calls, 1); // the second slide was never uploaded
     assert.equal(await leaseHeld(), false);
+  });
+
+  // What another run does once this run's lease has expired: claim it with its own locked_until. Returns that value.
+  const takeLease = async () => (await db.pool.query(
+    `update job_locks set locked_until = now() + interval '5 minutes' where name = 'instagram-sync'
+     returning locked_until::text`)).rows[0].locked_until;
+  const leaseUntil = async () =>
+    (await db.pool.query("select locked_until::text from job_locks where name = 'instagram-sync'")).rows[0].locked_until;
+
+  test("a run renews its lease before each post and releases it at the end", async (t) => {
+    stubFetch(t, mediaRoutes(carouselPost("TESTPOST7", 1, "2026-10-01T00:00:00Z"), carouselPost("TESTPOST8", 1, "2026-10-02T00:00:00Z")));
+    const seen = [];
+    const upload = async (pathname, buffer, contentType) => {
+      seen.push(await leaseUntil());
+      return fakeUpload(pathname, buffer, contentType);
+    };
+    const summary = await syncInstagram({ trigger: "cli", upload });
+    assert.deepEqual(summary.inserted.map((p) => p.shortcode), ["TESTPOST7", "TESTPOST8"]);
+    assert.equal(seen.length, 2);
+    assert.notEqual(seen[0], seen[1], "the second post's renewal moved locked_until on");
+    assert.equal((await lastRow()).status, "ok");
+    assert.equal(await leaseHeld(), false);
+  });
+
+  test("an imported post leaves caption_emojis to its column default, an empty array", async (t) => {
+    const p = carouselPost("TESTPOSTE", 1);
+    p.item.caption = "beach day 🏖️👨‍👩‍👧";
+    stubFetch(t, mediaRoutes(p));
+    await syncInstagram({ trigger: "cli", upload: fakeUpload });
+    const { rows } = await db.pool.query("select caption, caption_emojis from instagram_posts where source_key = 'ig:TESTPOSTE'");
+    assert.deepEqual(rows, [{ caption: "beach day 🏖️👨‍👩‍👧", caption_emojis: [] }]);
+  });
+
+  test("an imported slide is stored in asset_* only, with every cloudinary_* column left null", async (t) => {
+    stubFetch(t, mediaRoutes(carouselPost("TESTPOSTC", 2)));
+    await syncInstagram({ trigger: "cli", upload: fakeUpload });
+    const { rows } = await db.pool.query(
+      `select m.position, m.asset_url is not null as has_url, m.asset_pathname, num_nonnulls(
+                m.cloudinary_public_id, m.cloudinary_url, m.cloudinary_version, m.cloudinary_resource_type,
+                m.cloudinary_format, m.cloudinary_width, m.cloudinary_height, m.cloudinary_duration,
+                m.cloudinary_folder) as cloudinary_set
+         from instagram_media m join instagram_posts p on p.id = m.post_id
+        where p.source_key = 'ig:TESTPOSTC' order by m.position`
+    );
+    assert.equal(rows.length, 2);
+    for (const row of rows) {
+      assert.equal(row.has_url, true);
+      assert.match(row.asset_pathname, new RegExp(`^snapshots/\\d{6}/TESTPOSTC-${row.position}\\.`));
+      assert.equal(row.cloudinary_set, 0);
+    }
+  });
+
+  test("a run whose lease another run took stops at its next renewal, records failed, and leaves that lease alone", async (t) => {
+    stubFetch(t, mediaRoutes(carouselPost("TESTPOST9", 1, "2026-10-01T00:00:00Z"), carouselPost("TESTPOSTA", 1, "2026-10-02T00:00:00Z")));
+    let other;
+    const upload = t.mock.fn(async (pathname, buffer, contentType) => {
+      other = await takeLease(); // the first post outlived the lease, and the cron took it
+      return fakeUpload(pathname, buffer, contentType);
+    });
+    await assert.rejects(syncInstagram({ trigger: "cli", upload }), (error) => {
+      assert.equal(error.name, "LeaseLostError");
+      assert.equal(error.message, "Lost the run lease to another run, so this run stopped");
+      return true;
+    });
+    assert.equal(upload.mock.callCount(), 1, "the second post was never uploaded");
+    const r = await lastRow();
+    assert.deepEqual([r.status, r.imported, r.uploads, r.error],
+      ["failed", 1, 1, "Lost the run lease to another run, so this run stopped"]);
+    assert.equal(await leaseUntil(), other, "neither the renewal nor the release touched the other run's lease");
+    assert.equal(await leaseHeld(), true);
+  });
+
+  test("a run whose lease another run took does not release that lease when it finishes", async (t) => {
+    stubFetch(t, carouselRoutes("TESTPOSTB", 1));
+    let other;
+    const upload = async (pathname, buffer, contentType) => {
+      other = await takeLease();
+      return fakeUpload(pathname, buffer, contentType);
+    };
+    const summary = await syncInstagram({ trigger: "cli", upload });
+    assert.deepEqual(summary.inserted.map((p) => p.shortcode), ["TESTPOSTB"]);
+    assert.equal((await lastRow()).status, "ok");
+    assert.equal(await leaseUntil(), other);
+    assert.equal(await leaseHeld(), true);
+  });
+
+  test("a run whose lease was taken and then released by another run does not take it back", async (t) => {
+    stubFetch(t, mediaRoutes(carouselPost("TESTPOSTC", 1, "2026-10-01T00:00:00Z"), carouselPost("TESTPOSTD", 1, "2026-10-02T00:00:00Z")));
+    const upload = async (pathname, buffer, contentType) => {
+      await takeLease();
+      await db.pool.query("update job_locks set locked_until = 'epoch' where name = 'instagram-sync'");
+      return fakeUpload(pathname, buffer, contentType);
+    };
+    await assert.rejects(syncInstagram({ trigger: "cli", upload }), { name: "LeaseLostError" });
+    assert.equal(await leaseHeld(), false);
+    const { rows } = await db.pool.query("select locked_until = 'epoch' as freed from job_locks where name = 'instagram-sync'");
+    assert.equal(rows[0].freed, true, "the renewal did not re-take the freed lease");
   });
 
   // Records in lease_probe, as a row leaves 'running', whether the lease is still held. Returns a reader for it.

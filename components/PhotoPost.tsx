@@ -1,13 +1,14 @@
-import { useCallback, useMemo, useRef, useState } from "react"
-import { AspectRatio, Badge, Box, Flex, IconButton, Image, Link, Spinner, Text, chakra } from "@chakra-ui/react"
+import { useCallback, useMemo, useState } from "react"
+import { AspectRatio, Badge, Box, Flex, IconButton, Image, Link, Text, chakra } from "@chakra-ui/react"
 import { FiChevronLeft, FiChevronRight, FiExternalLink, FiInstagram } from "react-icons/fi"
+import { SURFACE_BG } from "./Card"
 
 // Instagram's feed range, from 3:4 portrait to 1.91:1 landscape. lib/image-resize.js
 // keeps 3:4 photos whole, so the frame shouldn't crop them to 4:5.
 const INSTAGRAM_MIN_RATIO = 3 / 4
 const INSTAGRAM_MAX_RATIO = 1.91
 
-interface SnapshotMedia {
+export interface SnapshotMedia {
     id: string;
     position: number;
     kind: "image" | "video";
@@ -17,12 +18,9 @@ interface SnapshotMedia {
     height?: number | null;
 }
 
-interface MediaResponse {
-    media: SnapshotMedia[];
-}
-
 interface PhotoPostProps {
     postId: string;
+    // Every slide of the post, from /api/snapshots.
     media: SnapshotMedia[];
     mediaCount: number;
     description: string;
@@ -46,11 +44,14 @@ const buildMediaByPosition = (media: SnapshotMedia[]) => {
     }, {})
 }
 
+// The dots show a slide at full opacity once it is "seen": the same slides that
+// used to be fetched on demand. That is slide 0 at first, then each slide moved
+// to, plus the one after it in a carousel of three or more.
+const initialSeen = () => new Set([0])
+
 export const PhotoPost = (props: PhotoPostProps) => {
     const [mediaIndex, setMediaIndex] = useState(0)
-    const [mediaByPosition, setMediaByPosition] = useState<Record<number, SnapshotMedia>>(() => buildMediaByPosition(props.media))
-    const [isLoadingMedia, setIsLoadingMedia] = useState(false)
-    const pendingPositionsRef = useRef<Set<number>>(new Set())
+    const [seenPositions, setSeenPositions] = useState<Set<number>>(initialSeen)
 
     // Snapshots keys each card by post id, so a different post remounts it. This
     // starts the carousel over when the same post is handed a new media array.
@@ -58,73 +59,34 @@ export const PhotoPost = (props: PhotoPostProps) => {
     if (shownMedia !== props.media) {
         setShownMedia(props.media)
         setMediaIndex(0)
-        setMediaByPosition(buildMediaByPosition(props.media))
-        setIsLoadingMedia(false)
+        setSeenPositions(initialSeen())
     }
 
+    const mediaByPosition = useMemo(() => buildMediaByPosition(props.media), [props.media])
     const mediaCount = Math.max(props.mediaCount, props.media.length)
     const normalizedIndex = normalizeIndex(mediaIndex, mediaCount)
     const activeMedia = mediaByPosition[normalizedIndex]
 
-    const loadMediaAtPosition = useCallback(async (position: number) => {
-        if (mediaCount <= 0 || mediaByPosition[position]) {
-            return
-        }
-
-        if (pendingPositionsRef.current.has(position)) {
-            return
-        }
-
-        pendingPositionsRef.current.add(position)
-        setIsLoadingMedia(true)
-
-        try {
-            const res = await fetch(`/api/snapshots/${props.postId}/media?position=${position}&limit=1`)
-            if (!res.ok) {
-                throw new Error("Failed to fetch media")
-            }
-
-            const payload = await res.json() as MediaResponse
-            if (!Array.isArray(payload.media)) {
-                return
-            }
-
-            setMediaByPosition((prev) => {
-                const next = { ...prev }
-                payload.media.forEach((item) => {
-                    next[item.position] = item
-                })
-                return next
-            })
-        } catch (error) {
-            console.error("[PhotoPost/loadMediaAtPosition]", error)
-        } finally {
-            pendingPositionsRef.current.delete(position)
-            setIsLoadingMedia(pendingPositionsRef.current.size > 0)
-        }
-    }, [mediaByPosition, mediaCount, props.postId])
-
-    const goToPosition = useCallback(async (nextPosition: number) => {
+    const goToPosition = useCallback((nextPosition: number) => {
         const nextIndex = normalizeIndex(nextPosition, mediaCount)
-
-        if (mediaCount > 1 && !mediaByPosition[nextIndex]) {
-            await loadMediaAtPosition(nextIndex)
-        }
 
         setMediaIndex(nextIndex)
 
+        const newlySeen = [nextIndex]
         if (mediaCount > 2) {
-            const prefetchIndex = normalizeIndex(nextIndex + 1, mediaCount)
-            void loadMediaAtPosition(prefetchIndex)
+            newlySeen.push(normalizeIndex(nextIndex + 1, mediaCount))
         }
-    }, [loadMediaAtPosition, mediaByPosition, mediaCount])
+        setSeenPositions((prev) => (
+            newlySeen.every((position) => prev.has(position)) ? prev : new Set([...prev, ...newlySeen])
+        ))
+    }, [mediaCount])
 
     const handlePrevious = () => {
-        void goToPosition(mediaIndex - 1)
+        goToPosition(mediaIndex - 1)
     }
 
     const handleNext = () => {
-        void goToPosition(mediaIndex + 1)
+        goToPosition(mediaIndex + 1)
     }
 
     const sourceName = props.sourceName || "Instagram"
@@ -141,7 +103,7 @@ export const PhotoPost = (props: PhotoPostProps) => {
 
     return (
         <Box p="5" maxW="320px" w={{ base: "100%", sm: "320px" }} borderWidth="1px" minH="320px" rounded={{ sm: "lg" }}
-            shadow={{ md: "sm" }} bg={{ base: "gray.100", _dark: "#111111" }}>
+            shadow={{ md: "sm" }} bg={SURFACE_BG}>
             <Box position="relative">
                 <AspectRatio ratio={activeRatio} maxH="400px">
                     {activeMedia ? (
@@ -165,12 +127,6 @@ export const PhotoPost = (props: PhotoPostProps) => {
                                 h="100%"
                             />
                         )
-                    ) : mediaCount > 0 ? (
-                        <Flex borderRadius="md" align="center" justify="center" direction="column" gap={2}
-                            bg={{ base: "gray.200", _dark: "gray.700" }}>
-                            {isLoadingMedia ? <Spinner size="sm" /> : null}
-                            <Text fontSize="sm" color={{ base: "gray.700", _dark: "gray.200" }}>Loading media...</Text>
-                        </Flex>
                     ) : (
                         <Flex borderRadius="md" align="center" justify="center" bg={{ base: "gray.200", _dark: "gray.700" }}>
                             <Text fontSize="sm" color={{ base: "gray.700", _dark: "gray.200" }}>No media available</Text>
@@ -211,18 +167,18 @@ export const PhotoPost = (props: PhotoPostProps) => {
             {mediaCount > 1 ? (
                 <Flex mt={2} gap={1} justify="center">
                     {Array.from({ length: mediaCount }).map((_, index) => {
-                        const isLoaded = Boolean(mediaByPosition[index])
+                        const isSeen = seenPositions.has(index) && Boolean(mediaByPosition[index])
 
                         return (
                             <chakra.button
                                 key={`${props.postId}-${index}`}
                                 type="button"
                                 aria-label={`View media ${index + 1}`}
-                                onClick={() => void goToPosition(index)}
+                                onClick={() => goToPosition(index)}
                                 w="2"
                                 h="2"
                                 borderRadius="full"
-                                opacity={isLoaded ? 1 : 0.6}
+                                opacity={isSeen ? 1 : 0.6}
                                 bg={index === normalizedIndex ? "pink.500" : "gray.400"}
                             />
                         )

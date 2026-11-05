@@ -6,7 +6,7 @@ import type { Project } from "./data";
 const groupBg = { base: "blackAlpha.50", _dark: "whiteAlpha.50" };
 const groupBorder = { base: "blackAlpha.100", _dark: "whiteAlpha.100" };
 
-export const ProjectLogo = ({ project, size }: { project: Project; size: string }) => (
+const ProjectLogo = ({ project, size }: { project: Project; size: string }) => (
   <Box
     boxSize={size}
     flexShrink={0}

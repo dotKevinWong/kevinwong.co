@@ -168,19 +168,19 @@ test("exchange_failed: the code exchange throws", async (t) => {
 
 test("missing_scopes: a scope was not granted", async (t) => {
   const logs = muteConsole(t);
-  const granted = SPOTIFY_SCOPES.filter((s) => s !== "user-read-recently-played");
+  const granted = SPOTIFY_SCOPES.filter((s) => s !== "user-top-read");
   const { deps, calls } = fakeReconnect({ exchangeCode: async () => ({ refreshToken: "new-refresh", accessToken: "new-access", scopes: granted, expiresIn: 3600 }) });
   assertFailed(await completeSpotifyReconnect({ query: GOOD, cookieState: STATE, deps }), calls, "missing_scopes",
-    { details: { code: "missing_scopes", missing: ["user-read-recently-played"] }, logs });
+    { details: { code: "missing_scopes", missing: ["user-top-read"] }, logs });
   assert.equal(calls.account.length, 0);
 });
 
-test("missing_scopes: three scopes granted, but one is the wrong one", async (t) => {
+test("missing_scopes: two scopes granted, but one is the wrong one", async (t) => {
   const logs = muteConsole(t);
-  const granted = ["user-read-currently-playing", "user-top-read", "user-library-read"];
+  const granted = ["user-read-currently-playing", "user-library-read"];
   const { deps, calls } = fakeReconnect({ exchangeCode: async () => ({ refreshToken: "new-refresh", accessToken: "new-access", scopes: granted, expiresIn: 3600 }) });
   assertFailed(await completeSpotifyReconnect({ query: GOOD, cookieState: STATE, deps }), calls, "missing_scopes",
-    { details: { code: "missing_scopes", missing: ["user-read-recently-played"] }, logs });
+    { details: { code: "missing_scopes", missing: ["user-top-read"] }, logs });
   assert.equal(calls.account.length, 0);
 });
 

@@ -34,6 +34,18 @@ export function loadEnvFiles() {
 }
 
 /**
+ * Copy .env then .env.local into process.env, never overwriting a key that is
+ * already set. Returns the merged file contents.
+ */
+export function applyEnvFiles() {
+  const fileEnv = loadEnvFiles();
+  for (const [key, value] of Object.entries(fileEnv)) {
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
+  return fileEnv;
+}
+
+/**
  * Read a variable from the real environment first, then the env files.
  * Exits with a clear message when a required variable is missing.
  */

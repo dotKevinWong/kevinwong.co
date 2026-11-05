@@ -6,12 +6,9 @@ import { testDb } from "../helpers/db.mjs";
 import { stubFetch } from "../helpers/fetch-stub.mjs";
 import { fakeRes } from "../helpers/admin-fakes.mjs";
 import "../helpers/resolve-extensionless.mjs";
+import "../helpers/fake-blob-env.mjs";
 
 process.env.CRON_SECRET = "cron-secret-for-tests";
-process.env.BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_fake_for_tests";
-process.env.VERCEL_BLOB_API_URL = "http://127.0.0.1:9";
-process.env.VERCEL_BLOB_RETRIES = "0";
-delete process.env.BLOB_STORE_ID;
 
 const db = testDb();
 // The route's sync uses getDbPool(), whose pool opens on first use: point it at the local test database.

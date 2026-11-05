@@ -3,21 +3,16 @@ import { Meta } from "../../components/Meta";
 import { PageShell } from "../../components/PageShell";
 import { AdminPage } from "../../components/admin/AdminPage";
 import type { AdminPageProps, AdminStatus } from "../../components/admin/types";
-import { getOwnerSession, isAdminEnabled, setNoStore } from "../../lib/admin/guard";
+import { ownerForPage } from "../../lib/admin/guard";
 import { flashFromQuery } from "../../lib/admin/messages";
 import { OWNER_GITHUB_LOGIN } from "../../lib/admin/owner";
 import { buildAdminStatus } from "../../lib/admin/status";
 import { describeError } from "../../lib/redact";
 
 export const getServerSideProps = (async ({ req, res, query }) => {
-    setNoStore(res);
-    if (!isAdminEnabled(req)) return { notFound: true };
-    let owner;
-    try { owner = await getOwnerSession(req); } catch (error) {
-        // If ownership can't be confirmed, the page must not render.
-        console.error("[admin] owner check failed:", describeError(error));
-        throw new Error("Admin page unavailable");
-    }
+    const gate = await ownerForPage(req, res);
+    if ("notFound" in gate) return gate;
+    const { owner } = gate;
     if (!owner) return { redirect: { destination: "/admin/sign-in", permanent: false } };
     let initialStatus: AdminStatus | null = null;
     try {

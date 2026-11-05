@@ -5,7 +5,7 @@ export const HomePage = () => {
     // The mobile/desktop differences are responsive props rather than a
     // `useBreakpointValue` switch, so the server-rendered HTML already matches.
     return (
-        <Box as="section" flex="1" p="6" overflow="auto">
+        <Box as="section" p="6" overflow="auto">
             <Heading as="h1" srOnly>Kevin Wong</Heading>
             <HStack
             align="start"

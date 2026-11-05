@@ -1,17 +1,8 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Box, Button, Flex, Heading, Spinner, Text } from "@chakra-ui/react"
 import useSWRInfinite from "swr/infinite"
-import { PhotoPost } from "../PhotoPost"
-
-interface SnapshotMedia {
-    id: string;
-    position: number;
-    kind: "image" | "video";
-    url: string;
-    publicId?: string;
-    width?: number | null;
-    height?: number | null;
-}
+import fetcher from "../../lib/fetcher"
+import { PhotoPost, type SnapshotMedia } from "../PhotoPost"
 
 interface SnapshotPost {
     id: string;
@@ -19,7 +10,11 @@ interface SnapshotPost {
     instagramUrl: string | null;
     postedAt: string | null;
     mediaCount: number;
+    // Slide 0 only; kept in the response for bundles built before "slides".
     media: SnapshotMedia[];
+    // Every slide, in position order. Optional only so a response cached from
+    // before it was added still renders its first slide.
+    slides?: SnapshotMedia[];
 }
 
 interface SnapshotsResponse {
@@ -29,16 +24,6 @@ interface SnapshotsResponse {
         hasMore: boolean;
         nextCursor: string | null;
     };
-}
-
-const fetcher = async (url: string): Promise<SnapshotsResponse> => {
-    const res = await fetch(url)
-
-    if (!res.ok) {
-        throw new Error("Failed to load snapshots")
-    }
-
-    return res.json()
 }
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -182,7 +167,7 @@ export const SnapshotsPage = () => {
                         <PhotoPost
                             key={post.id}
                             postId={post.id}
-                            media={post.media}
+                            media={post.slides ?? post.media}
                             mediaCount={post.mediaCount}
                             description={post.caption}
                             date={formatPostedAt(post.postedAt)}
@@ -223,7 +208,7 @@ export const SnapshotsPage = () => {
     }
 
     return (
-        <Box as="section" flex="1" p="6" overflow="auto" ref={measureSection}>
+        <Box as="section" p="6" overflow="auto" ref={measureSection}>
             <Heading as="h1" srOnly>Snapshots</Heading>
             {content}
         </Box>

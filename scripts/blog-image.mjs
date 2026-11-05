@@ -22,12 +22,10 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
-import { loadEnvFiles } from "./load-env.mjs";
+import { applyEnvFiles } from "./load-env.mjs";
 
 // lib/blob-store.js reads process.env when it loads, so apply the env files first.
-for (const [key, value] of Object.entries(loadEnvFiles())) {
-  if (process.env[key] === undefined) process.env[key] = value;
-}
+applyEnvFiles();
 
 const args = process.argv.slice(2);
 const update = args.includes("--update");

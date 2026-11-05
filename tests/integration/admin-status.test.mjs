@@ -48,9 +48,8 @@ async function seedPost(shortcode, mediaBytes) {
     const url = `https://blob.example/snapshots/202610/${shortcode}-${position}.jpg`;
     await db.pool.query(
       `insert into instagram_media (post_id, position, kind, asset_url, asset_pathname, asset_content_type, asset_bytes,
-         asset_width, asset_height, cloudinary_url, cloudinary_public_id, cloudinary_folder, cloudinary_width,
-         cloudinary_height, file_ext, source_uri, source_created_at, raw_media_json)
-       values ($1, $2, 'image'::media_kind, $3, $4, 'image/jpeg', $5, 1440, 1440, $3, $4, '202610', 1440, 1440,
+         asset_width, asset_height, file_ext, source_uri, source_created_at, raw_media_json)
+       values ($1, $2, 'image'::media_kind, $3, $4, 'image/jpeg', $5, 1440, 1440,
                'jpg', $3, now(), '{}'::jsonb)`,
       [rows[0].id, position, url, `snapshots/202610/${shortcode}-${position}.jpg`, bytes]);
   }
@@ -71,6 +70,7 @@ describe("buildAdminStatus", { skip: db.skip }, () => {
     assert.equal(s.deadReason, null);
     assert.deepEqual(s.scopes, SPOTIFY_SCOPES);
     assert.deepEqual(s.missingScopes, []);
+    assert.equal(s.requiredScopeCount, SPOTIFY_SCOPES.length);
   });
   test("spotify: dead when dead_reason is set", async () => {
     await seedSpotify({ deadReason: "invalid_grant" });
@@ -81,7 +81,7 @@ describe("buildAdminStatus", { skip: db.skip }, () => {
   test("spotify: missing when there is no row, even with env.refresh_token set", async () => {
     assert.deepEqual((await status({ env: { refresh_token: SECRETS.envRefresh } })).spotify, {
       state: "missing", authorizedAt: null, expiresAt: null, daysLeft: null, accountMatches: null,
-      scopes: null, missingScopes: null, deadReason: null });
+      scopes: null, missingScopes: null, requiredScopeCount: SPOTIFY_SCOPES.length, deadReason: null });
   });
   test("spotify: missing when there is neither", async () => {
     assert.equal((await status()).spotify.state, "missing");
@@ -100,8 +100,14 @@ describe("buildAdminStatus", { skip: db.skip }, () => {
     assert.equal((await status()).spotify.accountMatches, null);
   });
   test("spotify: missingScopes lists what the row lacks", async () => {
-    await seedSpotify({ scopes: "user-read-currently-playing user-top-read" });
-    assert.deepEqual((await status()).spotify.missingScopes, ["user-read-recently-played"]);
+    await seedSpotify({ scopes: "user-read-currently-playing" });
+    assert.deepEqual((await status()).spotify.missingScopes, ["user-top-read"]);
+  });
+  test("spotify: a row approved with the retired recently-played scope lacks nothing", async () => {
+    await seedSpotify({ scopes: "user-read-currently-playing user-top-read user-read-recently-played" });
+    const s = (await status()).spotify;
+    assert.deepEqual(s.missingScopes, []);
+    assert.deepEqual(s.scopes, ["user-read-currently-playing", "user-top-read", "user-read-recently-played"]);
   });
 
   test("instagram.token: null without a row, fields and daysLeft with one", async () => {
@@ -317,7 +323,7 @@ describe("buildAdminStatus", { skip: db.skip }, () => {
     await seedSpotify();
     assert.deepEqual((await status()).spotify, { state: "connected", authorizedAt: "2026-08-03T00:00:00.000Z",
       expiresAt: "2027-01-30T00:00:00.000Z", daysLeft: 105, accountMatches: true, scopes: [...SPOTIFY_SCOPES],
-      missingScopes: [], deadReason: null });
+      missingScopes: [], requiredScopeCount: SPOTIFY_SCOPES.length, deadReason: null });
   });
 
   // Fix round 1 (X3): an assumed Instagram expiry, and daysLeft floored at fractional instants either side of it.
@@ -345,8 +351,8 @@ describe("buildAdminStatus", { skip: db.skip }, () => {
         { message: "one read failed" }, target.replace(/\s+/g, " ").slice(0, 90));
     }
   });
-  // The same, call by call: the 30-day uploads read runs twice with one text (directly, and inside the import verdict),
-  // so failing a text fails both and can't show that the direct read isn't swallowed.
+  // The same, call by call: the 30-day uploads read runs once and its result also feeds the import verdict, so
+  // failing by text fails both and can't show that the direct read isn't swallowed.
   test("any one failed query call rejects the whole status", async () => {
     await seedSpotify();
     await seedRunAgo({ trigger: "cron", dryRun: false, ago: "2 days", uploads: 1000 });

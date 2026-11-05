@@ -41,7 +41,7 @@ describe("lib/spotify-token.js against the test database", { skip: db.skip }, ()
     });
     const row = await raw();
     assert.equal(row.access_token, null);
-    assert.equal(row.scopes, "user-read-currently-playing user-top-read user-read-recently-played");
+    assert.equal(row.scopes, "user-read-currently-playing user-top-read");
     assert.equal(row.expires_at_is_assumed, true);
   });
 

@@ -15,7 +15,7 @@ function fakeDb(result = { rows: [], rowCount: 0 }) {
 
 test("constants", () => {
   assert.equal(tokens.SPOTIFY_PROVIDER, "spotify");
-  assert.deepEqual(tokens.SPOTIFY_SCOPES, ["user-read-currently-playing", "user-top-read", "user-read-recently-played"]);
+  assert.deepEqual(tokens.SPOTIFY_SCOPES, ["user-read-currently-playing", "user-top-read"]);
   assert.ok(Object.isFrozen(tokens.SPOTIFY_SCOPES));
   assert.equal(tokens.AUTHORIZATION_LIFETIME_DAYS, 180);
 });

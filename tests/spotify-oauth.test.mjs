@@ -5,7 +5,7 @@ import {
   exchangeCode, fetchSpotifyAccountId, fetchSpotifyProfile, missingScopes,
 } from "../lib/spotify-oauth.js";
 
-const ALL = ["user-read-currently-playing", "user-top-read", "user-read-recently-played"];
+const ALL = ["user-read-currently-playing", "user-top-read"];
 const basic = (id, secret) => `Basic ${Buffer.from(`${id}:${secret}`).toString("base64")}`;
 const recorder = (respond) => {
   const calls = [];
@@ -47,7 +47,7 @@ test("buildAuthorizeUrl sends exactly the six parameters", () => {
   assert.deepEqual(Object.fromEntries(url.searchParams), {
     client_id: "cid", response_type: "code",
     redirect_uri: "https://www.kevinwong.co/api/admin/spotify/callback",
-    scope: "user-read-currently-playing user-top-read user-read-recently-played",
+    scope: "user-read-currently-playing user-top-read",
     state: "st-123", show_dialog: "true",
   });
 });
@@ -109,7 +109,9 @@ test("account lookup failures are account_lookup_failed", async () => {
 test("missingScopes lists what was not granted, in SPOTIFY_SCOPES order", () => {
   assert.deepEqual(missingScopes(ALL), []);
   assert.deepEqual(missingScopes(["user-read-recently-played", "user-read-email", "user-top-read", "user-read-currently-playing"]), []);
-  assert.deepEqual(missingScopes(["user-top-read"]), ["user-read-currently-playing", "user-read-recently-played"]);
+  assert.deepEqual(missingScopes(["user-top-read"]), ["user-read-currently-playing"]);
+  // A token approved before the Listening Timeline was removed still carries its scope, and lacks nothing.
+  assert.deepEqual(missingScopes(["user-read-currently-playing", "user-top-read", "user-read-recently-played"]), []);
   assert.deepEqual(missingScopes([]), ALL);
 });
 

@@ -55,7 +55,7 @@ export const AdminPage = ({ owner, initialStatus, flash }: AdminPageProps) => {
     }
 
     return (
-        <Box as="section" flex="1" p="6" overflow="auto">
+        <Box as="section" p="6" overflow="auto">
             <Flex justify="space-between" align="center" wrap="wrap" gap="4" mb="6">
                 <Heading as="h1" size="2xl">Admin</Heading>
                 <HStack gap="3">

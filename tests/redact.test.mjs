@@ -170,6 +170,12 @@ test("describeError gives the name, the code and the message, never pg's detail"
   assert.equal(describeError(error), "Error [ECONNREFUSED]: connect ECONNREFUSED 127.0.0.1:55432");
 });
 
+test("describeError names an AggregateError whose message is empty, with its code", () => {
+  // What pg throws when every address of a host refuses the connection.
+  const error = Object.assign(new AggregateError([new Error("connect ECONNREFUSED 127.0.0.1:9")], ""), { code: "ECONNREFUSED" });
+  assert.equal(describeError(error), "AggregateError [ECONNREFUSED]: AggregateError");
+});
+
 test("describeError falls back to String(error) when the message is empty", () => {
   assert.equal(describeError(new AggregateError([new Error("a"), new Error("b")])), "AggregateError: AggregateError");
 });

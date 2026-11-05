@@ -66,6 +66,26 @@ const formatDate = (dateValue: string | null) => {
 
 const ratingLabel = (rating: number) => (rating ? `${rating}/5` : "Not rated");
 
+const BookCover = ({ book }: { book: BookshelfBook }) => {
+  const cover = (
+    <Image
+      src={book.imageUrl || "/album.png"}
+      alt={book.title}
+      width="100%"
+      height={{ base: "180px", md: "220px" }}
+      objectFit="cover"
+      borderRadius="sm"
+    />
+  );
+  return book.url ? (
+    <Link as="a" href={book.url} target="_blank" rel="noreferrer">
+      {cover}
+    </Link>
+  ) : (
+    cover
+  );
+};
+
 export const BookshelfPage = () => {
   const { data, error } = useSWR<BookshelfResponse>("/api/bookshelf?limit=all", fetcher, {
     refreshInterval: 900000,
@@ -77,7 +97,7 @@ export const BookshelfPage = () => {
   const shelves = React.useMemo(() => chunkBooks(data?.books ?? [], booksPerShelf), [data?.books, booksPerShelf]);
 
   return (
-    <Box as="section" flex="1" p="6" overflow="auto">
+    <Box as="section" p="6" overflow="auto">
       <VStack align="stretch" gap={6}>
         <VStack align="left" gap={1}>
           <Heading as="h1" size="2xl">Bookshelf</Heading>
@@ -125,27 +145,7 @@ export const BookshelfPage = () => {
                       p={3}
                       minH="100%"
                     >
-                      {book.url ? (
-                        <Link as="a" href={book.url} target="_blank" rel="noreferrer">
-                          <Image
-                            src={book.imageUrl || "/album.png"}
-                            alt={book.title}
-                            width="100%"
-                            height={{ base: "180px", md: "220px" }}
-                            objectFit="cover"
-                            borderRadius="sm"
-                          />
-                        </Link>
-                      ) : (
-                        <Image
-                          src={book.imageUrl || "/album.png"}
-                          alt={book.title}
-                          width="100%"
-                          height={{ base: "180px", md: "220px" }}
-                          objectFit="cover"
-                          borderRadius="sm"
-                        />
-                      )}
+                      <BookCover book={book} />
 
                       <VStack align="left" gap={1} mt={3}>
                         {book.url ? (

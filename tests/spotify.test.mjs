@@ -6,7 +6,6 @@ import { createSpotifyClient, SpotifyReauthRequiredError } from "../lib/spotify.
 const TOKEN_URL = "https://accounts.spotify.com/api/token";
 const NOW_PLAYING_URL = "https://api.spotify.com/v1/me/player/currently-playing";
 const TOP_TRACKS_URL = "https://api.spotify.com/v1/me/top/tracks?time_range=short_term&limit=10&offset=5";
-const RECENTLY_PLAYED_URL = "https://api.spotify.com/v1/me/player/recently-played?limit=50";
 const ENV = { SPOTIFY_CLIENT_ID: "new-id", SPOTIFY_CLIENT_SECRET: "new-secret" };
 
 const live = (refreshToken) => ({ refreshToken, deadReason: null, authorizedAt: new Date(0), expiresAt: new Date(0), accountId: "owner", scopes: [] });
@@ -44,13 +43,12 @@ function setup({ row = null, env = ENV, token = [], apiResponses = [], storeTime
 
 test("(a) one token call serves sequential getters, and each returns Spotify's raw Response", async () => {
   const nothingPlaying = new Response(null, { status: 204 });
-  const s = setup({ row: live("rt-A"), token: [tokenOk("AT1")], apiResponses: [() => nothingPlaying, api(), api()] });
+  const s = setup({ row: live("rt-A"), token: [tokenOk("AT1")], apiResponses: [() => nothingPlaying, api()] });
   assert.equal(await s.client.getNowPlaying(), nothingPlaying);
   await s.client.getTopTracks();
-  await s.client.getListeningTimeline();
   assert.equal(s.calls.token.length, 1);
   assert.equal(s.calls.reads, 1);
-  assert.deepEqual(s.calls.api.map((c) => c.url), [NOW_PLAYING_URL, TOP_TRACKS_URL, RECENTLY_PLAYED_URL]);
+  assert.deepEqual(s.calls.api.map((c) => c.url), [NOW_PLAYING_URL, TOP_TRACKS_URL]);
   assert.ok(s.calls.api.every((c) => c.init.headers.Authorization === "Bearer AT1" && c.init.signal instanceof AbortSignal));
   const [{ init, form }] = s.calls.token;
   assert.equal(init.method, "POST");
@@ -394,7 +392,7 @@ test("(l3) after reset() a call neither joins nor is cut off by the refresh begu
 
 test("(m) the module keeps its public names and error class", () => {
   assert.deepEqual(Object.keys(spotify).sort(), [
-    "SpotifyReauthRequiredError", "createSpotifyClient", "getListeningTimeline",
+    "SpotifyReauthRequiredError", "createSpotifyClient",
     "getNowPlaying", "getTopTracks", "resetSpotifyTokenCache",
   ]);
   const error = new SpotifyReauthRequiredError();

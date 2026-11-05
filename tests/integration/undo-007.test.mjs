@@ -122,11 +122,10 @@ async function seed() {
     [POST_ID]
   );
   await db.pool.query(
-    `insert into instagram_media (id, post_id, position, kind, cloudinary_public_id, cloudinary_url, cloudinary_folder,
-                                  file_ext, source_uri, source_created_at, asset_url)
-     values ($1, $2, 0, 'image', 'snapshots/TESTCODE-0', 'https://res.cloudinary.example/TESTCODE-0.jpg', 'snapshots',
-             'jpg', 'https://instagram.example/TESTCODE-0.jpg', '2026-10-01T12:00:00Z',
-             'https://blob.example/snapshots/202610/TESTCODE-0.jpg')`,
+    `insert into instagram_media (id, post_id, position, kind, file_ext, source_uri, source_created_at,
+                                  asset_url, asset_pathname)
+     values ($1, $2, 0, 'image', 'jpg', 'https://instagram.example/TESTCODE-0.jpg', '2026-10-01T12:00:00Z',
+             'https://blob.example/snapshots/202610/TESTCODE-0.jpg', 'snapshots/202610/TESTCODE-0.jpg')`,
     [MEDIA_ID, POST_ID]
   );
   await db.pool.query(

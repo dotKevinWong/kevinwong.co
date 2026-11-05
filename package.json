@@ -13,10 +13,8 @@
     "db:test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-db.mjs",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "spotify:reauth": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/spotify-reauth.mjs",
-    "instagram:token": "node scripts/instagram-token.mjs",
+    "instagram:token": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/instagram-token.mjs",
     "instagram:sync": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/instagram-sync.mjs",
-    "instagram:repair": "node scripts/instagram-repair-source-keys.mjs",
-    "snapshots:blob": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/snapshots-blob-backfill.mjs",
     "blog:image": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/blog-image.mjs"
   },
   "engines": {
@@ -30,7 +28,6 @@
     "@vercel/blob": "^2.8.2",
     "@vercel/functions": "^3.10.3",
     "better-auth": "1.7.12",
-    "chart.js": "^4.5.1",
     "gray-matter": "^4.0.3",
     "next": "^16.4.2",
     "next-mdx-remote": "^6.0.0",
@@ -57,6 +54,9 @@
       "js-yaml": {
         "argparse": "2.0.1"
       }
+    },
+    "@vercel/cli-config": {
+      "zod": "^4.6.6"
     }
   }
 }

@@ -1,6 +1,8 @@
 import React, { useLayoutEffect, useRef, useState } from "react";
 import styles from "./Desktop.module.css";
-import type { AppId, Frame, RectLike } from "./windowManager";
+import { APPS, APP_IDS, type AppId } from "./apps";
+import type { Frame, RectLike } from "./windowManager";
+import { cx } from "./util";
 
 const ICON = 50;
 const SLOT = ICON + 4; // icon plus its 2px side margins
@@ -11,13 +13,7 @@ const RANGE = 150;
 /** Longest side of a minimized window's preview inside its slot. */
 const PREVIEW = ICON - 4;
 
-export const APP_ICONS: Record<AppId, { name: string; icon: string }> = {
-  finder: { name: "Finder", icon: "/finder-dock.png" },
-  spotify: { name: "Spotify", icon: "/spotify-dock.png" },
-  terminal: { name: "Terminal", icon: "/terminal-dock.png" },
-};
-
-const DOCK_APPS: AppId[] = ["finder", "spotify", "terminal"];
+const DOCK_APPS = APP_IDS;
 
 export interface DockThumb {
   id: string;
@@ -25,8 +21,6 @@ export interface DockThumb {
   title: string;
   frame: Frame;
 }
-
-const cx = (...classes: (string | false | undefined)[]) => classes.filter(Boolean).join(" ");
 
 /** A window of this size, scaled to fit a Dock slot. */
 const previewSize = (w: number, h: number) => {
@@ -204,7 +198,7 @@ export const Dock = ({
       {DOCK_APPS.map((app, i) => (
         <DockItem
           key={app}
-          label={APP_ICONS[app].name}
+          label={APPS[app].name}
           scale={scaleAt(i)}
           running={running.has(app)}
           bouncing={bouncing === app}
@@ -212,7 +206,7 @@ export const Dock = ({
           onClick={() => onLaunch(app)}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={APP_ICONS[app].icon} alt="" draggable={false} />
+          <img src={APPS[app].icon} alt="" draggable={false} />
         </DockItem>
       ))}
 
@@ -228,7 +222,7 @@ export const Dock = ({
         >
           <WindowPreview id={thumb.id} frame={thumb.frame} />
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className={styles.dockThumbBadge} src={APP_ICONS[thumb.app].icon} alt="" draggable={false} />
+          <img className={styles.dockThumbBadge} src={APPS[thumb.app].icon} alt="" draggable={false} />
         </DockItem>
       ))}
 

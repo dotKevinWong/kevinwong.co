@@ -10,7 +10,7 @@ interface Blog {
 export const BlogPage = (props: Blog) => {
     const { posts } = props
     return (
-        <Box as="section" flex="1" p="4" margin="4" overflow="auto">
+        <Box as="section" p="4" margin="4" overflow="auto">
             <Heading as="h1" srOnly>Blog</Heading>
             <VStack gap={12} align="left">
                 {posts.length > 0 ?

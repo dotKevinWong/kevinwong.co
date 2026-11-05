@@ -1,10 +1,9 @@
 import Head from "next/head"
 import { useRouter } from "next/router"
 
-const SITE_URL = "https://www.kevinwong.co"
+import { DEFAULT_OG_IMAGE, SITE_ORIGIN } from "../lib/site"
+
 const DEFAULT_DESC = "Developer, Creator, and Entrepreneur"
-// public/og.jpg, the only share image whose size is known (1920x1080).
-const DEFAULT_OG_IMAGE = `${SITE_URL}/og.jpg`
 
 /**
  * `noindex` is for private pages (the admin panel): the head keeps the title, description and icons,
@@ -16,7 +15,7 @@ export const Meta = (props: { title: string, ogImage?: string, ogDesc?: string, 
     // keeps ?app=… in the URL), so shared links and search engines get the page
     // itself rather than the homepage.
     const { asPath } = useRouter()
-    const url = SITE_URL + asPath.split(/[?#]/)[0]
+    const url = SITE_ORIGIN + asPath.split(/[?#]/)[0]
     const desc = props.ogDesc || DEFAULT_DESC
     const image = props.ogImage || DEFAULT_OG_IMAGE
 
