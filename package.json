@@ -57,6 +57,9 @@
     },
     "@vercel/cli-config": {
       "zod": "^4.6.6"
+    },
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "^11.0.1"
     }
   }
 }
