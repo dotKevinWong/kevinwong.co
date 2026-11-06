@@ -53,15 +53,6 @@ CREATE TABLE public.instagram_media (
     post_id uuid NOT NULL,
     "position" integer NOT NULL,
     kind public.media_kind NOT NULL,
-    cloudinary_public_id text,
-    cloudinary_url text,
-    cloudinary_version integer,
-    cloudinary_resource_type text,
-    cloudinary_format text,
-    cloudinary_width integer,
-    cloudinary_height integer,
-    cloudinary_duration numeric,
-    cloudinary_folder text,
     file_ext text NOT NULL,
     source_uri text NOT NULL,
     source_created_at timestamp with time zone NOT NULL,
@@ -167,13 +158,6 @@ ALTER TABLE ONLY public.integration_tokens
 
 ALTER TABLE ONLY public.job_locks
     ADD CONSTRAINT job_locks_pkey PRIMARY KEY (name);
-
-
---
--- Name: instagram_media_cloudinary_public_id_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX instagram_media_cloudinary_public_id_idx ON public.instagram_media USING btree (cloudinary_public_id);
 
 
 --

@@ -71,7 +71,7 @@ L22, L24, L29, L30, L31, L35, L36, L38, L39, L40, L41, and tests for `lib/macos.
 
 | Item | Why |
 | --- | --- |
-| M1 Cloudinary | In progress. Step 1 ran on production 2026-11-05 and step 2's code is made (reviewed, tests pass). Left: deploy step 2 twice, then step 3 (drop the columns) and step 4 (close the account), per TODO.md |
+| M1 Cloudinary | Done in code and production on 2026-11-05: steps 1–3 ran, the `cloudinary_*` columns are dropped, and the per-slide media route is retired. Only closing the account is left (TODO.md) |
 | L9 duplicate index | Done on production 2026-11-05 (Kevin ran it); the schema fixture no longer has it |
 | L10, L11, L37 | The recommendation was no change |
 | L32 | Deferred until a third project |

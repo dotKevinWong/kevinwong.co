@@ -7,8 +7,8 @@
 -- rows are untouched and the deployed read path never sees these columns.
 --
 -- During the transition the sync wrote both sets and the read path preferred
--- asset_*. Since 2026-11-05 (step 2 of "Retiring Cloudinary" in the README) the
--- code writes and reads asset_* only. Dropping cloudinary_* is a later, separate step.
+-- asset_*. On 2026-11-05 the code switched to asset_* only and the cloudinary_*
+-- columns were dropped from production (README, "History: Cloudinary").
 
 -- Fail fast rather than queue behind a long-running transaction: the ALTER needs
 -- an ACCESS EXCLUSIVE lock, and while it waits every live SELECT on the table

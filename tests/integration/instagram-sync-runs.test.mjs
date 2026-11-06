@@ -318,14 +318,11 @@ describe("syncInstagram records its runs (integration)", { skip: db.skip }, () =
     assert.deepEqual(rows, [{ caption: "beach day 🏖️👨‍👩‍👧", caption_emojis: [] }]);
   });
 
-  test("an imported slide is stored in asset_* only, with every cloudinary_* column left null", async (t) => {
+  test("an imported slide is stored in asset_*", async (t) => {
     stubFetch(t, mediaRoutes(carouselPost("TESTPOSTC", 2)));
     await syncInstagram({ trigger: "cli", upload: fakeUpload });
     const { rows } = await db.pool.query(
-      `select m.position, m.asset_url is not null as has_url, m.asset_pathname, num_nonnulls(
-                m.cloudinary_public_id, m.cloudinary_url, m.cloudinary_version, m.cloudinary_resource_type,
-                m.cloudinary_format, m.cloudinary_width, m.cloudinary_height, m.cloudinary_duration,
-                m.cloudinary_folder) as cloudinary_set
+      `select m.position, m.asset_url is not null as has_url, m.asset_pathname
          from instagram_media m join instagram_posts p on p.id = m.post_id
         where p.source_key = 'ig:TESTPOSTC' order by m.position`
     );
@@ -333,7 +330,6 @@ describe("syncInstagram records its runs (integration)", { skip: db.skip }, () =
     for (const row of rows) {
       assert.equal(row.has_url, true);
       assert.match(row.asset_pathname, new RegExp(`^snapshots/\\d{6}/TESTPOSTC-${row.position}\\.`));
-      assert.equal(row.cloudinary_set, 0);
     }
   });
 

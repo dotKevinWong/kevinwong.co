@@ -38,7 +38,7 @@ pages/                 routes (thin: <Meta/> + <PageShell> + a body from compone
   admin/{index,sign-in}.tsx      owner-only dashboard (getServerSideProps gate)
   api/nowplaying, toptracks      Spotify (lib/spotify.js)
   api/bookshelf                  Goodreads RSS (rss-parser)
-  api/snapshots/index, [postId]/media            Postgres read side of /snapshots
+  api/snapshots/index            Postgres read side of /snapshots
   api/cron/sync-instagram        daily 05:00 UTC cron → lib/instagram-sync.js
   api/admin/*, api/auth/[...all] thin shims over lib/admin/* and lib/auth.js
 components/
@@ -148,14 +148,11 @@ docs/superpowers/  historic plans and specs for the admin panel (read-only histo
     6. Insert the post in one transaction.
   - A partial carousel is never inserted.
 - **Read side:** `/api/snapshots` uses keyset pagination on (posted_at, id) and returns
-  `mediaCount`, `slides` (every slide) and `media` (slide 0, for bundles from before 2026-11-05).
-  `PhotoPost` indexes the slides from props, with no request per slide. `/api/snapshots/[postId]/media`
-  is no longer called by the current page and stays for the rollback target (TODO.md). Both routes take their cache header and GET-only/rate-limit
-  guard (`SNAPSHOTS_CACHE_HEADER`, `rejectUnlessGet`) from `lib/snapshots.js`.
-- **Cloudinary retirement** is in progress (TODO.md). Since 2026-11-05 production has `asset_*`
-  NOT NULL and `cloudinary_*` nullable, and the code neither writes nor reads `cloudinary_*`.
-  The columns stay until TODO.md's step 3, which waits for two deploys of that code. Follow
-  TODO.md's step order.
+  `mediaCount` and `slides` (every slide). `PhotoPost` indexes the slides from props, with no
+  request per slide. The route takes its cache header and GET-only/rate-limit guard
+  (`SNAPSHOTS_CACHE_HEADER`, `rejectUnlessGet`) from `lib/snapshots.js`.
+- **Media columns:** only `asset_*` (Vercel Blob). `asset_url` and `asset_pathname` are NOT NULL.
+  The `cloudinary_*` columns were dropped on 2026-11-05.
 - The run lease is fenced on its `locked_until` value: renew and release only touch the row
   if it still holds this run's value, and a run that lost its lease stops with `LeaseLostError`
   (recorded `failed`). The lock names and the claim query live in `lib/job-locks.js`.

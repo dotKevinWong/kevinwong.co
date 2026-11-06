@@ -10,11 +10,8 @@ interface SnapshotPost {
     instagramUrl: string | null;
     postedAt: string | null;
     mediaCount: number;
-    // Slide 0 only; kept in the response for bundles built before "slides".
-    media: SnapshotMedia[];
-    // Every slide, in position order. Optional only so a response cached from
-    // before it was added still renders its first slide.
-    slides?: SnapshotMedia[];
+    // Every slide, in position order.
+    slides: SnapshotMedia[];
 }
 
 interface SnapshotsResponse {
@@ -167,7 +164,7 @@ export const SnapshotsPage = () => {
                         <PhotoPost
                             key={post.id}
                             postId={post.id}
-                            media={post.slides ?? post.media}
+                            media={post.slides}
                             mediaCount={post.mediaCount}
                             description={post.caption}
                             date={formatPostedAt(post.postedAt)}

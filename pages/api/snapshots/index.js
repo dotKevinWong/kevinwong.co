@@ -104,9 +104,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // Every slide comes with the list, so the carousel never waits on
-    // [postId]/media. "media" stays slide 0 only, as before, for bundles that
-    // were built against that shape.
+    // Every slide comes with the list, so the carousel makes no request per slide.
     const posts = pageRows.map((row) => toSnapshotPost(row, mediaByPostId.get(row.id)));
 
     const lastPost = posts[posts.length - 1];

@@ -2,7 +2,7 @@
 
 💫 A little portfolio built with Next.js and Chakra UI
 
-📋 Open tasks live in [TODO.md](TODO.md): content ideas, retiring Cloudinary, reconnecting Spotify
+📋 Open tasks live in [TODO.md](TODO.md): content ideas, closing Cloudinary, reconnecting Spotify
 twice a year, and follow-ups from the last codebase audit.
 
 ## 😎 Getting Started
@@ -537,26 +537,13 @@ for up to 30 days and every image on /snapshots goes blank.** About 80 MB (as of
 and a few uploads a day are far inside that. The thing to watch is transfer, if the page
 ever gets heavy traffic or hotlinking. Usage is under the store's **Usage** tab.
 
-#### Moving from Cloudinary
+#### History: Cloudinary
 
-The media used to be mirrored to Cloudinary. On 2026-09-26:
-
-- [`sql/003`](sql/003_asset_columns.sql) added nullable `asset_*` columns next to `cloudinary_*`.
-- `npm run snapshots:blob -- --apply` copied all 133 files (79.4 MB) into Blob, and
-  `-- --verify` passed: every object is present, sizes match, and videos serve 206.
-- The switch deploy made the read path prefer `asset_*`, falling back to `cloudinary_*`.
-
-New posts go straight to Blob. Until 2026-11-05 they were also mirrored into `cloudinary_*`, so
-an Instant Rollback to the pre-switch code still rendered them. The copy script
-(`scripts/snapshots-blob-backfill.mjs`) was removed then and is still in git history.
-
-#### Retiring Cloudinary
-
-In progress. On 2026-11-05 production's `asset_*` columns became NOT NULL and `cloudinary_*`
-nullable (step 1), and the code stopped writing and reading `cloudinary_*` (step 2). The
-remaining steps and their SQL are in [TODO.md](TODO.md). The column drop is deliberately
-**not** a file in `sql/`. Setup applies that folder in order, and running it early would break
-older code.
+The media used to be mirrored to Cloudinary. On 2026-09-26 [`sql/003`](sql/003_asset_columns.sql)
+added the `asset_*` columns, a one-off script copied all 133 files (79.4 MB) into Blob, and the
+read path switched to Blob. On 2026-11-05 the code stopped writing and reading `cloudinary_*` and
+those columns were dropped from production. A JSON copy of their values was kept outside the repo.
+What is left (closing the account) is in [TODO.md](TODO.md).
 
 #### How duplicates are prevented
 

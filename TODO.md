@@ -5,73 +5,17 @@ How everything works, and how to set it up from scratch, stays in the [README](R
 
 ## 📅 Dated
 
-### ☁️ Retire Cloudinary (steps 0–1 done 2026-11-05)
+### ☁️ Close the Cloudinary account
 
-The /snapshots media moved to Vercel Blob on 2026-09-26. The copy was done that day, and the
-switch (commit `bf9932f`) landed on `main` the same night. Wait **at least 30 days after the
-switch is deployed and working**, because until then rolling back to the old code still needs
-the Cloudinary files. The 2026-10-27 date assumes production deployed the switch on
-2026-09-26/27. If Vercel → Deployments shows a later date, count 30 days from that instead.
+The /snapshots media moved to Vercel Blob on 2026-09-26, and on 2026-11-05 the code stopped using
+Cloudinary and the `cloudinary_*` columns were dropped from production. A copy of every row's old
+values is in `~/Downloads/kevinwong-instagram_media-cloudinary-columns-2026-11-06T01-52-02-109Z.json`.
+Nothing on the site uses Cloudinary any more (the blog covers moved to Blob on 2026-09-27).
 
-Then do the steps in this order. Each one leaves every deployment that could still be serving
-(including the Instant Rollback target) working. Run the SQL over the unpooled connection
-string (the non-pooler Neon host), not the pooled `DATABASE_URL`.
-
-- [x] **0. Make sure nothing can roll back to pre-switch code.** Both the current production
-  deployment and its Instant Rollback target (on Hobby, the deployment just before it) must
-  include the switch. The code deployed from 2026-09-05 until the switch ran its own daily
-  sync, which inserts `instagram_media` rows with only the `cloudinary_*` columns. Once step 1
-  makes `asset_*` `not null`, those inserts would fail.
-- [x] **1. Relax the schema.** Done on production 2026-11-05. This is safe for every deployment that includes the switch,
-  because that code already writes `asset_*` on every insert. First confirm nothing is
-  missing. This must return 0:
-  ````sql
-  select count(*) from instagram_media where asset_url is null or asset_pathname is null;
-  ````
-  then (if the lock timeout trips, the transaction rolls back and can simply be re-run):
-  ````sql
-  begin;
-  set local lock_timeout = '5s';
-  alter table instagram_media
-    alter column asset_url set not null,
-    alter column asset_pathname set not null,
-    alter column cloudinary_url drop not null,
-    alter column cloudinary_public_id drop not null,
-    alter column cloudinary_folder drop not null;
-  commit;
-  ````
-- [ ] **2. Stop using the old columns in code.** The code change is made (2026-11-05); what is
-  left is the two deploys at the end of this step. In [`lib/instagram-sync.js`](lib/instagram-sync.js),
-  stop `insertPost` writing `cloudinary_*` (and drop the now-unused `folder` / `folderFor`
-  plumbing that only feeds them). In both `pages/api/snapshots` routes, remove the
-  `coalesce(..., m.cloudinary_*)` fallbacks and select the `asset_*` columns directly. Delete
-  `scripts/snapshots-blob-backfill.mjs` and its `snapshots:blob` npm script, which reads
-  `cloudinary_*`. Deploy, then **Redeploy once more** (Vercel → Deployments → Redeploy). On
-  Hobby, Instant Rollback can only go to the immediately previous deployment, and the extra
-  deploy makes sure that target no longer reads the columns step 3 removes.
-- [ ] **3. Drop the columns.** This is deliberately **not** a file in `sql/`. Setup applies
-  that folder in order, and running this early would break the old code. Older code includes
-  any local checkout or worktree not yet on step 2's commit: its `npm run instagram:sync` writes
-  `cloudinary_*`, so after this step it would upload every missing post and then fail to insert
-  it. Pull `main` everywhere you run the CLI, and delete stale worktrees, before running:
-  ````sql
-  begin;
-  set local lock_timeout = '5s';
-  alter table instagram_media
-    drop column cloudinary_public_id, drop column cloudinary_url,
-    drop column cloudinary_version, drop column cloudinary_resource_type,
-    drop column cloudinary_format, drop column cloudinary_width,
-    drop column cloudinary_height, drop column cloudinary_duration,
-    drop column cloudinary_folder;
-  commit;
-  ````
-- [ ] **4. Close the Cloudinary account.** The blog covers moved to Blob on 2026-09-27, so once
-  steps 1–3 are done nothing on the site uses Cloudinary. Keep an offline copy of its files
-  first, because Blob has no versioning.
-  - If `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` and `CLOUDINARY_API_SECRET` are still in
-    the Vercel project or `.env`, remove them. Nothing in the code reads them.
-  - Delete the *Moving from Cloudinary* and *Retiring Cloudinary* notes from the README, and
-    the pointer to them in `sql/003_asset_columns.sql`.
+- [ ] Keep an offline copy of the Cloudinary files first, because Blob has no versioning.
+- [ ] If `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` and `CLOUDINARY_API_SECRET` are still in
+  the Vercel project or `.env`, remove them. Nothing in the code reads them.
+- [ ] Close the account.
 
 ### 🎧 Reconnect Spotify (by ~2027-03-21)
 
@@ -180,19 +124,14 @@ All unused or oversized, found in the audit. Everything is in git history if nee
 - [ ] **Add a baseline migration for the /snapshots tables.** Nothing in `sql/` creates
   `instagram_posts`, `instagram_media` or the `media_kind` enum, and `003_asset_columns.sql`
   only alters `instagram_media`, so the README's "apply `sql/` in filename order" fails on an
-  empty database. Best done after step 3 of *Retire Cloudinary*, so the baseline doesn't include
-  the `cloudinary_*` columns. Dump the live tables into a `sql/000_…` file over the unpooled
+  empty database. The `cloudinary_*` columns are gone since 2026-11-05, so the baseline won't
+  include them. Dump the live tables into a `sql/000_…` file over the unpooled
   connection string:
   ````sh
   pg_dump --schema-only --no-owner --table=instagram_posts --table=instagram_media "<unpooled connection string>"
   ````
   `--table` doesn't include the `media_kind` type, so add its `create type` by hand
   (`\dT+ media_kind` in psql lists the values).
-- [ ] **Retire the per-slide media route.** Since 2026-11-05, `/api/snapshots` sends every slide of a
-  post (`slides`), and the page no longer calls `/api/snapshots/[postId]/media`. Once two deployments of that
-  change are live (so the Instant Rollback target has it too), delete `pages/api/snapshots/[postId]/media.js`
-  and the list's slide-0 `media` field (kept for pages still running an older bundle), and the page's
-  `post.slides ?? post.media` fallback in `components/pages/Snapshots.tsx`.
 - [ ] **Headings.** Blog posts and the main pages have an `<h1>` now; the 404 page and Home
   still don't, and the Sidebar/Navbar name renders as an `<h2>` above every page's `<h1>`.
 - [ ] **Trim Chakra's theme (maybe).** `components/ui/provider.tsx` ships the full

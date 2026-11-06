@@ -12,7 +12,6 @@ const db = testDb();
 if (!db.skip) process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
 
 const { default: listHandler } = await import("../../pages/api/snapshots/index.js");
-const { default: mediaHandler } = await import("../../pages/api/snapshots/[postId]/media.js");
 
 const POSTS = [
   // Newest first in the response.
@@ -40,17 +39,14 @@ describe("/api/snapshots (integration)", { skip: db.skip }, () => {
       );
       // Inserted in reverse so the response's order comes from the query, not from insertion.
       for (let position = post.slides - 1; position >= 0; position -= 1) {
-        // cloudinary_* still holds different values, to show the routes no longer read it.
-        // Slide 1 has no Blob dimensions, which come back as null rather than Cloudinary's.
+        // Slide 1 has no Blob dimensions, which come back as null.
         const sized = position !== 1;
         await db.pool.query(
-          `insert into instagram_media (post_id, position, kind, cloudinary_public_id, cloudinary_url,
-             cloudinary_width, cloudinary_height, cloudinary_folder, file_ext, source_uri, source_created_at,
+          `insert into instagram_media (post_id, position, kind, file_ext, source_uri, source_created_at,
              asset_url, asset_pathname, asset_width, asset_height)
-           values ($1, $2, $3, $4, $5, 1080, 1350, 'f', 'jpg', 'https://src.invalid', now(), $6, $7, $8, $9)`,
+           values ($1, $2, $3, 'jpg', 'https://src.invalid', now(), $4, $5, $6, $7)`,
           [
             post.id, position, position === 1 ? "video" : "image",
-            `cld/${post.id}/${position}`, `https://res.cloudinary.invalid/${post.id}/${position}.jpg`,
             `https://blob.invalid/${post.id}/${position}.jpg`,
             `snapshots/${post.id}/${position}.jpg`,
             sized ? 1440 : null, sized ? 1920 : null,
@@ -61,7 +57,7 @@ describe("/api/snapshots (integration)", { skip: db.skip }, () => {
   });
   after(async () => { await getDbPool().end(); await db.close(); });
 
-  test("returns every slide with each post, and media stays slide 0 only", async () => {
+  test("returns every slide with each post", async () => {
     const res = await call(listHandler, { limit: "3" });
     assert.equal(res.statusCode, 200);
     assert.equal(res.headers["cache-control"], SNAPSHOTS_CACHE_HEADER);
@@ -70,13 +66,11 @@ describe("/api/snapshots (integration)", { skip: db.skip }, () => {
     const [carousel, single, empty] = res.body.posts;
     assert.deepEqual(res.body.posts.map((p) => p.id), POSTS.map((p) => p.id));
     assert.deepEqual(Object.keys(carousel),
-      ["id", "caption", "instagramUrl", "postedAt", "mediaCount", "media", "slides"]);
+      ["id", "caption", "instagramUrl", "postedAt", "mediaCount", "slides"]);
     assert.equal(carousel.postedAt, "2024-03-01T00:00:00.000Z");
     assert.equal(carousel.mediaCount, 3);
     assert.deepEqual(carousel.slides.map((s) => s.position), [0, 1, 2]);
-    assert.deepEqual(carousel.media, [carousel.slides[0]]);
 
-    // Only the Blob columns are read, even where they are null and cloudinary_* is not.
     assert.equal(carousel.slides[0].url, `https://blob.invalid/${carousel.id}/0.jpg`);
     assert.equal(carousel.slides[0].publicId, `snapshots/${carousel.id}/0.jpg`);
     assert.equal(carousel.slides[0].width, 1440);
@@ -87,18 +81,8 @@ describe("/api/snapshots (integration)", { skip: db.skip }, () => {
     );
 
     assert.equal(single.mediaCount, 1);
-    assert.deepEqual(single.media, single.slides);
-    assert.deepEqual({ mediaCount: empty.mediaCount, media: empty.media, slides: empty.slides },
-      { mediaCount: 0, media: [], slides: [] });
-  });
-
-  test("each slide matches what [postId]/media returns for that position", async () => {
-    const list = await call(listHandler, { limit: "3" });
-    const carousel = list.body.posts[0];
-    for (const slide of carousel.slides) {
-      const res = await call(mediaHandler, { postId: carousel.id, position: String(slide.position), limit: "1" });
-      assert.deepEqual(res.body.media, [slide]);
-    }
+    assert.deepEqual(single.slides.map((s) => s.position), [0]);
+    assert.deepEqual({ mediaCount: empty.mediaCount, slides: empty.slides }, { mediaCount: 0, slides: [] });
   });
 
   test("keyset pagination still pages through in order", async () => {
